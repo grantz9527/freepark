@@ -49,7 +49,7 @@ Default connection:
 - database: `freepark_local`
 - user / password: `freepark_local` / `freepark_local`
 
-Override with `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD`.
+Override with `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD`. Do not commit real database passwords; this repository is public.
 
 ## Run
 
