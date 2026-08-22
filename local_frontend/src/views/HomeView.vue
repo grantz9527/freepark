@@ -1,15 +1,28 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { getHealth, getI18n, type I18nView } from '@/api/client'
+import { getUser } from '@/auth/session'
 
 const { t, locale } = useI18n()
+const user = computed(() => getUser())
+const displayName = computed(() => user.value?.displayName ?? user.value?.username ?? '')
+const username = computed(() => user.value?.username ?? '')
+const role = computed(() => user.value?.role ?? '')
 
 const loading = ref(false)
 const backendOk = ref(false)
 const backend = ref<I18nView | null>(null)
 const health = ref('')
+
+const modules = computed(() => [
+  { to: '/lots', title: t('nav.lots'), desc: t('dashboard.moduleLots') },
+  { to: '/spaces', title: t('nav.spaces'), desc: t('dashboard.moduleSpaces') },
+  { to: '/operators', title: t('nav.operators'), desc: t('dashboard.moduleOperators') },
+  { to: '/settings', title: t('nav.settings'), desc: t('dashboard.moduleSettings') },
+])
 
 async function loadBackend(): Promise<void> {
   loading.value = true
@@ -32,113 +45,233 @@ watch(locale, loadBackend)
 </script>
 
 <template>
-  <main class="home">
-    <section class="hero">
-      <p class="eyebrow">{{ t('app.tagline') }}</p>
-      <h1>{{ t('home.title') }}</h1>
-      <p class="lead">{{ t('home.description') }}</p>
+  <div class="dashboard">
+    <section class="intro">
+      <div>
+        <h2>{{ t('dashboard.welcome', { name: displayName }) }}</h2>
+        <p>{{ t('dashboard.subtitle') }}</p>
+      </div>
+      <button type="button" class="ghost" @click="loadBackend">{{ t('home.retry') }}</button>
     </section>
 
-    <section class="cards">
-      <article class="card">
-        <h2>{{ t('home.frontendLocale') }}</h2>
-        <p class="value">{{ locale }}</p>
+    <section class="kpis">
+      <article class="kpi">
+        <p>{{ t('dashboard.system') }}</p>
+        <strong :class="backendOk ? 'ok' : 'fail'">
+          {{ loading ? '…' : backendOk ? t('dashboard.online') : t('dashboard.offline') }}
+        </strong>
+        <span>{{ health || '—' }}</span>
       </article>
-
-      <article class="card">
-        <h2>{{ t('home.backend') }}</h2>
-        <p class="value" :class="backendOk ? 'ok' : 'fail'">
-          {{ loading ? '…' : backendOk ? t('home.backendOk') : t('home.backendFail') }}
-        </p>
-        <p v-if="backendOk && backend" class="meta">
-          {{ t('home.backendLocale') }}: {{ backend.locale }}
-        </p>
-        <p v-if="backendOk && backend" class="meta">
-          {{ t('home.backendWelcome') }}: {{ backend.welcome }}
-        </p>
-        <p v-if="backendOk && health" class="meta">health: {{ health }}</p>
-        <button type="button" class="retry" @click="loadBackend">{{ t('home.retry') }}</button>
+      <article class="kpi">
+        <p>{{ t('dashboard.user') }}</p>
+        <strong>{{ displayName }}</strong>
+        <span>{{ username }}</span>
+      </article>
+      <article class="kpi">
+        <p>{{ t('dashboard.role') }}</p>
+        <strong>{{ role }}</strong>
+        <span>{{ t('app.console') }}</span>
+      </article>
+      <article class="kpi">
+        <p>{{ t('dashboard.locale') }}</p>
+        <strong>{{ locale }}</strong>
+        <span v-if="backend">{{ backend.locale }}</span>
       </article>
     </section>
-  </main>
+
+    <section class="grid">
+      <article class="panel">
+        <div class="panel-head">
+          <h3>{{ t('home.backend') }}</h3>
+          <span class="pill" :class="backendOk ? 'ok' : 'fail'">
+            {{ backendOk ? t('home.backendOk') : t('home.backendFail') }}
+          </span>
+        </div>
+        <dl>
+          <div>
+            <dt>{{ t('home.backendLocale') }}</dt>
+            <dd>{{ backend?.locale ?? '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('home.backendWelcome') }}</dt>
+            <dd>{{ backend?.welcome ?? '—' }}</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h3>{{ t('dashboard.modules') }}</h3>
+        </div>
+        <div class="modules">
+          <RouterLink v-for="item in modules" :key="item.to" :to="item.to" class="module">
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.desc }}</span>
+            <em aria-hidden="true">→</em>
+          </RouterLink>
+        </div>
+      </article>
+    </section>
+  </div>
 </template>
 
 <style scoped>
-.home {
+.dashboard {
   display: grid;
-  gap: 2rem;
-}
-
-.eyebrow {
-  margin: 0 0 0.5rem;
-  color: var(--accent);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-size: 0.8rem;
-}
-
-h1 {
-  margin: 0 0 0.75rem;
-  font-size: clamp(1.8rem, 3vw, 2.6rem);
-  line-height: 1.2;
-}
-
-.lead {
-  margin: 0;
-  max-width: 42rem;
-  color: var(--muted);
-  font-size: 1.05rem;
-}
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1rem;
 }
 
-.card {
+.intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.intro h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.intro p {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+}
+
+.ghost {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.45rem 0.8rem;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.kpi,
+.panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 1.25rem;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
 }
 
-h2 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-  color: var(--muted);
-  font-weight: 600;
+.kpi {
+  padding: 1rem 1.1rem;
 }
 
-.value {
+.kpi p,
+.kpi span {
   margin: 0;
-  font-size: 1.4rem;
-  font-weight: 700;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.kpi strong {
+  display: block;
+  margin: 0.35rem 0 0.2rem;
+  font-size: 1.25rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 0.9rem;
+}
+
+.panel {
+  padding: 1.1rem 1.2rem;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.panel-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pill {
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.78rem;
+  background: #f2f4f3;
+}
+
+dl {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+dd {
+  margin: 0.2rem 0 0;
+}
+
+.modules {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.module {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.module strong {
+  grid-column: 1;
+}
+
+.module span {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.module em {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--accent);
+  font-style: normal;
+}
+
+.module:hover {
+  border-color: #9ec9c1;
+  background: #f6fbf9;
 }
 
 .ok {
-  color: #15803d;
+  color: var(--ok);
 }
 
 .fail {
-  color: #b91c1c;
+  color: var(--danger);
 }
 
-.meta {
-  margin: 0.5rem 0 0;
-  color: var(--muted);
-  font-size: 0.95rem;
-}
-
-.retry {
-  margin-top: 1rem;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  border-radius: 8px;
-  padding: 0.4rem 0.8rem;
-  font: inherit;
-  cursor: pointer;
+@media (max-width: 960px) {
+  .kpis,
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

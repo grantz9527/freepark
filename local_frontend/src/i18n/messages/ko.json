@@ -1,21 +1,61 @@
 {
   "app": {
     "name": "FreePark 로컬",
-    "tagline": "현장 주차 콘솔"
+    "tagline": "현장 주차 콘솔",
+    "console": "현장 관리"
   },
   "nav": {
-    "home": "개요"
+    "overview": "개요",
+    "lots": "주차장",
+    "spaces": "주차면",
+    "operators": "운영자",
+    "settings": "설정",
+    "sectionOps": "운영",
+    "sectionSystem": "시스템",
+    "logout": "로그아웃"
+  },
+  "login": {
+    "title": "로그인",
+    "subtitle": "현장 관리 콘솔에 로그인하세요.",
+    "hero": "주차장, 주차면, 운영자를 하나의 로컬 콘솔에서 관리합니다.",
+    "username": "사용자 이름",
+    "password": "비밀번호",
+    "submit": "로그인",
+    "submitting": "로그인 중…",
+    "required": "사용자 이름과 비밀번호를 입력하세요",
+    "failed": "로그인할 수 없습니다"
+  },
+  "dashboard": {
+    "welcome": "다시 오신 것을 환영합니다, {name}",
+    "subtitle": "이 현장의 운영 현황입니다.",
+    "system": "시스템",
+    "online": "온라인",
+    "offline": "오프라인",
+    "user": "운영자",
+    "role": "역할",
+    "locale": "언어",
+    "modules": "관리 모듈",
+    "moduleLots": "주차장과 현장 지도 구성",
+    "moduleSpaces": "점유 상태 확인",
+    "moduleOperators": "현장 직원 계정 관리",
+    "moduleSettings": "사이트 환경설정 및 언어"
+  },
+  "page": {
+    "comingSoon": "곧 제공",
+    "comingSoonHint": "이 모듈은 관리 콘솔의 일부이며 다음 단계에서 local_server에 연결됩니다.",
+    "new": "새로 만들기",
+    "search": "검색",
+    "colName": "이름",
+    "colStatus": "상태",
+    "colUpdated": "업데이트"
   },
   "home": {
-    "title": "FreePark 로컬에 오신 것을 환영합니다",
-    "description": "이 콘솔은 현장에서 실행되며 local_server에 연결됩니다. 여기에서 언어를 바꾸면 같은 언어가 백엔드로 전송됩니다.",
-    "frontendLocale": "프론트엔드 언어",
     "backend": "백엔드 상태",
     "backendOk": "연결됨",
     "backendFail": "사용 불가",
     "backendWelcome": "서버 메시지",
     "backendLocale": "서버 언어",
-    "retry": "다시 시도"
+    "retry": "새로고침"
   },
   "locale": {
     "label": "언어"

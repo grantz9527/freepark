@@ -67,6 +67,23 @@ mvnw.cmd spring-boot:run
 
 Health check: [http://localhost:8081/actuator/health](http://localhost:8081/actuator/health)
 
+## Login
+
+On first startup, a default admin is created if the user table is empty:
+
+- username: `admin`
+- password: `admin123`
+
+Override with `FREEPARK_ADMIN_USERNAME` and `FREEPARK_ADMIN_PASSWORD`. Change this password in production.
+
+```bash
+curl -X POST "http://localhost:8081/api/v1/auth/login" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"username\":\"admin\",\"password\":\"admin123\"}"
+```
+
+Use the returned Bearer token for authenticated APIs such as `GET /api/v1/auth/me`.
+
 ## Test
 
 Tests use an in-memory H2 database (MySQL compatibility mode), so MySQL is not required.

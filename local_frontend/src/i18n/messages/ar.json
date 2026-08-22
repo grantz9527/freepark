@@ -1,21 +1,61 @@
 {
   "app": {
     "name": "FreePark المحلي",
-    "tagline": "وحدة تحكم مواقف السيارات في الموقع"
+    "tagline": "وحدة تحكم مواقف السيارات في الموقع",
+    "console": "إدارة الموقع"
   },
   "nav": {
-    "home": "نظرة عامة"
+    "overview": "نظرة عامة",
+    "lots": "مواقف السيارات",
+    "spaces": "الأماكن",
+    "operators": "المشغّلون",
+    "settings": "الإعدادات",
+    "sectionOps": "التشغيل",
+    "sectionSystem": "النظام",
+    "logout": "تسجيل الخروج"
+  },
+  "login": {
+    "title": "تسجيل الدخول",
+    "subtitle": "سجّل الدخول إلى وحدة الإدارة المحلية.",
+    "hero": "أدِر المواقف والأماكن والمشغّلين من وحدة تحكم محلية واحدة.",
+    "username": "اسم المستخدم",
+    "password": "كلمة المرور",
+    "submit": "تسجيل الدخول",
+    "submitting": "جارٍ تسجيل الدخول…",
+    "required": "أدخل اسم المستخدم وكلمة المرور",
+    "failed": "تعذر تسجيل الدخول"
+  },
+  "dashboard": {
+    "welcome": "مرحبًا بعودتك، {name}",
+    "subtitle": "لقطة تشغيلية لهذا الموقع.",
+    "system": "النظام",
+    "online": "متصل",
+    "offline": "غير متصل",
+    "user": "المشغّل",
+    "role": "الدور",
+    "locale": "اللغة",
+    "modules": "وحدات الإدارة",
+    "moduleLots": "تهيئة المواقف والخرائط",
+    "moduleSpaces": "مراقبة الإشغال",
+    "moduleOperators": "إدارة حسابات الموظفين",
+    "moduleSettings": "تفضيلات الموقع واللغة"
+  },
+  "page": {
+    "comingSoon": "قريبًا",
+    "comingSoonHint": "هذه الوحدة جزء من وحدة الإدارة وسيتم ربطها بـ local_server لاحقًا.",
+    "new": "إنشاء",
+    "search": "بحث",
+    "colName": "الاسم",
+    "colStatus": "الحالة",
+    "colUpdated": "آخر تحديث"
   },
   "home": {
-    "title": "مرحبًا بك في FreePark المحلي",
-    "description": "تعمل هذه الوحدة في الموقع وتتصل بـ local_server. عند تغيير اللغة هنا، تُرسل اللغة نفسها إلى الخادم.",
-    "frontendLocale": "لغة الواجهة",
     "backend": "حالة الخادم",
     "backendOk": "متصل",
     "backendFail": "غير متاح",
     "backendWelcome": "رسالة الخادم",
     "backendLocale": "لغة الخادم",
-    "retry": "إعادة المحاولة"
+    "retry": "تحديث"
   },
   "locale": {
     "label": "اللغة"

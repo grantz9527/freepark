@@ -8,6 +8,8 @@ import {
   type SupportedLocale,
 } from '@/i18n/locales'
 
+defineProps<{ compact?: boolean }>()
+
 const { t, locale } = useI18n()
 
 function onChange(event: Event): void {
@@ -18,9 +20,14 @@ function onChange(event: Event): void {
 </script>
 
 <template>
-  <label class="locale-switcher">
-    <span class="locale-switcher__label">{{ t('locale.label') }}</span>
-    <select class="locale-switcher__select" :value="locale" @change="onChange">
+  <label class="locale-switcher" :class="{ compact }">
+    <span v-if="!compact" class="locale-switcher__label">{{ t('locale.label') }}</span>
+    <select
+      class="locale-switcher__select"
+      :value="locale"
+      :aria-label="t('locale.label')"
+      @change="onChange"
+    >
       <option v-for="code in SUPPORTED_LOCALES" :key="code" :value="code">
         {{ LOCALE_LABELS[code] }}
       </option>
@@ -38,6 +45,12 @@ function onChange(event: Event): void {
 
 .locale-switcher__label {
   color: var(--muted);
+}
+
+.locale-switcher.compact .locale-switcher__select {
+  min-height: 2rem;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.85rem;
 }
 
 .locale-switcher__select {

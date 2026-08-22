@@ -27,6 +27,11 @@ cd ../local_server
 mvnw.cmd spring-boot:run
 ```
 
+Open [http://localhost:5173](http://localhost:5173) and sign in. First-run default account:
+
+- username: `admin`
+- password: `admin123`
+
 ## I18N
 
 - UI strings live in `src/i18n/messages/*.json`

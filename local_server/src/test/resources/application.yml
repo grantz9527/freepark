@@ -8,3 +8,12 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: create-drop
+
+freepark:
+  jwt:
+    secret: test-jwt-secret-must-be-32-bytes-min
+    ttl: 1h
+  admin:
+    username: admin
+    password: admin123
+    display-name: Administrator

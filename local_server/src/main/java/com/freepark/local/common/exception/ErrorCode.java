@@ -7,6 +7,9 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     VALIDATION_FAILED("error.validation", HttpStatus.BAD_REQUEST),
+    INVALID_CREDENTIALS("error.auth.invalid-credentials", HttpStatus.UNAUTHORIZED),
+    ACCOUNT_DISABLED("error.auth.disabled", HttpStatus.FORBIDDEN),
+    UNAUTHORIZED("error.unauthorized", HttpStatus.UNAUTHORIZED),
     NOT_FOUND("error.not-found", HttpStatus.NOT_FOUND),
     INTERNAL_ERROR("error.internal", HttpStatus.INTERNAL_SERVER_ERROR);
 

@@ -1,21 +1,61 @@
 {
   "app": {
     "name": "FreePark 本地",
-    "tagline": "場端停車控制台"
+    "tagline": "場端停車控制台",
+    "console": "場端管理"
   },
   "nav": {
-    "home": "總覽"
+    "overview": "總覽",
+    "lots": "停車場",
+    "spaces": "車位",
+    "operators": "操作員",
+    "settings": "設定",
+    "sectionOps": "營運",
+    "sectionSystem": "系統",
+    "logout": "登出"
+  },
+  "login": {
+    "title": "登入",
+    "subtitle": "登入場端管理後台。",
+    "hero": "在本地控制台統一管理車場、車位與操作員。",
+    "username": "使用者名稱",
+    "password": "密碼",
+    "submit": "登入",
+    "submitting": "正在登入…",
+    "required": "請輸入使用者名稱和密碼",
+    "failed": "登入失敗"
+  },
+  "dashboard": {
+    "welcome": "歡迎回來，{name}",
+    "subtitle": "目前場站的營運概覽。",
+    "system": "系統",
+    "online": "在線",
+    "offline": "離線",
+    "user": "操作員",
+    "role": "角色",
+    "locale": "語言",
+    "modules": "管理模組",
+    "moduleLots": "設定停車場與場地圖",
+    "moduleSpaces": "查看車位占用與狀態",
+    "moduleOperators": "管理場端員工帳號",
+    "moduleSettings": "站點偏好與語言"
+  },
+  "page": {
+    "comingSoon": "即將推出",
+    "comingSoonHint": "此模組屬於管理後台，下一步會接到 local_server。",
+    "new": "新增",
+    "search": "搜尋",
+    "colName": "名稱",
+    "colStatus": "狀態",
+    "colUpdated": "更新時間"
   },
   "home": {
-    "title": "歡迎使用 FreePark 本地服務",
-    "description": "本控制台部署在現場，並連接到 local_server。在此切換語言後，會把相同語言發給後端。",
-    "frontendLocale": "前端語言",
     "backend": "後端狀態",
     "backendOk": "已連線",
     "backendFail": "不可用",
     "backendWelcome": "服務端文案",
     "backendLocale": "服務端語言",
-    "retry": "重試"
+    "retry": "重新整理"
   },
   "locale": {
     "label": "語言"

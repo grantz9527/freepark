@@ -1,21 +1,61 @@
 {
   "app": {
     "name": "FreePark Local",
-    "tagline": "Console de estacionamento no local"
+    "tagline": "Console de estacionamento no local",
+    "console": "Administração local"
   },
   "nav": {
-    "home": "Visão geral"
+    "overview": "Visão geral",
+    "lots": "Estacionamentos",
+    "spaces": "Vagas",
+    "operators": "Operadores",
+    "settings": "Configurações",
+    "sectionOps": "Operação",
+    "sectionSystem": "Sistema",
+    "logout": "Sair"
+  },
+  "login": {
+    "title": "Entrar",
+    "subtitle": "Acesse o console de administração local.",
+    "hero": "Gerencie estacionamentos, vagas e operadores em um console local.",
+    "username": "Usuário",
+    "password": "Senha",
+    "submit": "Entrar",
+    "submitting": "Entrando…",
+    "required": "Informe usuário e senha",
+    "failed": "Não foi possível entrar"
+  },
+  "dashboard": {
+    "welcome": "Bem-vindo de volta, {name}",
+    "subtitle": "Panorama operacional deste local.",
+    "system": "Sistema",
+    "online": "Online",
+    "offline": "Offline",
+    "user": "Operador",
+    "role": "Função",
+    "locale": "Idioma",
+    "modules": "Módulos de gestão",
+    "moduleLots": "Configurar estacionamentos e mapas",
+    "moduleSpaces": "Monitorar ocupação",
+    "moduleOperators": "Gerenciar contas da equipe",
+    "moduleSettings": "Preferências do local e idioma"
+  },
+  "page": {
+    "comingSoon": "Em breve",
+    "comingSoonHint": "Este módulo faz parte do console e será ligado ao local_server em seguida.",
+    "new": "Criar",
+    "search": "Pesquisar",
+    "colName": "Nome",
+    "colStatus": "Status",
+    "colUpdated": "Atualizado"
   },
   "home": {
-    "title": "Bem-vindo ao FreePark Local",
-    "description": "Este console roda no local e se conecta ao local_server. Ao mudar o idioma aqui, o mesmo idioma é enviado ao backend.",
-    "frontendLocale": "Idioma do frontend",
     "backend": "Status do backend",
     "backendOk": "Conectado",
     "backendFail": "Indisponível",
     "backendWelcome": "Mensagem do servidor",
     "backendLocale": "Idioma do servidor",
-    "retry": "Tentar novamente"
+    "retry": "Atualizar"
   },
   "locale": {
     "label": "Idioma"

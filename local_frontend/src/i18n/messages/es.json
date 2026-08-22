@@ -1,21 +1,61 @@
 {
   "app": {
     "name": "FreePark Local",
-    "tagline": "Consola de aparcamiento in situ"
+    "tagline": "Consola de aparcamiento in situ",
+    "console": "Administración local"
   },
   "nav": {
-    "home": "Resumen"
+    "overview": "Resumen",
+    "lots": "Aparcamientos",
+    "spaces": "Plazas",
+    "operators": "Operadores",
+    "settings": "Ajustes",
+    "sectionOps": "Operación",
+    "sectionSystem": "Sistema",
+    "logout": "Salir"
+  },
+  "login": {
+    "title": "Iniciar sesión",
+    "subtitle": "Accede a la consola de administración local.",
+    "hero": "Gestiona aparcamientos, plazas y operadores desde una consola local.",
+    "username": "Usuario",
+    "password": "Contraseña",
+    "submit": "Entrar",
+    "submitting": "Entrando…",
+    "required": "Introduce usuario y contraseña",
+    "failed": "No se pudo iniciar sesión"
+  },
+  "dashboard": {
+    "welcome": "Bienvenido de nuevo, {name}",
+    "subtitle": "Resumen operativo de este recinto.",
+    "system": "Sistema",
+    "online": "En línea",
+    "offline": "Fuera de línea",
+    "user": "Operador",
+    "role": "Rol",
+    "locale": "Idioma",
+    "modules": "Módulos de gestión",
+    "moduleLots": "Configurar aparcamientos y mapas",
+    "moduleSpaces": "Supervisar ocupación",
+    "moduleOperators": "Gestionar cuentas del personal",
+    "moduleSettings": "Preferencias del recinto e idioma"
+  },
+  "page": {
+    "comingSoon": "Próximamente",
+    "comingSoonHint": "Este módulo forma parte de la consola y se conectará a local_server a continuación.",
+    "new": "Crear",
+    "search": "Buscar",
+    "colName": "Nombre",
+    "colStatus": "Estado",
+    "colUpdated": "Actualizado"
   },
   "home": {
-    "title": "Bienvenido a FreePark Local",
-    "description": "Esta consola funciona en el sitio y se conecta a local_server. Al cambiar el idioma aquí, el mismo idioma se envía al backend.",
-    "frontendLocale": "Idioma del frontend",
     "backend": "Estado del backend",
     "backendOk": "Conectado",
     "backendFail": "No disponible",
     "backendWelcome": "Mensaje del servidor",
     "backendLocale": "Idioma del servidor",
-    "retry": "Reintentar"
+    "retry": "Actualizar"
   },
   "locale": {
     "label": "Idioma"

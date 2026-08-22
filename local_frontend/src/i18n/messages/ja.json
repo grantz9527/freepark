@@ -1,21 +1,61 @@
 {
   "app": {
     "name": "FreePark ローカル",
-    "tagline": "現地パーキングコンソール"
+    "tagline": "現地パーキングコンソール",
+    "console": "現地管理"
   },
   "nav": {
-    "home": "概要"
+    "overview": "概要",
+    "lots": "駐車場",
+    "spaces": "区画",
+    "operators": "オペレーター",
+    "settings": "設定",
+    "sectionOps": "運用",
+    "sectionSystem": "システム",
+    "logout": "ログアウト"
+  },
+  "login": {
+    "title": "ログイン",
+    "subtitle": "現地管理コンソールにサインインしてください。",
+    "hero": "駐車場、区画、オペレーターを一つの現地コンソールで管理します。",
+    "username": "ユーザー名",
+    "password": "パスワード",
+    "submit": "ログイン",
+    "submitting": "ログイン中…",
+    "required": "ユーザー名とパスワードを入力してください",
+    "failed": "ログインできませんでした"
+  },
+  "dashboard": {
+    "welcome": "おかえりなさい、{name} さん",
+    "subtitle": "このサイトの運用状況です。",
+    "system": "システム",
+    "online": "オンライン",
+    "offline": "オフライン",
+    "user": "オペレーター",
+    "role": "ロール",
+    "locale": "言語",
+    "modules": "管理モジュール",
+    "moduleLots": "駐車場とマップを設定",
+    "moduleSpaces": "稼働状況を確認",
+    "moduleOperators": "現地スタッフアカウントを管理",
+    "moduleSettings": "サイト設定と言語"
+  },
+  "page": {
+    "comingSoon": "近日公開",
+    "comingSoonHint": "このモジュールは管理コンソールの一部で、次に local_server へ接続します。",
+    "new": "新規作成",
+    "search": "検索",
+    "colName": "名称",
+    "colStatus": "状態",
+    "colUpdated": "更新日時"
   },
   "home": {
-    "title": "FreePark ローカルへようこそ",
-    "description": "このコンソールは現地で動作し、local_server に接続します。ここで言語を切り替えると、同じ言語がバックエンドに送られます。",
-    "frontendLocale": "フロントエンドの言語",
     "backend": "バックエンドの状態",
     "backendOk": "接続済み",
     "backendFail": "利用不可",
     "backendWelcome": "サーバーメッセージ",
     "backendLocale": "サーバーの言語",
-    "retry": "再試行"
+    "retry": "更新"
   },
   "locale": {
     "label": "言語"

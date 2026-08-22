@@ -1,21 +1,61 @@
 {
   "app": {
     "name": "FreePark Local",
-    "tagline": "On-site parking console"
+    "tagline": "On-site parking console",
+    "console": "Site admin"
   },
   "nav": {
-    "home": "Overview"
+    "overview": "Overview",
+    "lots": "Parking lots",
+    "spaces": "Spaces",
+    "operators": "Operators",
+    "settings": "Settings",
+    "sectionOps": "Operations",
+    "sectionSystem": "System",
+    "logout": "Sign out"
+  },
+  "login": {
+    "title": "Sign in",
+    "subtitle": "Sign in to the on-site management console.",
+    "hero": "Manage lots, spaces, and operators from one local console.",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "required": "Enter username and password",
+    "failed": "Unable to sign in"
+  },
+  "dashboard": {
+    "welcome": "Welcome back, {name}",
+    "subtitle": "Local operations snapshot for this site.",
+    "system": "System",
+    "online": "Online",
+    "offline": "Offline",
+    "user": "Operator",
+    "role": "Role",
+    "locale": "Locale",
+    "modules": "Management modules",
+    "moduleLots": "Configure lots and site maps",
+    "moduleSpaces": "Monitor occupancy and space status",
+    "moduleOperators": "Manage local staff accounts",
+    "moduleSettings": "Site preferences and language"
+  },
+  "page": {
+    "comingSoon": "Coming soon",
+    "comingSoonHint": "This module is part of the admin console and will be connected to local_server next.",
+    "new": "Create",
+    "search": "Search",
+    "colName": "Name",
+    "colStatus": "Status",
+    "colUpdated": "Updated"
   },
   "home": {
-    "title": "Welcome to FreePark Local",
-    "description": "This console runs on site and talks to local_server. Switch language here; the same locale is sent to the backend.",
-    "frontendLocale": "Frontend locale",
     "backend": "Backend status",
     "backendOk": "Connected",
     "backendFail": "Unavailable",
     "backendWelcome": "Server message",
     "backendLocale": "Server locale",
-    "retry": "Retry"
+    "retry": "Refresh"
   },
   "locale": {
     "label": "Language"
