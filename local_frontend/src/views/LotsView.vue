@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, createLot, listLots, updateLot, type LotType, type LotView } from '@/api/client'
 import { getUser } from '@/auth/session'
 
 const { t, locale } = useI18n()
+const router = useRouter()
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -20,11 +22,22 @@ const formTotalSpaces = ref('')
 const formLotType = ref<LotType>('INTERNAL')
 const formEnabled = ref(true)
 const formError = ref('')
+const searchQuery = ref('')
 
 const lotTypeOptions: LotType[] = ['INTERNAL', 'PUBLIC']
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const isEditing = computed(() => editingLotId.value !== null)
+const filteredLots = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  if (!query) {
+    return lots.value
+  }
+  return lots.value.filter(
+    (lot) => lot.name.toLowerCase().includes(query) || lot.code.toLowerCase().includes(query),
+  )
+})
+const isSearching = computed(() => searchQuery.value.trim().length > 0)
 
 async function loadLots(): Promise<void> {
   loading.value = true
@@ -159,6 +172,10 @@ async function onSubmit(): Promise<void> {
   }
 }
 
+function openInterceptConfig(lot: LotView): void {
+  void router.push({ name: 'lotIntercept', params: { lotId: lot.id } })
+}
+
 function lotTypeLabel(type: LotType): string {
   const key = `lotTypes.${type}`
   const label = t(key)
@@ -183,7 +200,11 @@ onMounted(loadLots)
     <div class="toolbar">
       <label class="search">
         <span class="sr-only">{{ t('page.search') }}</span>
-        <input type="search" disabled :placeholder="t('page.search')" />
+        <input
+          v-model="searchQuery"
+          type="search"
+          :placeholder="t('lots.searchPlaceholder')"
+        />
       </label>
       <button v-if="isAdmin" type="button" @click="openCreateForm">{{ t('lots.create') }}</button>
     </div>
@@ -191,7 +212,7 @@ onMounted(loadLots)
     <p v-if="errorMessage" class="banner error">{{ errorMessage }}</p>
 
     <div class="table-card">
-      <table v-if="lots.length > 0">
+      <table v-if="filteredLots.length > 0">
         <thead>
           <tr>
             <th>{{ t('lots.colName') }}</th>
@@ -205,7 +226,7 @@ onMounted(loadLots)
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in lots" :key="item.id">
+          <tr v-for="item in filteredLots" :key="item.id">
             <td>{{ item.name }}</td>
             <td>{{ item.code }}</td>
             <td>{{ lotTypeLabel(item.lotType) }}</td>
@@ -218,15 +239,23 @@ onMounted(loadLots)
             </td>
             <td>{{ formatTime(item.updatedAt) }}</td>
             <td v-if="isAdmin" class="col-actions">
-              <button type="button" class="link-btn" @click="openEditForm(item)">
-                {{ t('lots.edit') }}
-              </button>
+              <div class="action-group">
+                <button type="button" class="link-btn" @click="openEditForm(item)">
+                  {{ t('lots.edit') }}
+                </button>
+                <button type="button" class="link-btn" @click="openInterceptConfig(item)">
+                  {{ t('lots.interceptConfig') }}
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
       <div v-else-if="loading" class="empty">
         <p>{{ t('lots.loading') }}</p>
+      </div>
+      <div v-else-if="isSearching && lots.length > 0" class="empty">
+        <strong>{{ t('lots.searchNoResults') }}</strong>
       </div>
       <div v-else class="empty">
         <strong>{{ t('lots.empty') }}</strong>
@@ -331,10 +360,6 @@ onMounted(loadLots)
   border-color: transparent;
 }
 
-.search input:disabled {
-  opacity: 0.55;
-}
-
 .table-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -363,8 +388,15 @@ th {
 }
 
 .col-actions {
-  width: 5.5rem;
+  width: 11rem;
   text-align: end;
+}
+
+.action-group {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
 }
 
 tbody tr:last-child td {

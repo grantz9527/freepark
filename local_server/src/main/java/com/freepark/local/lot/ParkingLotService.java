@@ -77,6 +77,22 @@ public class ParkingLotService {
         return LotView.from(lots.save(lot));
     }
 
+    @Transactional(readOnly = true)
+    public LotInterceptView getLotIntercept(UUID lotId) {
+        ParkingLot lot = lots.findById(lotId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        return LotInterceptView.from(lot);
+    }
+
+    @Transactional
+    public LotInterceptView updateLotIntercept(UUID requesterId, UUID lotId, UpdateLotInterceptRequest request) {
+        requireAdmin(requesterId);
+        ParkingLot lot = lots.findById(lotId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        lot.updateInterceptRules(request.entryRules(), request.exitRules());
+        return LotInterceptView.from(lots.save(lot));
+    }
+
     private void requireAdmin(UUID userId) {
         LocalUser user = users.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));

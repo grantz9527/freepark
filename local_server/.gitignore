@@ -34,3 +34,5 @@ build/
 ### Local env ###
 .env
 *.log
+src/main/resources/application-dev.yml
+**/application-dev.yml

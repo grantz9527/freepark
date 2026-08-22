@@ -16,8 +16,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.freepark.local.common.api.ApiResponse;
 import com.freepark.local.common.i18n.MessageService;
 import com.freepark.local.lot.CreateLotRequest;
+import com.freepark.local.lot.LotInterceptView;
 import com.freepark.local.lot.LotView;
 import com.freepark.local.lot.ParkingLotService;
+import com.freepark.local.lot.UpdateLotInterceptRequest;
 import com.freepark.local.lot.UpdateLotRequest;
 
 import jakarta.validation.Valid;
@@ -52,5 +54,20 @@ public class ParkingLotController {
             @PathVariable UUID lotId,
             @Valid @RequestBody UpdateLotRequest request) {
         return ApiResponse.ok(messages, parkingLotService.updateLot(UUID.fromString(jwt.getSubject()), lotId, request));
+    }
+
+    @GetMapping("/{lotId}/intercept")
+    public ApiResponse<LotInterceptView> getIntercept(@PathVariable UUID lotId) {
+        return ApiResponse.ok(messages, parkingLotService.getLotIntercept(lotId));
+    }
+
+    @PutMapping("/{lotId}/intercept")
+    public ApiResponse<LotInterceptView> updateIntercept(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID lotId,
+            @Valid @RequestBody UpdateLotInterceptRequest request) {
+        return ApiResponse.ok(
+                messages,
+                parkingLotService.updateLotIntercept(UUID.fromString(jwt.getSubject()), lotId, request));
     }
 }

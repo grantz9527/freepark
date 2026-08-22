@@ -29,6 +29,13 @@ const modules = computed(() => {
   const items = [
     { to: '/lots', title: t('nav.lots'), desc: t('dashboard.moduleLots') },
     { to: '/spaces', title: t('nav.spaces'), desc: t('dashboard.moduleSpaces') },
+    {
+      to: '/internal-vehicles',
+      title: t('nav.internalVehicles'),
+      desc: t('dashboard.moduleInternalVehicles'),
+    },
+    { to: '/whitelist', title: t('nav.whitelist'), desc: t('dashboard.moduleWhitelist') },
+    { to: '/blacklist', title: t('nav.blacklist'), desc: t('dashboard.moduleBlacklist') },
   ]
   if (user.value?.role === 'ADMIN') {
     items.push({ to: '/operators', title: t('nav.operators'), desc: t('dashboard.moduleOperators') })

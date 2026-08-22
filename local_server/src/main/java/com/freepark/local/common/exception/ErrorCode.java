@@ -14,6 +14,9 @@ public enum ErrorCode {
     FORBIDDEN("error.forbidden", HttpStatus.FORBIDDEN),
     USERNAME_EXISTS("error.user.username-exists", HttpStatus.BAD_REQUEST),
     LOT_CODE_EXISTS("error.lot.code-exists", HttpStatus.BAD_REQUEST),
+    SPACE_CODE_EXISTS("error.space.code-exists", HttpStatus.BAD_REQUEST),
+    LOCATION_NAME_EXISTS("error.location.name-exists", HttpStatus.BAD_REQUEST),
+    AREA_NAME_EXISTS("error.area.name-exists", HttpStatus.BAD_REQUEST),
     NOT_FOUND("error.not-found", HttpStatus.NOT_FOUND),
     INTERNAL_ERROR("error.internal", HttpStatus.INTERNAL_SERVER_ERROR);
 

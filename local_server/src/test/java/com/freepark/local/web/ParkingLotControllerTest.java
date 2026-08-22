@@ -188,4 +188,34 @@ class ParkingLotControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("forbidden"));
     }
+
+    @Test
+    void adminCanUpdateLotInterceptRules() throws Exception {
+        String token = adminToken();
+        String code = "lot_" + System.nanoTime();
+
+        MvcResult create = mockMvc.perform(post("/api/v1/lots")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Intercept Lot\",\"code\":\"" + code
+                                + "\",\"lotType\":\"INTERNAL\",\"totalSpaces\":10}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String lotId = jsonMapper.readTree(create.getResponse().getContentAsString())
+                .get("data").get("id").asString();
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/intercept").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.entryRules").isEmpty())
+                .andExpect(jsonPath("$.data.exitRules").isEmpty());
+
+        mockMvc.perform(put("/api/v1/lots/" + lotId + "/intercept")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryRules\":[\"ARREARS\",\"BLACKLIST\"],\"exitRules\":[\"BLACKLIST\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.entryRules.length()").value(2))
+                .andExpect(jsonPath("$.data.exitRules.length()").value(1))
+                .andExpect(jsonPath("$.data.exitRules[0]").value("BLACKLIST"));
+    }
 }

@@ -1,10 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import LocaleSwitcher from '@/components/LocaleSwitcher.vue'
 import { clearSession, getUser } from '@/auth/session'
+
+interface NavChild {
+  to: string
+  name: string
+  label: string
+  icon: string
+}
+
+interface NavGroup {
+  id: string
+  label: string
+  children: NavChild[]
+}
 
 const { t } = useI18n()
 const route = useRoute()
@@ -25,29 +38,141 @@ const initials = computed(() => {
   const source = displayName.value.trim()
   return source ? source.slice(0, 1).toUpperCase() : 'A'
 })
-const pageTitle = computed(() => t(String(route.meta.titleKey ?? 'nav.overview')))
 
-const navItems = computed(() => {
-  const items = [
-    { to: '/', name: 'home', label: t('nav.overview'), group: 'ops', icon: 'overview' },
-    { to: '/lots', name: 'lots', label: t('nav.lots'), group: 'ops', icon: 'lots' },
-    { to: '/spaces', name: 'spaces', label: t('nav.spaces'), group: 'ops', icon: 'spaces' },
-    { to: '/settings', name: 'settings', label: t('nav.settings'), group: 'system', icon: 'settings' },
-  ]
+const navGroups = computed((): NavGroup[] => {
+  const systemChildren: NavChild[] = []
   if (user.value?.role === 'ADMIN') {
-    items.push({
+    systemChildren.push({
       to: '/operators',
       name: 'operators',
       label: t('nav.operators'),
-      group: 'system',
       icon: 'operators',
     })
   }
-  return items
+  systemChildren.push({
+    to: '/settings',
+    name: 'settings',
+    label: t('nav.settings'),
+    icon: 'settings',
+  })
+
+  return [
+    {
+      id: 'ops',
+      label: t('nav.sectionOps'),
+      children: [
+        { to: '/lots', name: 'lots', label: t('nav.lots'), icon: 'lots' },
+        { to: '/spaces', name: 'spaces', label: t('nav.spaces'), icon: 'spaces' },
+        {
+          to: '/internal-vehicles',
+          name: 'internalVehicles',
+          label: t('nav.internalVehicles'),
+          icon: 'internalVehicles',
+        },
+      ],
+    },
+    {
+      id: 'access',
+      label: t('nav.sectionAccess'),
+      children: [
+        {
+          to: '/whitelist',
+          name: 'whitelist',
+          label: t('nav.whitelist'),
+          icon: 'whitelist',
+        },
+        {
+          to: '/blacklist',
+          name: 'blacklist',
+          label: t('nav.blacklist'),
+          icon: 'blacklist',
+        },
+      ],
+    },
+    {
+      id: 'system',
+      label: t('nav.sectionSystem'),
+      children: systemChildren,
+    },
+  ]
 })
 
+const expandedGroups = ref<string[]>(['ops', 'access', 'system'])
+
+const pageTitle = computed(() => {
+  for (const group of navGroups.value) {
+    const child = group.children.find((item) => item.name === route.name)
+    if (child) {
+      return child.label
+    }
+  }
+  const parentNav = route.meta.parentNav as { childName?: string } | undefined
+  if (parentNav?.childName) {
+    for (const group of navGroups.value) {
+      const child = group.children.find((item) => item.name === parentNav.childName)
+      if (child) {
+        return t(String(route.meta.titleKey ?? child.label))
+      }
+    }
+  }
+  return t(String(route.meta.titleKey ?? 'nav.overview'))
+})
+
+const pageCrumb = computed(() => {
+  const keys = route.meta.breadcrumbKeys as string[] | undefined
+  if (keys?.length) {
+    return keys.map((key) => t(key)).join(' / ')
+  }
+  for (const group of navGroups.value) {
+    const child = group.children.find((item) => item.name === route.name)
+    if (child) {
+      return `${group.label} / ${child.label}`
+    }
+  }
+  return t('nav.overview')
+})
+
+function syncExpandedGroups(): void {
+  const parentNav = route.meta.parentNav as { groupId?: string; childName?: string } | undefined
+  const activeGroup = navGroups.value.find((group) => {
+    if (parentNav?.groupId && group.id === parentNav.groupId) {
+      return true
+    }
+    return group.children.some((child) => child.name === route.name)
+  })
+  if (activeGroup && !expandedGroups.value.includes(activeGroup.id)) {
+    expandedGroups.value = [...expandedGroups.value, activeGroup.id]
+  }
+}
+
+watch(() => route.name, syncExpandedGroups, { immediate: true })
+
+function isExpanded(groupId: string): boolean {
+  return expandedGroups.value.includes(groupId)
+}
+
+function toggleGroup(groupId: string): void {
+  if (isExpanded(groupId)) {
+    expandedGroups.value = expandedGroups.value.filter((id) => id !== groupId)
+  } else {
+    expandedGroups.value = [...expandedGroups.value, groupId]
+  }
+}
+
 function isActive(name: string): boolean {
+  const parentNav = route.meta.parentNav as { childName?: string } | undefined
+  if (parentNav?.childName === name) {
+    return true
+  }
   return route.name === name
+}
+
+function isGroupActive(group: NavGroup): boolean {
+  const parentNav = route.meta.parentNav as { groupId?: string; childName?: string } | undefined
+  if (parentNav?.groupId === group.id) {
+    return true
+  }
+  return group.children.some((child) => child.name === route.name)
 }
 
 function logout(): void {
@@ -68,67 +193,106 @@ function logout(): void {
       </div>
 
       <nav class="nav">
-        <p class="group">{{ t('nav.sectionOps') }}</p>
-        <RouterLink
-          v-for="item in navItems.filter((entry) => entry.group === 'ops')"
-          :key="item.name"
-          :to="item.to"
-          class="nav-link"
-          :class="{ active: isActive(item.name) }"
-        >
+        <RouterLink to="/" class="nav-link level-1" :class="{ active: isActive('home') }">
           <span class="icon" aria-hidden="true">
-            <svg v-if="item.icon === 'overview'" viewBox="0 0 24 24" fill="none">
+            <svg viewBox="0 0 24 24" fill="none">
               <rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8" />
               <rect x="13" y="3" width="8" height="5" rx="1.5" stroke="currentColor" stroke-width="1.8" />
               <rect x="13" y="10" width="8" height="11" rx="1.5" stroke="currentColor" stroke-width="1.8" />
               <rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.8" />
             </svg>
-            <svg v-else-if="item.icon === 'lots'" viewBox="0 0 24 24" fill="none">
-              <path d="M4 20V8.5L12 4l8 4.5V20" stroke="currentColor" stroke-width="1.8" />
-              <path d="M9 20v-7h6v7" stroke="currentColor" stroke-width="1.8" />
-            </svg>
-            <svg v-else-if="item.icon === 'spaces'" viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8" />
-              <path d="M8 10h3.2a2.4 2.4 0 0 1 0 4.8H8V10Z" stroke="currentColor" stroke-width="1.8" />
-            </svg>
           </span>
-          {{ item.label }}
+          {{ t('nav.overview') }}
         </RouterLink>
 
-        <p class="group">{{ t('nav.sectionSystem') }}</p>
-        <RouterLink
-          v-for="item in navItems.filter((entry) => entry.group === 'system')"
-          :key="item.name"
-          :to="item.to"
-          class="nav-link"
-          :class="{ active: isActive(item.name) }"
-        >
-          <span class="icon" aria-hidden="true">
-            <svg v-if="item.icon === 'operators'" viewBox="0 0 24 24" fill="none">
-              <circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.8" />
-              <path d="M4 19a5 5 0 0 1 10 0" stroke="currentColor" stroke-width="1.8" />
-              <circle cx="17" cy="9" r="2.2" stroke="currentColor" stroke-width="1.8" />
-              <path d="M16 19a4 4 0 0 1 4-4" stroke="currentColor" stroke-width="1.8" />
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />
-              <path
-                d="M12 4.5v1.8M12 17.7v1.8M19.5 12h-1.8M6.3 12H4.5M16.9 7.1l-1.3 1.3M8.4 15.6l-1.3 1.3M16.9 16.9l-1.3-1.3M8.4 8.4 7.1 7.1"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-              />
-            </svg>
-          </span>
-          {{ item.label }}
-        </RouterLink>
+        <div v-for="group in navGroups" :key="group.id" class="nav-group">
+          <button
+            type="button"
+            class="nav-group-btn"
+            :class="{ active: isGroupActive(group) }"
+            :aria-expanded="isExpanded(group.id)"
+            @click="toggleGroup(group.id)"
+          >
+            <span class="group-label">{{ group.label }}</span>
+            <span class="chevron" :class="{ open: isExpanded(group.id) }" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M8 10l4 4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+            </span>
+          </button>
+
+          <div v-show="isExpanded(group.id)" class="nav-children">
+            <RouterLink
+              v-for="item in group.children"
+              :key="item.name"
+              :to="item.to"
+              class="nav-link level-2"
+              :class="{ active: isActive(item.name) }"
+            >
+              <span class="icon" aria-hidden="true">
+                <svg v-if="item.icon === 'lots'" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 20V8.5L12 4l8 4.5V20" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M9 20v-7h6v7" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else-if="item.icon === 'spaces'" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M8 10h3.2a2.4 2.4 0 0 1 0 4.8H8V10Z" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else-if="item.icon === 'internalVehicles'" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M5 17h14M6 17l1.2-4.5a2 2 0 0 1 1.9-1.5h7.8a2 2 0 0 1 1.9 1.5L19 17"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+                  <path d="M7.5 17a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM16.5 17a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
+                  <path d="M6 11h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+                <svg v-else-if="item.icon === 'whitelist'" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M9 12l2 2 4-4M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <svg v-else-if="item.icon === 'blacklist'" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M9 9l6 6M15 9l-6 6M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <svg v-else-if="item.icon === 'operators'" viewBox="0 0 24 24" fill="none">
+                  <circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M4 19a5 5 0 0 1 10 0" stroke="currentColor" stroke-width="1.8" />
+                  <circle cx="17" cy="9" r="2.2" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M16 19a4 4 0 0 1 4-4" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />
+                  <path
+                    d="M12 4.5v1.8M12 17.7v1.8M19.5 12h-1.8M6.3 12H4.5M16.9 7.1l-1.3 1.3M8.4 15.6l-1.3 1.3M16.9 16.9l-1.3-1.3M8.4 8.4 7.1 7.1"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </span>
+              {{ item.label }}
+            </RouterLink>
+          </div>
+        </div>
       </nav>
     </aside>
 
     <div class="workspace">
       <header class="topbar">
         <div>
-          <p class="crumb">{{ t('app.name') }} / {{ pageTitle }}</p>
+          <p class="crumb">{{ t('app.name') }} / {{ pageCrumb }}</p>
           <h1>{{ pageTitle }}</h1>
         </div>
         <div class="top-actions">
@@ -192,15 +356,65 @@ function logout(): void {
 
 .nav {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.35rem;
 }
 
-.group {
-  margin: 1rem 0.6rem 0.4rem;
-  color: #7f938c;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
+.nav-group {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.nav-group-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #c5d4ce;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  cursor: pointer;
+}
+
+.nav-group-btn:hover,
+.nav-group-btn.active {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.group-label {
+  flex: 1;
+  text-align: start;
+}
+
+.chevron {
+  width: 1rem;
+  height: 1rem;
+  display: grid;
+  place-items: center;
+  opacity: 0.8;
+  transition: transform 0.15s ease;
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.chevron svg {
+  width: 100%;
+  height: 100%;
+}
+
+.nav-children {
+  display: grid;
+  gap: 0.1rem;
+  padding-left: 0.35rem;
 }
 
 .nav-link {
@@ -210,6 +424,11 @@ function logout(): void {
   padding: 0.55rem 0.75rem;
   border-radius: 8px;
   color: var(--sidebar-text);
+}
+
+.nav-link.level-2 {
+  padding: 0.48rem 0.75rem;
+  font-size: 0.92rem;
 }
 
 .icon {
@@ -309,10 +528,6 @@ function logout(): void {
 
   .sidebar {
     width: 100%;
-  }
-
-  .nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .topbar,

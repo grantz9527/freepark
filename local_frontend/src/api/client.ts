@@ -130,6 +130,13 @@ export function createOperator(
 
 export type LotType = 'INTERNAL' | 'PUBLIC'
 
+export type InterceptRuleType = 'ARREARS' | 'BLACKLIST'
+
+export interface LotInterceptView {
+  entryRules: InterceptRuleType[]
+  exitRules: InterceptRuleType[]
+}
+
 export interface LotView {
   id: string
   name: string
@@ -188,6 +195,183 @@ export function updateLot(
     },
     locale,
   )
+}
+
+export function getLotIntercept(lotId: string, locale: string): Promise<ApiResponse<LotInterceptView>> {
+  return apiCall(`/api/v1/lots/${lotId}/intercept`, { method: 'GET' }, locale)
+}
+
+export function updateLotIntercept(
+  lotId: string,
+  payload: LotInterceptView,
+  locale: string,
+): Promise<ApiResponse<LotInterceptView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/intercept`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export interface PageView<T> {
+  items: T[]
+  total: number
+  page: number
+  size: number
+}
+
+export interface LocationView {
+  id: string
+  name: string
+}
+
+export interface AreaView {
+  id: string
+  locationId: string
+  name: string
+}
+
+export interface SpaceView {
+  id: string
+  lotId: string
+  areaId: string
+  areaName: string
+  locationName: string
+  code: string
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listLocations(lotId: string, locale: string): Promise<ApiResponse<LocationView[]>> {
+  return apiCall(`/api/v1/lots/${lotId}/locations`, { method: 'GET' }, locale)
+}
+
+export function createLocation(
+  lotId: string,
+  name: string,
+  locale: string,
+): Promise<ApiResponse<LocationView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/locations`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    },
+    locale,
+  )
+}
+
+export function listAreas(
+  lotId: string,
+  locale: string,
+  locationId?: string,
+): Promise<ApiResponse<AreaView[]>> {
+  const query = locationId ? `?locationId=${encodeURIComponent(locationId)}` : ''
+  return apiCall(`/api/v1/lots/${lotId}/areas${query}`, { method: 'GET' }, locale)
+}
+
+export function createArea(
+  lotId: string,
+  payload: { locationId: string; name: string },
+  locale: string,
+): Promise<ApiResponse<AreaView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/areas`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function listSpaces(
+  lotId: string,
+  locale: string,
+  params: {
+    locationId?: string
+    areaId?: string
+    code?: string
+    page?: number
+    size?: number
+  } = {},
+): Promise<ApiResponse<PageView<SpaceView>>> {
+  const query = new URLSearchParams()
+  if (params.locationId) query.set('locationId', params.locationId)
+  if (params.areaId) query.set('areaId', params.areaId)
+  if (params.code) query.set('code', params.code)
+  if (params.page != null) query.set('page', String(params.page))
+  if (params.size != null) query.set('size', String(params.size))
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return apiCall(`/api/v1/lots/${lotId}/spaces${suffix}`, { method: 'GET' }, locale)
+}
+
+export function createSpace(
+  lotId: string,
+  payload: { areaId: string; code: string; enabled?: boolean },
+  locale: string,
+): Promise<ApiResponse<SpaceView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/spaces`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateSpace(
+  lotId: string,
+  spaceId: string,
+  payload: { areaId: string; code: string; enabled?: boolean },
+  locale: string,
+): Promise<ApiResponse<SpaceView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/spaces/${spaceId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function deleteSpace(lotId: string, spaceId: string, locale: string): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/lots/${lotId}/spaces/${spaceId}`, { method: 'DELETE' }, locale)
+}
+
+export async function importSpaces(
+  lotId: string,
+  areaId: string,
+  file: File,
+  locale: string,
+): Promise<ApiResponse<number>> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('areaId', areaId)
+  const response = await fetch(`${API_BASE}/api/v1/lots/${lotId}/spaces/import`, {
+    method: 'POST',
+    headers: headers(locale),
+    body: form,
+  })
+  const body = (await response.json().catch(() => null)) as ApiResponse<number> | null
+  if (response.status === 401) {
+    clearSession()
+  }
+  if (!response.ok || body == null) {
+    throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)
+  }
+  return body
 }
 
 export function changePassword(
