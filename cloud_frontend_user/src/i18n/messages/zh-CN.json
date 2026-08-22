@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark",
+    "tagline": "全球找车位"
+  },
+  "nav": {
+    "home": "首页"
+  },
+  "home": {
+    "title": "欢迎使用 FreePark",
+    "description": "这是面向司机的云端应用，用于查找和使用停车位，并连接到 cloud_server。在此切换语言后，会把相同语言发给后端。",
+    "frontendLocale": "应用语言",
+    "backend": "服务状态",
+    "backendOk": "已连接",
+    "backendFail": "不可用",
+    "backendWelcome": "服务端文案",
+    "backendLocale": "服务端语言",
+    "retry": "重试"
+  },
+  "locale": {
+    "label": "语言"
+  }
+}

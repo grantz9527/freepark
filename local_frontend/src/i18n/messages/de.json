@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark Local",
+    "tagline": "Parkkonsole vor Ort"
+  },
+  "nav": {
+    "home": "Übersicht"
+  },
+  "home": {
+    "title": "Willkommen bei FreePark Local",
+    "description": "Diese Konsole läuft vor Ort und verbindet sich mit local_server. Die hier gewählte Sprache wird an das Backend gesendet.",
+    "frontendLocale": "Frontend-Sprache",
+    "backend": "Backend-Status",
+    "backendOk": "Verbunden",
+    "backendFail": "Nicht verfügbar",
+    "backendWelcome": "Servernachricht",
+    "backendLocale": "Serversprache",
+    "retry": "Erneut versuchen"
+  },
+  "locale": {
+    "label": "Sprache"
+  }
+}

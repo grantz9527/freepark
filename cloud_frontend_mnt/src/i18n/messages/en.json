@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark Cloud Admin",
+    "tagline": "Cloud parking management"
+  },
+  "nav": {
+    "home": "Overview"
+  },
+  "home": {
+    "title": "Welcome to FreePark Cloud Admin",
+    "description": "This console manages the cloud platform and talks to cloud_server. Switch language here; the same locale is sent to the backend.",
+    "frontendLocale": "Frontend locale",
+    "backend": "Backend status",
+    "backendOk": "Connected",
+    "backendFail": "Unavailable",
+    "backendWelcome": "Server message",
+    "backendLocale": "Server locale",
+    "retry": "Retry"
+  },
+  "locale": {
+    "label": "Language"
+  }
+}

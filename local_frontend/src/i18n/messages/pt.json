@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark Local",
+    "tagline": "Console de estacionamento no local"
+  },
+  "nav": {
+    "home": "Visão geral"
+  },
+  "home": {
+    "title": "Bem-vindo ao FreePark Local",
+    "description": "Este console roda no local e se conecta ao local_server. Ao mudar o idioma aqui, o mesmo idioma é enviado ao backend.",
+    "frontendLocale": "Idioma do frontend",
+    "backend": "Status do backend",
+    "backendOk": "Conectado",
+    "backendFail": "Indisponível",
+    "backendWelcome": "Mensagem do servidor",
+    "backendLocale": "Idioma do servidor",
+    "retry": "Tentar novamente"
+  },
+  "locale": {
+    "label": "Idioma"
+  }
+}

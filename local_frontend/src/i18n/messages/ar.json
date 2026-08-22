@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark المحلي",
+    "tagline": "وحدة تحكم مواقف السيارات في الموقع"
+  },
+  "nav": {
+    "home": "نظرة عامة"
+  },
+  "home": {
+    "title": "مرحبًا بك في FreePark المحلي",
+    "description": "تعمل هذه الوحدة في الموقع وتتصل بـ local_server. عند تغيير اللغة هنا، تُرسل اللغة نفسها إلى الخادم.",
+    "frontendLocale": "لغة الواجهة",
+    "backend": "حالة الخادم",
+    "backendOk": "متصل",
+    "backendFail": "غير متاح",
+    "backendWelcome": "رسالة الخادم",
+    "backendLocale": "لغة الخادم",
+    "retry": "إعادة المحاولة"
+  },
+  "locale": {
+    "label": "اللغة"
+  }
+}

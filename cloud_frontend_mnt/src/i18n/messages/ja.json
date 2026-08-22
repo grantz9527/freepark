@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark クラウド管理",
+    "tagline": "クラウド駐車管理コンソール"
+  },
+  "nav": {
+    "home": "概要"
+  },
+  "home": {
+    "title": "FreePark クラウド管理へようこそ",
+    "description": "このコンソールはクラウド基盤を管理し、cloud_server に接続します。ここで言語を切り替えると、同じ言語がバックエンドに送られます。",
+    "frontendLocale": "フロントエンドの言語",
+    "backend": "バックエンドの状態",
+    "backendOk": "接続済み",
+    "backendFail": "利用不可",
+    "backendWelcome": "サーバーメッセージ",
+    "backendLocale": "サーバーの言語",
+    "retry": "再試行"
+  },
+  "locale": {
+    "label": "言語"
+  }
+}

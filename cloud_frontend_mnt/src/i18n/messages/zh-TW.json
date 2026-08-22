@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark 雲端管理",
+    "tagline": "雲端停車管理台"
+  },
+  "nav": {
+    "home": "總覽"
+  },
+  "home": {
+    "title": "歡迎使用 FreePark 雲端管理",
+    "description": "本控制台用於管理雲端平台，並連接到 cloud_server。在此切換語言後，會把相同語言發給後端。",
+    "frontendLocale": "前端語言",
+    "backend": "後端狀態",
+    "backendOk": "已連線",
+    "backendFail": "不可用",
+    "backendWelcome": "服務端文案",
+    "backendLocale": "服務端語言",
+    "retry": "重試"
+  },
+  "locale": {
+    "label": "語言"
+  }
+}

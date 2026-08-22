@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark",
+    "tagline": "Trouvez un parking dans le monde"
+  },
+  "nav": {
+    "home": "Accueil"
+  },
+  "home": {
+    "title": "Bienvenue sur FreePark",
+    "description": "Cette application aide les conducteurs à trouver et utiliser un parking. Elle se connecte à cloud_server. Changer la langue ici envoie la même langue au backend.",
+    "frontendLocale": "Langue de l'application",
+    "backend": "État du service",
+    "backendOk": "Connecté",
+    "backendFail": "Indisponible",
+    "backendWelcome": "Message du serveur",
+    "backendLocale": "Langue du serveur",
+    "retry": "Réessayer"
+  },
+  "locale": {
+    "label": "Langue"
+  }
+}

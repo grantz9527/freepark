@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark 本地",
+    "tagline": "场端停车控制台"
+  },
+  "nav": {
+    "home": "总览"
+  },
+  "home": {
+    "title": "欢迎使用 FreePark 本地服务",
+    "description": "本控制台部署在现场，并连接到 local_server。在此切换语言后，会把相同语言发给后端。",
+    "frontendLocale": "前端语言",
+    "backend": "后端状态",
+    "backendOk": "已连接",
+    "backendFail": "不可用",
+    "backendWelcome": "服务端文案",
+    "backendLocale": "服务端语言",
+    "retry": "重试"
+  },
+  "locale": {
+    "label": "语言"
+  }
+}

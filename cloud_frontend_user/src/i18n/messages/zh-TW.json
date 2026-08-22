@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark",
+    "tagline": "全球找車位"
+  },
+  "nav": {
+    "home": "首頁"
+  },
+  "home": {
+    "title": "歡迎使用 FreePark",
+    "description": "這是面向駕駛人的雲端應用，用於尋找和使用停車位，並連接到 cloud_server。在此切換語言後，會把相同語言發給後端。",
+    "frontendLocale": "應用語言",
+    "backend": "服務狀態",
+    "backendOk": "已連線",
+    "backendFail": "不可用",
+    "backendWelcome": "服務端文案",
+    "backendLocale": "服務端語言",
+    "retry": "重試"
+  },
+  "locale": {
+    "label": "語言"
+  }
+}
