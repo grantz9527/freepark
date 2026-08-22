@@ -9,7 +9,7 @@
     "lots": "停車場",
     "spaces": "車位",
     "operators": "操作員",
-    "settings": "設定",
+    "settings": "個人設定",
     "sectionOps": "營運",
     "sectionSystem": "系統",
     "logout": "登出"
@@ -38,7 +38,7 @@
     "moduleLots": "設定停車場與場地圖",
     "moduleSpaces": "查看車位占用與狀態",
     "moduleOperators": "管理場端員工帳號",
-    "moduleSettings": "站點偏好與語言"
+    "moduleSettings": "個人帳號與密碼"
   },
   "page": {
     "comingSoon": "即將推出",
@@ -59,5 +59,86 @@
   },
   "locale": {
     "label": "語言"
+  },
+  "lots": {
+    "create": "新增車場",
+    "createTitle": "新建停車場",
+    "createHint": "填寫車場名稱、編號與類型，地址和車位總數可選。",
+    "name": "車場名稱",
+    "code": "車場編號",
+    "codeLocked": "車場編號建立後不可修改",
+    "lotType": "車場類型",
+    "address": "地址",
+    "totalSpaces": "車位總數",
+    "colName": "車場名稱",
+    "colCode": "車場編號",
+    "colLotType": "車場類型",
+    "colAddress": "地址",
+    "colTotalSpaces": "車位總數",
+    "statusActive": "正常",
+    "statusDisabled": "已停用",
+    "empty": "暫無停車場",
+    "emptyHint": "請聯絡管理員新增停車場。",
+    "emptyHintAdmin": "點擊「新增車場」建立第一個停車場。",
+    "loading": "載入中…",
+    "loadFailed": "載入停車場失敗",
+    "createFailed": "建立停車場失敗",
+    "formRequired": "請填寫車場名稱和編號",
+    "codeTooShort": "車場編號至少 2 位",
+    "totalSpacesInvalid": "車位總數須為非負整數",
+    "creating": "建立中…",
+    "cancel": "取消",
+    "edit": "編輯",
+    "editTitle": "編輯停車場",
+    "editHint": "修改車場資訊並儲存。",
+    "save": "儲存",
+    "saving": "儲存中…",
+    "updateFailed": "更新停車場失敗",
+    "enabled": "啟用該車場",
+    "colActions": "操作"
+  },
+  "lotTypes": {
+    "INTERNAL": "內部車場",
+    "PUBLIC": "公共車場"
+  },
+  "operators": {
+    "create": "新增操作員",
+    "createTitle": "新建操作員",
+    "createHint": "建立後操作員可使用使用者名稱和密碼登入系統。",
+    "displayName": "姓名",
+    "colDisplayName": "姓名",
+    "colUsername": "使用者名稱",
+    "statusActive": "正常",
+    "statusDisabled": "已停用",
+    "empty": "暫無操作員",
+    "emptyHint": "點擊「新增操作員」建立第一個場端帳號。",
+    "loading": "載入中…",
+    "loadFailed": "載入操作員失敗",
+    "createFailed": "建立操作員失敗",
+    "formRequired": "請填寫完整資訊",
+    "passwordTooShort": "密碼至少 6 位",
+    "creating": "建立中…",
+    "cancel": "取消",
+    "forbidden": "僅管理員可管理操作員",
+    "forbiddenHint": "請聯絡管理員新增或管理操作員帳號。"
+  },
+  "settings": {
+    "account": "帳號資訊",
+    "changePassword": "修改密碼",
+    "changePasswordHint": "修改個人登入密碼，需驗證目前密碼。",
+    "currentPassword": "目前密碼",
+    "newPassword": "新密碼",
+    "confirmPassword": "確認新密碼",
+    "savePassword": "儲存密碼",
+    "saving": "儲存中…",
+    "passwordRequired": "請填寫所有密碼欄位",
+    "passwordTooShort": "新密碼至少 6 位",
+    "passwordMismatch": "兩次輸入的新密碼不一致",
+    "passwordChanged": "密碼已更新",
+    "passwordFailed": "修改密碼失敗"
+  },
+  "roles": {
+    "ADMIN": "管理員",
+    "OPERATOR": "操作員"
   }
 }

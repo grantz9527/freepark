@@ -12,20 +12,39 @@ const router = useRouter()
 
 const user = computed(() => getUser())
 const displayName = computed(() => user.value?.displayName ?? user.value?.username ?? '')
-const role = computed(() => user.value?.role ?? '')
+const role = computed(() => {
+  const value = user.value?.role
+  if (!value) {
+    return ''
+  }
+  const key = `roles.${value}`
+  const label = t(key)
+  return label === key ? value : label
+})
 const initials = computed(() => {
   const source = displayName.value.trim()
   return source ? source.slice(0, 1).toUpperCase() : 'A'
 })
 const pageTitle = computed(() => t(String(route.meta.titleKey ?? 'nav.overview')))
 
-const navItems = computed(() => [
-  { to: '/', name: 'home', label: t('nav.overview'), group: 'ops', icon: 'overview' },
-  { to: '/lots', name: 'lots', label: t('nav.lots'), group: 'ops', icon: 'lots' },
-  { to: '/spaces', name: 'spaces', label: t('nav.spaces'), group: 'ops', icon: 'spaces' },
-  { to: '/operators', name: 'operators', label: t('nav.operators'), group: 'system', icon: 'operators' },
-  { to: '/settings', name: 'settings', label: t('nav.settings'), group: 'system', icon: 'settings' },
-])
+const navItems = computed(() => {
+  const items = [
+    { to: '/', name: 'home', label: t('nav.overview'), group: 'ops', icon: 'overview' },
+    { to: '/lots', name: 'lots', label: t('nav.lots'), group: 'ops', icon: 'lots' },
+    { to: '/spaces', name: 'spaces', label: t('nav.spaces'), group: 'ops', icon: 'spaces' },
+    { to: '/settings', name: 'settings', label: t('nav.settings'), group: 'system', icon: 'settings' },
+  ]
+  if (user.value?.role === 'ADMIN') {
+    items.push({
+      to: '/operators',
+      name: 'operators',
+      label: t('nav.operators'),
+      group: 'system',
+      icon: 'operators',
+    })
+  }
+  return items
+})
 
 function isActive(name: string): boolean {
   return route.name === name

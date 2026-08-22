@@ -10,19 +10,32 @@ const { t, locale } = useI18n()
 const user = computed(() => getUser())
 const displayName = computed(() => user.value?.displayName ?? user.value?.username ?? '')
 const username = computed(() => user.value?.username ?? '')
-const role = computed(() => user.value?.role ?? '')
+const role = computed(() => {
+  const value = user.value?.role
+  if (!value) {
+    return ''
+  }
+  const key = `roles.${value}`
+  const label = t(key)
+  return label === key ? value : label
+})
 
 const loading = ref(false)
 const backendOk = ref(false)
 const backend = ref<I18nView | null>(null)
 const health = ref('')
 
-const modules = computed(() => [
-  { to: '/lots', title: t('nav.lots'), desc: t('dashboard.moduleLots') },
-  { to: '/spaces', title: t('nav.spaces'), desc: t('dashboard.moduleSpaces') },
-  { to: '/operators', title: t('nav.operators'), desc: t('dashboard.moduleOperators') },
-  { to: '/settings', title: t('nav.settings'), desc: t('dashboard.moduleSettings') },
-])
+const modules = computed(() => {
+  const items = [
+    { to: '/lots', title: t('nav.lots'), desc: t('dashboard.moduleLots') },
+    { to: '/spaces', title: t('nav.spaces'), desc: t('dashboard.moduleSpaces') },
+  ]
+  if (user.value?.role === 'ADMIN') {
+    items.push({ to: '/operators', title: t('nav.operators'), desc: t('dashboard.moduleOperators') })
+  }
+  items.push({ to: '/settings', title: t('nav.settings'), desc: t('dashboard.moduleSettings') })
+  return items
+})
 
 async function loadBackend(): Promise<void> {
   loading.value = true

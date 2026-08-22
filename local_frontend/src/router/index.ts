@@ -1,10 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import { isAuthenticated } from '@/auth/session'
+import { isAuthenticated, getUser } from '@/auth/session'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import ComingSoonView from '@/views/ComingSoonView.vue'
 import HomeView from '@/views/HomeView.vue'
+import LotsView from '@/views/LotsView.vue'
 import LoginView from '@/views/LoginView.vue'
+import OperatorsView from '@/views/OperatorsView.vue'
+import SettingsView from '@/views/SettingsView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -20,18 +23,18 @@ const router = createRouter({
       component: AdminLayout,
       children: [
         { path: '', name: 'home', component: HomeView, meta: { titleKey: 'nav.overview' } },
-        { path: 'lots', name: 'lots', component: ComingSoonView, meta: { titleKey: 'nav.lots' } },
+        { path: 'lots', name: 'lots', component: LotsView, meta: { titleKey: 'nav.lots' } },
         { path: 'spaces', name: 'spaces', component: ComingSoonView, meta: { titleKey: 'nav.spaces' } },
         {
           path: 'operators',
           name: 'operators',
-          component: ComingSoonView,
-          meta: { titleKey: 'nav.operators' },
+          component: OperatorsView,
+          meta: { titleKey: 'nav.operators', requiresAdmin: true },
         },
         {
           path: 'settings',
           name: 'settings',
-          component: ComingSoonView,
+          component: SettingsView,
           meta: { titleKey: 'nav.settings' },
         },
       ],
@@ -48,6 +51,9 @@ router.beforeEach((to) => {
   }
   if (!isAuthenticated()) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.requiresAdmin && getUser()?.role !== 'ADMIN') {
+    return { name: 'home' }
   }
   return true
 })

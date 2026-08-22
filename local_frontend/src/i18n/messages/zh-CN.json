@@ -9,7 +9,7 @@
     "lots": "停车场",
     "spaces": "车位",
     "operators": "操作员",
-    "settings": "设置",
+    "settings": "个人设置",
     "sectionOps": "运营",
     "sectionSystem": "系统",
     "logout": "退出"
@@ -38,7 +38,7 @@
     "moduleLots": "配置停车场与场地图",
     "moduleSpaces": "查看车位占用与状态",
     "moduleOperators": "管理场端员工账号",
-    "moduleSettings": "站点偏好与语言"
+    "moduleSettings": "个人账号与密码"
   },
   "page": {
     "comingSoon": "即将上线",
@@ -59,5 +59,86 @@
   },
   "locale": {
     "label": "语言"
+  },
+  "lots": {
+    "create": "添加车场",
+    "createTitle": "新建停车场",
+    "createHint": "填写车场名称、编号与类型，地址和车位总数可选。",
+    "name": "车场名称",
+    "code": "车场编号",
+    "codeLocked": "车场编号创建后不可修改",
+    "lotType": "车场类型",
+    "address": "地址",
+    "totalSpaces": "车位总数",
+    "colName": "车场名称",
+    "colCode": "车场编号",
+    "colLotType": "车场类型",
+    "colAddress": "地址",
+    "colTotalSpaces": "车位总数",
+    "statusActive": "正常",
+    "statusDisabled": "已停用",
+    "empty": "暂无停车场",
+    "emptyHint": "请联系管理员添加停车场。",
+    "emptyHintAdmin": "点击「添加车场」创建第一个停车场。",
+    "loading": "加载中…",
+    "loadFailed": "加载停车场失败",
+    "createFailed": "创建停车场失败",
+    "formRequired": "请填写车场名称和编号",
+    "codeTooShort": "车场编号至少 2 位",
+    "totalSpacesInvalid": "车位总数须为非负整数",
+    "creating": "创建中…",
+    "cancel": "取消",
+    "edit": "编辑",
+    "editTitle": "编辑停车场",
+    "editHint": "修改车场信息并保存。",
+    "save": "保存",
+    "saving": "保存中…",
+    "updateFailed": "更新停车场失败",
+    "enabled": "启用该车场",
+    "colActions": "操作"
+  },
+  "lotTypes": {
+    "INTERNAL": "内部车场",
+    "PUBLIC": "公共车场"
+  },
+  "operators": {
+    "create": "添加操作员",
+    "createTitle": "新建操作员",
+    "createHint": "创建后操作员可使用用户名和密码登录系统。",
+    "displayName": "姓名",
+    "colDisplayName": "姓名",
+    "colUsername": "用户名",
+    "statusActive": "正常",
+    "statusDisabled": "已禁用",
+    "empty": "暂无操作员",
+    "emptyHint": "点击「添加操作员」创建第一个场端账号。",
+    "loading": "加载中…",
+    "loadFailed": "加载操作员失败",
+    "createFailed": "创建操作员失败",
+    "formRequired": "请填写完整信息",
+    "passwordTooShort": "密码至少 6 位",
+    "creating": "创建中…",
+    "cancel": "取消",
+    "forbidden": "仅管理员可管理操作员",
+    "forbiddenHint": "请联系管理员添加或管理操作员账号。"
+  },
+  "settings": {
+    "account": "账号信息",
+    "changePassword": "修改密码",
+    "changePasswordHint": "修改个人登录密码，需验证当前密码。",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmPassword": "确认新密码",
+    "savePassword": "保存密码",
+    "saving": "保存中…",
+    "passwordRequired": "请填写所有密码字段",
+    "passwordTooShort": "新密码至少 6 位",
+    "passwordMismatch": "两次输入的新密码不一致",
+    "passwordChanged": "密码已更新",
+    "passwordFailed": "修改密码失败"
+  },
+  "roles": {
+    "ADMIN": "管理员",
+    "OPERATOR": "操作员"
   }
 }

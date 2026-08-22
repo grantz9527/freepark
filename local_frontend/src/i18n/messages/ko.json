@@ -9,7 +9,7 @@
     "lots": "주차장",
     "spaces": "주차면",
     "operators": "운영자",
-    "settings": "설정",
+    "settings": "개인 설정",
     "sectionOps": "운영",
     "sectionSystem": "시스템",
     "logout": "로그아웃"
@@ -38,7 +38,7 @@
     "moduleLots": "주차장과 현장 지도 구성",
     "moduleSpaces": "점유 상태 확인",
     "moduleOperators": "현장 직원 계정 관리",
-    "moduleSettings": "사이트 환경설정 및 언어"
+    "moduleSettings": "계정 및 비밀번호"
   },
   "page": {
     "comingSoon": "곧 제공",
@@ -59,5 +59,86 @@
   },
   "locale": {
     "label": "언어"
+  },
+  "lots": {
+    "create": "Add lot",
+    "createTitle": "New parking lot",
+    "createHint": "Name and code are required. Address and total spaces are optional.",
+    "name": "Lot name",
+    "code": "Lot code",
+    "codeLocked": "Lot code cannot be changed after creation",
+    "lotType": "Lot type",
+    "address": "Address",
+    "totalSpaces": "Total spaces",
+    "colName": "Lot name",
+    "colCode": "Lot code",
+    "colLotType": "Lot type",
+    "colAddress": "Address",
+    "colTotalSpaces": "Total spaces",
+    "statusActive": "Active",
+    "statusDisabled": "Disabled",
+    "empty": "No parking lots yet",
+    "emptyHint": "Ask an administrator to add a parking lot.",
+    "emptyHintAdmin": "Click “Add lot” to create the first parking lot.",
+    "loading": "Loading…",
+    "loadFailed": "Failed to load parking lots",
+    "createFailed": "Failed to create parking lot",
+    "formRequired": "Enter lot name and code",
+    "codeTooShort": "Lot code must be at least 2 characters",
+    "totalSpacesInvalid": "Total spaces must be a non-negative integer",
+    "creating": "Creating…",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "editTitle": "Edit parking lot",
+    "editHint": "Update lot details and save.",
+    "save": "Save",
+    "saving": "Saving…",
+    "updateFailed": "Failed to update parking lot",
+    "enabled": "Lot enabled",
+    "colActions": "Actions"
+  },
+  "lotTypes": {
+    "INTERNAL": "Internal lot",
+    "PUBLIC": "Public lot"
+  },
+  "operators": {
+    "create": "Add operator",
+    "createTitle": "New operator",
+    "createHint": "Operators can sign in with the username and password you set.",
+    "displayName": "Display name",
+    "colDisplayName": "Name",
+    "colUsername": "Username",
+    "statusActive": "Active",
+    "statusDisabled": "Disabled",
+    "empty": "No operators yet",
+    "emptyHint": "Click “Add operator” to create the first on-site account.",
+    "loading": "Loading…",
+    "loadFailed": "Failed to load operators",
+    "createFailed": "Failed to create operator",
+    "formRequired": "Fill in all fields",
+    "passwordTooShort": "Password must be at least 6 characters",
+    "creating": "Creating…",
+    "cancel": "Cancel",
+    "forbidden": "Admin access required",
+    "forbiddenHint": "Ask an administrator to manage operator accounts."
+  },
+  "settings": {
+    "account": "Account",
+    "changePassword": "Change password",
+    "changePasswordHint": "Update your sign-in password. Your current password is required.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "savePassword": "Save password",
+    "saving": "Saving…",
+    "passwordRequired": "Fill in all password fields",
+    "passwordTooShort": "New password must be at least 6 characters",
+    "passwordMismatch": "New passwords do not match",
+    "passwordChanged": "Password updated",
+    "passwordFailed": "Failed to change password"
+  },
+  "roles": {
+    "ADMIN": "Administrator",
+    "OPERATOR": "Operator"
   }
 }

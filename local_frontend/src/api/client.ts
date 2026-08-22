@@ -98,3 +98,110 @@ export function login(
 export function getCurrentUser(locale: string): Promise<ApiResponse<UserView>> {
   return apiCall('/api/v1/auth/me', { method: 'GET' }, locale)
 }
+
+export interface OperatorView {
+  id: string
+  username: string
+  displayName: string
+  role: string
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listOperators(locale: string): Promise<ApiResponse<OperatorView[]>> {
+  return apiCall('/api/v1/operators', { method: 'GET' }, locale)
+}
+
+export function createOperator(
+  payload: { username: string; password: string; displayName: string },
+  locale: string,
+): Promise<ApiResponse<OperatorView>> {
+  return apiCall(
+    '/api/v1/operators',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export type LotType = 'INTERNAL' | 'PUBLIC'
+
+export interface LotView {
+  id: string
+  name: string
+  code: string
+  lotType: LotType
+  address: string | null
+  totalSpaces: number
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listLots(locale: string): Promise<ApiResponse<LotView[]>> {
+  return apiCall('/api/v1/lots', { method: 'GET' }, locale)
+}
+
+export function createLot(
+  payload: {
+    name: string
+    code: string
+    lotType: LotType
+    address?: string
+    totalSpaces?: number
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<LotView>> {
+  return apiCall(
+    '/api/v1/lots',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateLot(
+  lotId: string,
+  payload: {
+    name: string
+    lotType?: LotType
+    address?: string
+    totalSpaces?: number
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<LotView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function changePassword(
+  currentPassword: string,
+  newPassword: string,
+  locale: string,
+): Promise<ApiResponse<null>> {
+  return apiCall(
+    '/api/v1/auth/change-password',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    },
+    locale,
+  )
+}

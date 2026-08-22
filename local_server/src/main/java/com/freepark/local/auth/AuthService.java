@@ -50,4 +50,18 @@ public class AuthService {
         }
         return UserView.from(user);
     }
+
+    @Transactional
+    public void changePassword(UUID userId, ChangePasswordRequest request) {
+        LocalUser user = users.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        if (!user.isEnabled()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
+        }
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new BusinessException(ErrorCode.WRONG_PASSWORD);
+        }
+        user.changePasswordHash(passwordEncoder.encode(request.newPassword()));
+        users.save(user);
+    }
 }

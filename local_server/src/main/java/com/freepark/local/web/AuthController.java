@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.freepark.local.auth.AuthService;
+import com.freepark.local.auth.ChangePasswordRequest;
 import com.freepark.local.auth.LoginRequest;
 import com.freepark.local.auth.LoginResponse;
 import com.freepark.local.auth.UserView;
@@ -39,5 +40,13 @@ public class AuthController {
     @GetMapping("/me")
     public ApiResponse<UserView> me(@AuthenticationPrincipal Jwt jwt) {
         return ApiResponse.ok(messages, authService.currentUser(UUID.fromString(jwt.getSubject())));
+    }
+
+    @PostMapping("/change-password")
+    public ApiResponse<Void> changePassword(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        authService.changePassword(UUID.fromString(jwt.getSubject()), request);
+        return ApiResponse.ok(messages, null);
     }
 }

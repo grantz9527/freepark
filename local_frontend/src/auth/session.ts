@@ -52,3 +52,8 @@ export function clearSession(): void {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
 }
+
+export function updateUser(user: UserView): void {
+  session.user = user
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+}
