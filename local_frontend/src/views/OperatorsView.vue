@@ -4,8 +4,10 @@ import { useI18n } from 'vue-i18n'
 
 import { ApiError, createOperator, listOperators, type OperatorView } from '@/api/client'
 import { getUser } from '@/auth/session'
+import { useSiteTime } from '@/composables/useSiteTime'
 
 const { t, locale } = useI18n()
+const { formatTime } = useSiteTime()
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -74,16 +76,6 @@ async function onSubmit(): Promise<void> {
     formError.value = error instanceof ApiError ? error.message : t('operators.createFailed')
   } finally {
     submitting.value = false
-  }
-}
-
-function formatTime(value: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(
-      new Date(value),
-    )
-  } catch {
-    return value
   }
 }
 

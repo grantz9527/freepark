@@ -374,6 +374,92 @@ export async function importSpaces(
   return body
 }
 
+export type PlateColor = string
+
+export interface InternalVehicleView {
+  id: string
+  lotId: string
+  plateNumber: string
+  plateColor: PlateColor
+  ownerName: string
+  phone: string | null
+  department: string | null
+  remark: string | null
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listInternalVehicles(
+  lotId: string,
+  locale: string,
+  params: { plate?: string; page?: number; size?: number } = {},
+): Promise<ApiResponse<PageView<InternalVehicleView>>> {
+  const query = new URLSearchParams()
+  if (params.plate) query.set('plate', params.plate)
+  if (params.page != null) query.set('page', String(params.page))
+  if (params.size != null) query.set('size', String(params.size))
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return apiCall(`/api/v1/lots/${lotId}/internal-vehicles${suffix}`, { method: 'GET' }, locale)
+}
+
+export function createInternalVehicle(
+  lotId: string,
+  payload: {
+    plateNumber: string
+    plateColor: PlateColor
+    ownerName: string
+    phone?: string
+    department?: string
+    remark?: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<InternalVehicleView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/internal-vehicles`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateInternalVehicle(
+  lotId: string,
+  vehicleId: string,
+  payload: {
+    plateNumber: string
+    plateColor: PlateColor
+    ownerName: string
+    phone?: string
+    department?: string
+    remark?: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<InternalVehicleView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/internal-vehicles/${vehicleId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function deleteInternalVehicle(
+  lotId: string,
+  vehicleId: string,
+  locale: string,
+): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/lots/${lotId}/internal-vehicles/${vehicleId}`, { method: 'DELETE' }, locale)
+}
+
 export function changePassword(
   currentPassword: string,
   newPassword: string,
@@ -385,6 +471,41 @@ export function changePassword(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentPassword, newPassword }),
+    },
+    locale,
+  )
+}
+
+export interface SystemSettingsView {
+  defaultLocale: string
+  timezone: string
+  defaultPlateColor: PlateColor
+  allowedPlateColors: PlateColor[]
+  supportedLocales: string[]
+  supportedTimezones: string[]
+  supportedPlateColors: PlateColor[]
+  updatedAt: string
+}
+
+export function getSystemSettings(locale: string): Promise<ApiResponse<SystemSettingsView>> {
+  return apiCall('/api/v1/system-settings', { method: 'GET' }, locale)
+}
+
+export function updateSystemSettings(
+  payload: {
+    defaultLocale: string
+    timezone: string
+    defaultPlateColor: PlateColor
+    allowedPlateColors: PlateColor[]
+  },
+  locale: string,
+): Promise<ApiResponse<SystemSettingsView>> {
+  return apiCall(
+    '/api/v1/system-settings',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     },
     locale,
   )

@@ -1,14 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import { isAuthenticated, getUser } from '@/auth/session'
+import { detectLocale } from '@/i18n/locales'
+import { clearSiteSettingsCache, ensureSiteSettings } from '@/site/settings'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import ComingSoonView from '@/views/ComingSoonView.vue'
 import HomeView from '@/views/HomeView.vue'
+import InternalVehiclesView from '@/views/InternalVehiclesView.vue'
 import LotsView from '@/views/LotsView.vue'
 import LotInterceptConfigView from '@/views/LotInterceptConfigView.vue'
 import LoginView from '@/views/LoginView.vue'
 import OperatorsView from '@/views/OperatorsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import SystemSettingsView from '@/views/SystemSettingsView.vue'
 import SpacesView from '@/views/SpacesView.vue'
 
 const router = createRouter({
@@ -41,7 +45,7 @@ const router = createRouter({
         {
           path: 'internal-vehicles',
           name: 'internalVehicles',
-          component: ComingSoonView,
+          component: InternalVehiclesView,
           meta: { titleKey: 'nav.internalVehicles' },
         },
         {
@@ -63,6 +67,12 @@ const router = createRouter({
           meta: { titleKey: 'nav.operators', requiresAdmin: true },
         },
         {
+          path: 'system-settings',
+          name: 'systemSettings',
+          component: SystemSettingsView,
+          meta: { titleKey: 'nav.systemSettings', requiresAdmin: true },
+        },
+        {
           path: 'settings',
           name: 'settings',
           component: SettingsView,
@@ -73,7 +83,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   if (to.meta.public) {
     if (isAuthenticated() && to.name === 'login') {
       return { name: 'home' }
@@ -86,6 +96,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAdmin && getUser()?.role !== 'ADMIN') {
     return { name: 'home' }
   }
+  await ensureSiteSettings(detectLocale())
   return true
 })
 

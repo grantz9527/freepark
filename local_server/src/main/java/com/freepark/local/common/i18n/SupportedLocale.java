@@ -4,6 +4,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
+import com.freepark.local.common.exception.BusinessException;
+import com.freepark.local.common.exception.ErrorCode;
+
 public enum SupportedLocale {
 
     EN(Locale.ENGLISH),
@@ -33,6 +36,23 @@ public enum SupportedLocale {
 
     public static List<Locale> all() {
         return Arrays.stream(values()).map(SupportedLocale::locale).toList();
+    }
+
+    public static List<String> languageTags() {
+        return all().stream().map(Locale::toLanguageTag).toList();
+    }
+
+    public static String validateLanguageTag(String languageTag) {
+        if (languageTag == null || languageTag.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_LOCALE);
+        }
+        Locale resolved = resolve(languageTag);
+        String tag = resolved.toLanguageTag();
+        boolean supported = all().stream().anyMatch(locale -> locale.toLanguageTag().equals(tag));
+        if (!supported) {
+            throw new BusinessException(ErrorCode.INVALID_LOCALE);
+        }
+        return tag;
     }
 
     public static Locale resolve(String languageTag) {

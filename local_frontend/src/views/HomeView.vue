@@ -39,6 +39,11 @@ const modules = computed(() => {
   ]
   if (user.value?.role === 'ADMIN') {
     items.push({ to: '/operators', title: t('nav.operators'), desc: t('dashboard.moduleOperators') })
+    items.push({
+      to: '/system-settings',
+      title: t('nav.systemSettings'),
+      desc: t('dashboard.moduleSystemSettings'),
+    })
   }
   items.push({ to: '/settings', title: t('nav.settings'), desc: t('dashboard.moduleSettings') })
   return items

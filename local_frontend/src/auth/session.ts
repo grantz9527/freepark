@@ -46,11 +46,14 @@ export function setSession(token: string, user: UserView): void {
   localStorage.setItem(USER_KEY, JSON.stringify(user))
 }
 
+import { clearSiteSettingsCache } from '@/site/settings'
+
 export function clearSession(): void {
   session.token = null
   session.user = null
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
+  clearSiteSettingsCache()
 }
 
 export function updateUser(user: UserView): void {

@@ -5,9 +5,11 @@ import { useI18n } from 'vue-i18n'
 
 import { ApiError, createLot, listLots, updateLot, type LotType, type LotView } from '@/api/client'
 import { getUser } from '@/auth/session'
+import { useSiteTime } from '@/composables/useSiteTime'
 
 const { t, locale } = useI18n()
 const router = useRouter()
+const { formatTime } = useSiteTime()
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -180,16 +182,6 @@ function lotTypeLabel(type: LotType): string {
   const key = `lotTypes.${type}`
   const label = t(key)
   return label === key ? type : label
-}
-
-function formatTime(value: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(
-      new Date(value),
-    )
-  } catch {
-    return value
-  }
 }
 
 onMounted(loadLots)

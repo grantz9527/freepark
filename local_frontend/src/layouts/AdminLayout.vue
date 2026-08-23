@@ -48,6 +48,12 @@ const navGroups = computed((): NavGroup[] => {
       label: t('nav.operators'),
       icon: 'operators',
     })
+    systemChildren.push({
+      to: '/system-settings',
+      name: 'systemSettings',
+      label: t('nav.systemSettings'),
+      icon: 'systemSettings',
+    })
   }
   systemChildren.push({
     to: '/settings',
@@ -271,6 +277,26 @@ function logout(): void {
                   <path d="M4 19a5 5 0 0 1 10 0" stroke="currentColor" stroke-width="1.8" />
                   <circle cx="17" cy="9" r="2.2" stroke="currentColor" stroke-width="1.8" />
                   <path d="M16 19a4 4 0 0 1 4-4" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else-if="item.icon === 'systemSettings'" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M4 6h16M4 12h16M4 18h16"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+                  <circle cx="8" cy="6" r="2" stroke="currentColor" stroke-width="1.8" />
+                  <circle cx="16" cy="12" r="2" stroke="currentColor" stroke-width="1.8" />
+                  <circle cx="10" cy="18" r="2" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else-if="item.icon === 'settings'" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />
+                  <path
+                    d="M12 4.5v1.8M12 17.7v1.8M19.5 12h-1.8M6.3 12H4.5M16.9 7.1l-1.3 1.3M8.4 15.6l-1.3 1.3M16.9 16.9l-1.3-1.3M8.4 8.4 7.1 7.1"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
                 </svg>
                 <svg v-else viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />

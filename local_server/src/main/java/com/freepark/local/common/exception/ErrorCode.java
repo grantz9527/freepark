@@ -17,6 +17,12 @@ public enum ErrorCode {
     SPACE_CODE_EXISTS("error.space.code-exists", HttpStatus.BAD_REQUEST),
     LOCATION_NAME_EXISTS("error.location.name-exists", HttpStatus.BAD_REQUEST),
     AREA_NAME_EXISTS("error.area.name-exists", HttpStatus.BAD_REQUEST),
+    INTERNAL_VEHICLE_PLATE_EXISTS("error.internal-vehicle.plate-exists", HttpStatus.BAD_REQUEST),
+    INVALID_LOCALE("error.settings.invalid-locale", HttpStatus.BAD_REQUEST),
+    INVALID_TIMEZONE("error.settings.invalid-timezone", HttpStatus.BAD_REQUEST),
+    INVALID_PLATE_COLOR("error.settings.invalid-plate-color", HttpStatus.BAD_REQUEST),
+    INVALID_PLATE_COLOR_CONFIG("error.settings.invalid-plate-color-config", HttpStatus.BAD_REQUEST),
+    PLATE_COLOR_NOT_ALLOWED("error.plate-color.not-allowed", HttpStatus.BAD_REQUEST),
     NOT_FOUND("error.not-found", HttpStatus.NOT_FOUND),
     INTERNAL_ERROR("error.internal", HttpStatus.INTERNAL_SERVER_ERROR);
 
