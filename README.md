@@ -44,6 +44,14 @@ Issues and pull requests are welcome.
 
 ## License / 许可证
 
-License is not decided yet.
+Copyright (C) 2026 顾文斌
 
-许可证待定。
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+- Full license text: [LICENSE](LICENSE)
+- Summary: you may use, modify, and distribute this software; if you run a modified version as a network service, you must offer corresponding source to users. See the license for full terms.
+
+本项目采用 **GNU Affero 通用公共许可证 v3.0（AGPL-3.0）** 授权。
+
+- 完整协议文本见 [LICENSE](LICENSE)
+- 简要说明：可自由使用、修改和分发；若将修改后的版本作为网络服务提供，须向用户提供相应源代码。具体权利与义务以协议全文为准。
