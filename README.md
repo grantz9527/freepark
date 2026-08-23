@@ -42,6 +42,24 @@ Issues and pull requests are welcome.
 
 欢迎提交 Issue 和 Pull Request。
 
+## Ethical use / 伦理使用
+
+FreePark is for people and organizations that **respect workers' rights**. We oppose exploitative labor practices.
+
+FreePark 面向**尊重劳动者权益**的个人与组织。我们反对下列剥削性做法。
+
+**Organizations that practice any of the following may not use this software** (including deployment, operations, or offering it as a service):
+
+**实施以下任一做法的组织不得使用本软件**（含部署、运营或对外提供服务）：
+
+- **“996”** and systemic exploitative overtime / **996** 与系统性剥削性加班
+- **Unequal pay for equal work** / **同工不同酬**
+- **Labor outsourcing** used to evade employer duties and worker protections / 以规避用工责任、损害劳动者保障的**人力外包**
+
+Full policy: [ETHICAL_USE.md](ETHICAL_USE.md)
+
+完整声明见 [ETHICAL_USE.md](ETHICAL_USE.md)。
+
 ## License / 许可证
 
 Copyright (C) 2026 顾文斌
@@ -50,8 +68,10 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 
 - Full license text: [LICENSE](LICENSE)
 - Summary: you may use, modify, and distribute this software; if you run a modified version as a network service, you must offer corresponding source to users. See the license for full terms.
+- Ethical expectations: [ETHICAL_USE.md](ETHICAL_USE.md) (read together with AGPL).
 
 本项目采用 **GNU Affero 通用公共许可证 v3.0（AGPL-3.0）** 授权。
 
 - 完整协议文本见 [LICENSE](LICENSE)
 - 简要说明：可自由使用、修改和分发；若将修改后的版本作为网络服务提供，须向用户提供相应源代码。具体权利与义务以协议全文为准。
+- 伦理使用期望见 [ETHICAL_USE.md](ETHICAL_USE.md)（与 AGPL 一并阅读）。
