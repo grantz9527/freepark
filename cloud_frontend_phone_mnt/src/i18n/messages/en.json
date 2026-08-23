@@ -1,0 +1,23 @@
+{
+  "app": {
+    "name": "FreePark Mobile",
+    "tagline": "Mobile parking management"
+  },
+  "nav": {
+    "home": "Home"
+  },
+  "home": {
+    "title": "Welcome to FreePark",
+    "description": "This app helps drivers find and use parking. It talks to cloud_server. Switch language here; the same locale is sent to the backend.",
+    "frontendLocale": "App language",
+    "backend": "Service status",
+    "backendOk": "Connected",
+    "backendFail": "Unavailable",
+    "backendWelcome": "Server message",
+    "backendLocale": "Server locale",
+    "retry": "Retry"
+  },
+  "locale": {
+    "label": "Language"
+  }
+}
