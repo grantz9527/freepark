@@ -1,10 +1,17 @@
 :root {
-  --bg: #f3f5fb;
+  --bg: #eef2f0;
   --surface: #ffffff;
-  --text: #1e293b;
-  --muted: #64748b;
-  --border: #d9e0ef;
-  --accent: #3730a3;
+  --text: #12231e;
+  --muted: #66756f;
+  --border: #d8e2dd;
+  --accent: #0f766e;
+  --accent-dark: #0b5b55;
+  --sidebar: #10211d;
+  --sidebar-text: #c5d4cf;
+  --sidebar-active: #14332d;
+  --danger: #b42318;
+  --ok: #067647;
+  --shadow: 0 1px 2px rgb(16 33 29 / 6%);
   font-family:
     'Segoe UI',
     system-ui,
@@ -23,6 +30,7 @@ html,
 body,
 #app {
   min-height: 100%;
+  height: 100%;
 }
 
 body {
@@ -30,6 +38,17 @@ body {
 }
 
 button,
+select,
+input {
+  font: inherit;
+}
+
+button,
 select {
   cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
 }

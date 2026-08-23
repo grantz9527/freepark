@@ -8,3 +8,12 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: create-drop
+
+freepark:
+  jwt:
+    secret: freepark-cloud-test-secret-change-me-32
+    ttl: 1h
+  admin:
+    username: admin
+    password: admin123
+    display-name: Administrator

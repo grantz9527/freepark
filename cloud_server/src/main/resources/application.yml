@@ -43,3 +43,12 @@ management:
     health:
       probes:
         enabled: true
+
+freepark:
+  jwt:
+    secret: ${JWT_SECRET:freepark-cloud-dev-secret-change-me-32}
+    ttl: 12h
+  admin:
+    username: ${FREEPARK_ADMIN_USERNAME:admin}
+    password: ${FREEPARK_ADMIN_PASSWORD:admin123}
+    display-name: ${FREEPARK_ADMIN_DISPLAY_NAME:Administrator}

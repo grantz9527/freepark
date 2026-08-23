@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { getHealth, getI18n, type I18nView } from '@/api/client'
@@ -24,30 +23,6 @@ const loading = ref(false)
 const backendOk = ref(false)
 const backend = ref<I18nView | null>(null)
 const health = ref('')
-
-const modules = computed(() => {
-  const items = [
-    { to: '/lots', title: t('nav.lots'), desc: t('dashboard.moduleLots') },
-    { to: '/spaces', title: t('nav.spaces'), desc: t('dashboard.moduleSpaces') },
-    {
-      to: '/internal-vehicles',
-      title: t('nav.internalVehicles'),
-      desc: t('dashboard.moduleInternalVehicles'),
-    },
-    { to: '/whitelist', title: t('nav.whitelist'), desc: t('dashboard.moduleWhitelist') },
-    { to: '/blacklist', title: t('nav.blacklist'), desc: t('dashboard.moduleBlacklist') },
-  ]
-  if (user.value?.role === 'ADMIN') {
-    items.push({ to: '/operators', title: t('nav.operators'), desc: t('dashboard.moduleOperators') })
-    items.push({
-      to: '/system-settings',
-      title: t('nav.systemSettings'),
-      desc: t('dashboard.moduleSystemSettings'),
-    })
-  }
-  items.push({ to: '/settings', title: t('nav.settings'), desc: t('dashboard.moduleSettings') })
-  return items
-})
 
 async function loadBackend(): Promise<void> {
   loading.value = true
@@ -123,19 +98,6 @@ watch(locale, loadBackend)
           </div>
         </dl>
       </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <h3>{{ t('dashboard.modules') }}</h3>
-        </div>
-        <div class="modules">
-          <RouterLink v-for="item in modules" :key="item.to" :to="item.to" class="module">
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.desc }}</span>
-            <em aria-hidden="true">→</em>
-          </RouterLink>
-        </div>
-      </article>
     </section>
   </div>
 </template>
@@ -204,7 +166,6 @@ watch(locale, loadBackend)
 
 .grid {
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
   gap: 0.9rem;
 }
 
@@ -247,44 +208,6 @@ dd {
   margin: 0.2rem 0 0;
 }
 
-.modules {
-  display: grid;
-  gap: 0.65rem;
-}
-
-.module {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  column-gap: 0.75rem;
-  padding: 0.8rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-
-.module strong {
-  grid-column: 1;
-}
-
-.module span {
-  grid-column: 1;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.module em {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-  color: var(--accent);
-  font-style: normal;
-}
-
-.module:hover {
-  border-color: #9ec9c1;
-  background: #f6fbf9;
-}
-
 .ok {
   color: var(--ok);
 }
@@ -294,8 +217,7 @@ dd {
 }
 
 @media (max-width: 960px) {
-  .kpis,
-  .grid {
+  .kpis {
     grid-template-columns: 1fr;
   }
 }
