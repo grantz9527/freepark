@@ -31,5 +31,7 @@ export const i18n = createI18n<[MessageSchema], SupportedLocale>({
   legacy: false,
   locale: detectLocale(),
   fallbackLocale: DEFAULT_LOCALE,
-  messages,
+  missingWarn: false,
+  fallbackWarn: false,
+  messages: messages as unknown as Record<SupportedLocale, MessageSchema>,
 })

@@ -10,6 +10,7 @@ public record SystemSettingsView(
         String timezone,
         PlateColor defaultPlateColor,
         List<PlateColor> allowedPlateColors,
+        String imageStoragePath,
         List<String> supportedLocales,
         List<String> supportedTimezones,
         List<PlateColor> supportedPlateColors,

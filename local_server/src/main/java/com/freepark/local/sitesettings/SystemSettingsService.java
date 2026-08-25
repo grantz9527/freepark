@@ -54,6 +54,7 @@ public class SystemSettingsService {
         }
         settings.setAllowedPlateColors(allowed);
         settings.setDefaultPlateColor(defaultPlateColor);
+        settings.setImageStoragePath(normalizeImageStoragePath(request.imageStoragePath()));
         return toView(settingsRepository.save(settings));
     }
 
@@ -78,6 +79,11 @@ public class SystemSettingsService {
     }
 
     @Transactional(readOnly = true)
+    public String getImageStoragePath() {
+        return normalizeImageStoragePath(requireSettings().getImageStoragePath());
+    }
+
+    @Transactional(readOnly = true)
     public void ensurePlateColorAllowed(PlateColor plateColor) {
         PlateColorSupport.ensureAllowed(plateColor, requireSettings().getAllowedPlateColors());
     }
@@ -94,6 +100,7 @@ public class SystemSettingsService {
         SiteSettings settings = settingsRepository.findById(SiteSettings.SINGLETON_ID)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         ensurePlateColorDefaults(settings);
+        ensureImageStoragePath(settings);
         return settings;
     }
 
@@ -109,13 +116,26 @@ public class SystemSettingsService {
         }
     }
 
+    private void ensureImageStoragePath(SiteSettings settings) {
+        if (settings.getImageStoragePath() == null || settings.getImageStoragePath().isBlank()) {
+            settings.setImageStoragePath(SiteSettings.DEFAULT_IMAGE_STORAGE_PATH);
+        }
+    }
+
+    private String normalizeImageStoragePath(String path) {
+        String trimmed = path == null ? "" : path.trim();
+        return trimmed.isBlank() ? SiteSettings.DEFAULT_IMAGE_STORAGE_PATH : trimmed;
+    }
+
     private SystemSettingsView toView(SiteSettings settings) {
         ensurePlateColorDefaults(settings);
+        ensureImageStoragePath(settings);
         return new SystemSettingsView(
                 settings.getDefaultLocale(),
                 settings.getTimezone(),
                 settings.getDefaultPlateColor(),
                 List.copyOf(settings.getAllowedPlateColors()),
+                settings.getImageStoragePath(),
                 SupportedLocale.languageTags(),
                 SupportedTimezone.all(),
                 PlateColorSupport.all(),

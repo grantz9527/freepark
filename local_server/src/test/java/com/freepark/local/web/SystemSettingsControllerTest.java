@@ -44,6 +44,7 @@ class SystemSettingsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.defaultLocale").exists())
                 .andExpect(jsonPath("$.data.timezone").exists())
+                .andExpect(jsonPath("$.data.imageStoragePath").exists())
                 .andExpect(jsonPath("$.data.supportedLocales").isArray())
                 .andExpect(jsonPath("$.data.supportedTimezones").isArray());
     }
@@ -55,16 +56,18 @@ class SystemSettingsControllerTest {
         mockMvc.perform(put("/api/v1/system-settings")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\",\"YELLOW\",\"GREEN\"]}"))
+                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\",\"YELLOW\",\"GREEN\"],\"imageStoragePath\":\"D:/freepark/images\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.defaultLocale").value("en"))
                 .andExpect(jsonPath("$.data.timezone").value("UTC"))
-                .andExpect(jsonPath("$.data.defaultPlateColor").value("BLUE"));
+                .andExpect(jsonPath("$.data.defaultPlateColor").value("BLUE"))
+                .andExpect(jsonPath("$.data.imageStoragePath").value("D:/freepark/images"));
 
         mockMvc.perform(get("/api/v1/system-settings").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.defaultLocale").value("en"))
-                .andExpect(jsonPath("$.data.timezone").value("UTC"));
+                .andExpect(jsonPath("$.data.timezone").value("UTC"))
+                .andExpect(jsonPath("$.data.imageStoragePath").value("D:/freepark/images"));
     }
 
     @Test
@@ -90,7 +93,7 @@ class SystemSettingsControllerTest {
         mockMvc.perform(put("/api/v1/system-settings")
                         .header("Authorization", "Bearer " + operatorToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\"]}"))
+                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\"],\"imageStoragePath\":\"./data/images\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("forbidden"));
     }

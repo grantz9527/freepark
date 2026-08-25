@@ -19,6 +19,7 @@ const defaultLocale = ref('zh-CN')
 const timezone = ref('Asia/Shanghai')
 const defaultPlateColor = ref<PlateColor>('BLUE')
 const allowedPlateColors = ref<PlateColor[]>([])
+const imageStoragePath = ref('./data/images')
 const supportedLocales = ref<string[]>([])
 const supportedTimezones = ref<string[]>([])
 const supportedPlateColors = ref<PlateColor[]>([])
@@ -93,6 +94,7 @@ async function loadSettings(): Promise<void> {
     timezone.value = data.timezone
     defaultPlateColor.value = data.defaultPlateColor
     allowedPlateColors.value = [...data.allowedPlateColors]
+    imageStoragePath.value = data.imageStoragePath || './data/images'
     supportedLocales.value = data.supportedLocales
     supportedTimezones.value = data.supportedTimezones
     supportedPlateColors.value = data.supportedPlateColors
@@ -113,6 +115,11 @@ async function onSubmit(): Promise<void> {
     errorMessage.value = t('systemSettings.plateColorRequired')
     return
   }
+  const storagePath = imageStoragePath.value.trim()
+  if (!storagePath) {
+    errorMessage.value = t('systemSettings.imageStoragePathRequired')
+    return
+  }
   submitting.value = true
   try {
     const response = await updateSystemSettings(
@@ -121,6 +128,7 @@ async function onSubmit(): Promise<void> {
         timezone: timezone.value,
         defaultPlateColor: defaultPlateColor.value,
         allowedPlateColors: allowedPlateColors.value,
+        imageStoragePath: storagePath,
       },
       locale.value,
     )
@@ -129,6 +137,7 @@ async function onSubmit(): Promise<void> {
     timezone.value = data.timezone
     defaultPlateColor.value = data.defaultPlateColor
     allowedPlateColors.value = [...data.allowedPlateColors]
+    imageStoragePath.value = data.imageStoragePath || storagePath
     updatedAt.value = data.updatedAt
     applySiteSettings(data)
     successMessage.value = t('systemSettings.saved')
@@ -208,6 +217,22 @@ onMounted(() => {
       </article>
 
       <article class="card">
+        <h3>{{ t('systemSettings.storage') }}</h3>
+        <p class="hint">{{ t('systemSettings.storageHint') }}</p>
+        <div class="form">
+          <label>
+            <span>{{ t('systemSettings.imageStoragePath') }}</span>
+            <input
+              v-model="imageStoragePath"
+              type="text"
+              maxlength="512"
+              :placeholder="t('systemSettings.imageStoragePathPlaceholder')"
+            />
+          </label>
+        </div>
+      </article>
+
+      <article class="card">
         <h3>{{ t('systemSettings.usage') }}</h3>
         <p class="hint">{{ t('systemSettings.usageHint') }}</p>
         <ul class="usage-list">
@@ -215,6 +240,7 @@ onMounted(() => {
           <li>{{ t('systemSettings.usageSms') }}</li>
           <li>{{ t('systemSettings.usageHardware') }}</li>
           <li>{{ t('systemSettings.usagePlateColor') }}</li>
+          <li>{{ t('systemSettings.usageImages') }}</li>
         </ul>
       </article>
 
@@ -315,7 +341,8 @@ label {
   gap: 0.35rem;
 }
 
-select {
+select,
+input[type='text'] {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 0.75rem;

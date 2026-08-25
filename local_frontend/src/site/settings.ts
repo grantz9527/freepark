@@ -14,6 +14,7 @@ export const siteAllowedPlateColors = ref<PlateColor[]>([
   'BLACK',
   'WHITE',
 ])
+export const siteImageStoragePath = ref('./data/images')
 
 let loadedForSession = false
 let loadingPromise: Promise<void> | null = null
@@ -25,6 +26,7 @@ export function applySiteSettings(data: SystemSettingsView): void {
   }
   siteDefaultPlateColor.value = data.defaultPlateColor
   siteAllowedPlateColors.value = [...data.allowedPlateColors]
+  siteImageStoragePath.value = data.imageStoragePath || './data/images'
   loadedForSession = true
 }
 
@@ -35,6 +37,7 @@ export function clearSiteSettingsCache(): void {
   siteDefaultLocale.value = DEFAULT_LOCALE
   siteDefaultPlateColor.value = 'BLUE'
   siteAllowedPlateColors.value = ['BLUE', 'YELLOW', 'GREEN', 'YELLOW_GREEN', 'BLACK', 'WHITE']
+  siteImageStoragePath.value = './data/images'
 }
 
 export async function ensureSiteSettings(locale: string, force = false): Promise<void> {

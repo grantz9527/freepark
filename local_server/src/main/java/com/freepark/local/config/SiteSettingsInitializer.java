@@ -53,6 +53,10 @@ public class SiteSettingsInitializer implements ApplicationRunner {
             settings.setDefaultPlateColor(settings.getAllowedPlateColors().getFirst());
             changed = true;
         }
+        if (settings.getImageStoragePath() == null || settings.getImageStoragePath().isBlank()) {
+            settings.setImageStoragePath(SiteSettings.DEFAULT_IMAGE_STORAGE_PATH);
+            changed = true;
+        }
         if (changed) {
             settingsRepository.save(settings);
             log.info("Patched site settings plate color defaults");

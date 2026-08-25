@@ -26,6 +26,7 @@ import jakarta.persistence.Table;
 public class SiteSettings {
 
     public static final String SINGLETON_ID = "default";
+    public static final String DEFAULT_IMAGE_STORAGE_PATH = "./data/images";
 
     @Id
     @Column(length = 32, nullable = false, updatable = false)
@@ -50,6 +51,9 @@ public class SiteSettings {
     @OrderColumn(name = "sort_order")
     private List<PlateColor> allowedPlateColors = new ArrayList<>();
 
+    @Column(name = "image_storage_path", length = 512)
+    private String imageStoragePath = DEFAULT_IMAGE_STORAGE_PATH;
+
     @LastModifiedDate
     @Column(nullable = false)
     private Instant updatedAt;
@@ -62,6 +66,7 @@ public class SiteSettings {
         this.timezone = timezone;
         this.defaultPlateColor = PlateColor.BLUE;
         this.allowedPlateColors = new ArrayList<>(PlateColorSupport.defaultChinaAllowed());
+        this.imageStoragePath = DEFAULT_IMAGE_STORAGE_PATH;
     }
 
     public String getId() {
@@ -98,6 +103,14 @@ public class SiteSettings {
 
     public void setAllowedPlateColors(List<PlateColor> allowedPlateColors) {
         this.allowedPlateColors = new ArrayList<>(allowedPlateColors);
+    }
+
+    public String getImageStoragePath() {
+        return imageStoragePath;
+    }
+
+    public void setImageStoragePath(String imageStoragePath) {
+        this.imageStoragePath = imageStoragePath;
     }
 
     public Instant getUpdatedAt() {

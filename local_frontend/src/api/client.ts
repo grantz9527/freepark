@@ -175,6 +175,129 @@ export function createLot(
   )
 }
 
+export type LaneType = 'ENTRANCE' | 'EXIT' | 'BIDIRECTIONAL'
+
+export interface LaneView {
+  id: string
+  lotId: string
+  lotName: string
+  lotCode: string
+  linkedLotId: string | null
+  linkedLotName: string | null
+  linkedLotCode: string | null
+  name: string
+  code: string
+  laneType: LaneType
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listLanes(locale: string, lotId?: string): Promise<ApiResponse<LaneView[]>> {
+  const query = lotId ? `?lotId=${encodeURIComponent(lotId)}` : ''
+  return apiCall(`/api/v1/lanes${query}`, { method: 'GET' }, locale)
+}
+
+export function createLane(
+  payload: {
+    name: string
+    code: string
+    laneType: LaneType
+    lotId: string
+    linkedLotId?: string | null
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<LaneView>> {
+  return apiCall(
+    '/api/v1/lanes',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateLane(
+  laneId: string,
+  payload: {
+    name: string
+    laneType?: LaneType
+    lotId: string
+    linkedLotId?: string | null
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<LaneView>> {
+  return apiCall(
+    `/api/v1/lanes/${laneId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export interface BarrierView {
+  id: string
+  laneId: string
+  laneName: string
+  laneCode: string
+  name: string
+  code: string
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listBarriers(laneId: string, locale: string): Promise<ApiResponse<BarrierView[]>> {
+  return apiCall(`/api/v1/lanes/${laneId}/barriers`, { method: 'GET' }, locale)
+}
+
+export function createBarrier(
+  laneId: string,
+  payload: {
+    name: string
+    code: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<BarrierView>> {
+  return apiCall(
+    `/api/v1/lanes/${laneId}/barriers`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateBarrier(
+  laneId: string,
+  barrierId: string,
+  payload: {
+    name: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<BarrierView>> {
+  return apiCall(
+    `/api/v1/lanes/${laneId}/barriers/${barrierId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
 export function updateLot(
   lotId: string,
   payload: {
@@ -460,6 +583,186 @@ export function deleteInternalVehicle(
   return apiCall(`/api/v1/lots/${lotId}/internal-vehicles/${vehicleId}`, { method: 'DELETE' }, locale)
 }
 
+export interface WhitelistVehicleView {
+  id: string
+  lotId: string
+  plateNumber: string
+  plateColor: PlateColor
+  ownerName: string
+  phone: string | null
+  department: string | null
+  remark: string | null
+  startTime: string | null
+  endTime: string | null
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listWhitelistVehicles(
+  lotId: string,
+  locale: string,
+  params: { plate?: string; page?: number; size?: number } = {},
+): Promise<ApiResponse<PageView<WhitelistVehicleView>>> {
+  const query = new URLSearchParams()
+  if (params.plate) query.set('plate', params.plate)
+  if (params.page != null) query.set('page', String(params.page))
+  if (params.size != null) query.set('size', String(params.size))
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return apiCall(`/api/v1/lots/${lotId}/whitelist-vehicles${suffix}`, { method: 'GET' }, locale)
+}
+
+export function createWhitelistVehicle(
+  lotId: string,
+  payload: {
+    plateNumber: string
+    plateColor: PlateColor
+    ownerName: string
+    phone?: string
+    department?: string
+    remark?: string
+    startTime: string
+    endTime: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<WhitelistVehicleView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/whitelist-vehicles`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateWhitelistVehicle(
+  lotId: string,
+  vehicleId: string,
+  payload: {
+    plateNumber: string
+    plateColor: PlateColor
+    ownerName: string
+    phone?: string
+    department?: string
+    remark?: string
+    startTime: string
+    endTime: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<WhitelistVehicleView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/whitelist-vehicles/${vehicleId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function deleteWhitelistVehicle(
+  lotId: string,
+  vehicleId: string,
+  locale: string,
+): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/lots/${lotId}/whitelist-vehicles/${vehicleId}`, { method: 'DELETE' }, locale)
+}
+
+export interface BlacklistVehicleView {
+  id: string
+  lotId: string
+  plateNumber: string
+  plateColor: PlateColor
+  ownerName: string
+  phone: string | null
+  department: string | null
+  remark: string | null
+  startTime: string | null
+  endTime: string | null
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listBlacklistVehicles(
+  lotId: string,
+  locale: string,
+  params: { plate?: string; page?: number; size?: number } = {},
+): Promise<ApiResponse<PageView<BlacklistVehicleView>>> {
+  const query = new URLSearchParams()
+  if (params.plate) query.set('plate', params.plate)
+  if (params.page != null) query.set('page', String(params.page))
+  if (params.size != null) query.set('size', String(params.size))
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return apiCall(`/api/v1/lots/${lotId}/blacklist-vehicles${suffix}`, { method: 'GET' }, locale)
+}
+
+export function createBlacklistVehicle(
+  lotId: string,
+  payload: {
+    plateNumber: string
+    plateColor: PlateColor
+    ownerName: string
+    phone?: string
+    department?: string
+    remark?: string
+    startTime: string
+    endTime: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<BlacklistVehicleView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/blacklist-vehicles`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateBlacklistVehicle(
+  lotId: string,
+  vehicleId: string,
+  payload: {
+    plateNumber: string
+    plateColor: PlateColor
+    ownerName: string
+    phone?: string
+    department?: string
+    remark?: string
+    startTime: string
+    endTime: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<BlacklistVehicleView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/blacklist-vehicles/${vehicleId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function deleteBlacklistVehicle(
+  lotId: string,
+  vehicleId: string,
+  locale: string,
+): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/lots/${lotId}/blacklist-vehicles/${vehicleId}`, { method: 'DELETE' }, locale)
+}
+
 export function changePassword(
   currentPassword: string,
   newPassword: string,
@@ -481,6 +784,7 @@ export interface SystemSettingsView {
   timezone: string
   defaultPlateColor: PlateColor
   allowedPlateColors: PlateColor[]
+  imageStoragePath: string
   supportedLocales: string[]
   supportedTimezones: string[]
   supportedPlateColors: PlateColor[]
@@ -497,6 +801,7 @@ export function updateSystemSettings(
     timezone: string
     defaultPlateColor: PlateColor
     allowedPlateColors: PlateColor[]
+    imageStoragePath: string
   },
   locale: string,
 ): Promise<ApiResponse<SystemSettingsView>> {

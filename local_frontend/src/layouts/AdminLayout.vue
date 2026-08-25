@@ -16,6 +16,8 @@ interface NavChild {
 interface NavGroup {
   id: string
   label: string
+  to?: string
+  name?: string
   children: NavChild[]
 }
 
@@ -96,6 +98,54 @@ const navGroups = computed((): NavGroup[] => {
       ],
     },
     {
+      id: 'parking',
+      label: t('nav.sectionParking'),
+      children: [
+        {
+          to: '/parking/recognition-records',
+          name: 'recognitionRecords',
+          label: t('nav.recognitionRecords'),
+          icon: 'recognitionRecords',
+        },
+        {
+          to: '/parking/sessions',
+          name: 'parkingSessions',
+          label: t('nav.parkingSessions'),
+          icon: 'parkingSessions',
+        },
+      ],
+    },
+    {
+      id: 'hardware',
+      label: t('nav.sectionHardware'),
+      children: [
+        {
+          to: '/hardware/lanes',
+          name: 'lanes',
+          label: t('nav.lanes'),
+          icon: 'lanes',
+        },
+        {
+          to: '/hardware/barriers',
+          name: 'barriers',
+          label: t('nav.barriers'),
+          icon: 'barriers',
+        },
+        {
+          to: '/hardware/iot',
+          name: 'iot',
+          label: t('nav.iot'),
+          icon: 'iot',
+        },
+        {
+          to: '/hardware/frigate',
+          name: 'frigate',
+          label: t('nav.frigate'),
+          icon: 'frigate',
+        },
+      ],
+    },
+    {
       id: 'system',
       label: t('nav.sectionSystem'),
       children: systemChildren,
@@ -103,10 +153,13 @@ const navGroups = computed((): NavGroup[] => {
   ]
 })
 
-const expandedGroups = ref<string[]>(['ops', 'access', 'system'])
+const expandedGroups = ref<string[]>(['ops', 'access', 'parking', 'hardware', 'system'])
 
 const pageTitle = computed(() => {
   for (const group of navGroups.value) {
+    if (group.name === route.name) {
+      return group.label
+    }
     const child = group.children.find((item) => item.name === route.name)
     if (child) {
       return child.label
@@ -130,6 +183,9 @@ const pageCrumb = computed(() => {
     return keys.map((key) => t(key)).join(' / ')
   }
   for (const group of navGroups.value) {
+    if (group.name === route.name) {
+      return group.label
+    }
     const child = group.children.find((item) => item.name === route.name)
     if (child) {
       return `${group.label} / ${child.label}`
@@ -178,6 +234,9 @@ function isGroupActive(group: NavGroup): boolean {
   if (parentNav?.groupId === group.id) {
     return true
   }
+  if (group.name && isActive(group.name)) {
+    return true
+  }
   return group.children.some((child) => child.name === route.name)
 }
 
@@ -212,7 +271,16 @@ function logout(): void {
         </RouterLink>
 
         <div v-for="group in navGroups" :key="group.id" class="nav-group">
+          <RouterLink
+            v-if="group.to && group.children.length === 0"
+            :to="group.to"
+            class="nav-group-btn"
+            :class="{ active: isGroupActive(group) }"
+          >
+            <span class="group-label">{{ group.label }}</span>
+          </RouterLink>
           <button
+            v-else
             type="button"
             class="nav-group-btn"
             :class="{ active: isGroupActive(group) }"
@@ -227,7 +295,7 @@ function logout(): void {
             </span>
           </button>
 
-          <div v-show="isExpanded(group.id)" class="nav-children">
+          <div v-show="group.children.length > 0 && isExpanded(group.id)" class="nav-children">
             <RouterLink
               v-for="item in group.children"
               :key="item.name"
@@ -272,6 +340,15 @@ function logout(): void {
                     stroke-linejoin="round"
                   />
                 </svg>
+                <svg v-else-if="item.icon === 'recognitionRecords'" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="6" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.8" />
+                  <circle cx="10" cy="12" r="2.2" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M16 10.5l4-2v7l-4-2" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+                </svg>
+                <svg v-else-if="item.icon === 'parkingSessions'" viewBox="0 0 24 24" fill="none">
+                  <path d="M7 5h10a2 2 0 0 1 2 2v12H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M8.5 9h7M8.5 12.5h7M8.5 16h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
                 <svg v-else-if="item.icon === 'operators'" viewBox="0 0 24 24" fill="none">
                   <circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.8" />
                   <path d="M4 19a5 5 0 0 1 10 0" stroke="currentColor" stroke-width="1.8" />
@@ -288,6 +365,27 @@ function logout(): void {
                   <circle cx="8" cy="6" r="2" stroke="currentColor" stroke-width="1.8" />
                   <circle cx="16" cy="12" r="2" stroke="currentColor" stroke-width="1.8" />
                   <circle cx="10" cy="18" r="2" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else-if="item.icon === 'lanes'" viewBox="0 0 24 24" fill="none">
+                  <path d="M5 20V7M19 20V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M5 10h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M9 10v3.5a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+                <svg v-else-if="item.icon === 'barriers'" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 20V8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M6 9h12l-2 3H8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  <rect x="4.5" y="7" width="3" height="3" rx="0.6" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else-if="item.icon === 'iot'" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="8" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M14 11h4.5a1.5 1.5 0 0 1 1.5 1.5V16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <circle cx="20" cy="18" r="1.6" stroke="currentColor" stroke-width="1.6" />
+                  <path d="M7 12h4M7 15h2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+                <svg v-else-if="item.icon === 'frigate'" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="7" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M16 10.5l4-2v7l-4-2" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+                  <circle cx="10" cy="12" r="2" stroke="currentColor" stroke-width="1.8" />
                 </svg>
                 <svg v-else-if="item.icon === 'settings'" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />
@@ -406,6 +504,7 @@ function logout(): void {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .nav-group-btn:hover,

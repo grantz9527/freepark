@@ -4,9 +4,10 @@ import { isAuthenticated, getUser } from '@/auth/session'
 import { detectLocale } from '@/i18n/locales'
 import { clearSiteSettingsCache, ensureSiteSettings } from '@/site/settings'
 import AdminLayout from '@/layouts/AdminLayout.vue'
-import ComingSoonView from '@/views/ComingSoonView.vue'
 import HomeView from '@/views/HomeView.vue'
 import InternalVehiclesView from '@/views/InternalVehiclesView.vue'
+import WhitelistView from '@/views/WhitelistView.vue'
+import BlacklistView from '@/views/BlacklistView.vue'
 import LotsView from '@/views/LotsView.vue'
 import LotInterceptConfigView from '@/views/LotInterceptConfigView.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -14,6 +15,11 @@ import OperatorsView from '@/views/OperatorsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import SystemSettingsView from '@/views/SystemSettingsView.vue'
 import SpacesView from '@/views/SpacesView.vue'
+import LanesView from '@/views/LanesView.vue'
+import BarrierDockingView from '@/views/BarrierDockingView.vue'
+import FrigateDockingView from '@/views/FrigateDockingView.vue'
+import IotDockingView from '@/views/IotDockingView.vue'
+import ComingSoonView from '@/views/ComingSoonView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -51,14 +57,58 @@ const router = createRouter({
         {
           path: 'whitelist',
           name: 'whitelist',
-          component: ComingSoonView,
+          component: WhitelistView,
           meta: { titleKey: 'nav.whitelist' },
         },
         {
           path: 'blacklist',
           name: 'blacklist',
-          component: ComingSoonView,
+          component: BlacklistView,
           meta: { titleKey: 'nav.blacklist' },
+        },
+        {
+          path: 'parking',
+          redirect: { name: 'recognitionRecords' },
+        },
+        {
+          path: 'parking/recognition-records',
+          name: 'recognitionRecords',
+          component: ComingSoonView,
+          meta: { titleKey: 'nav.recognitionRecords' },
+        },
+        {
+          path: 'parking/sessions',
+          name: 'parkingSessions',
+          component: ComingSoonView,
+          meta: { titleKey: 'nav.parkingSessions' },
+        },
+        {
+          path: 'hardware',
+          redirect: { name: 'lanes' },
+        },
+        {
+          path: 'hardware/lanes',
+          name: 'lanes',
+          component: LanesView,
+          meta: { titleKey: 'nav.lanes' },
+        },
+        {
+          path: 'hardware/barriers',
+          name: 'barriers',
+          component: BarrierDockingView,
+          meta: { titleKey: 'nav.barriers' },
+        },
+        {
+          path: 'hardware/iot',
+          name: 'iot',
+          component: IotDockingView,
+          meta: { titleKey: 'nav.iot' },
+        },
+        {
+          path: 'hardware/frigate',
+          name: 'frigate',
+          component: FrigateDockingView,
+          meta: { titleKey: 'nav.frigate' },
         },
         {
           path: 'operators',
