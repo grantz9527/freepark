@@ -132,6 +132,12 @@ export type LotType = 'INTERNAL' | 'PUBLIC'
 
 export type InterceptRuleType = 'ARREARS' | 'BLACKLIST'
 
+export type AccessJudgmentRuleType = 'BLACKLIST' | 'WHITELIST' | 'PATTERN_ALLOWLIST'
+
+export interface AccessJudgmentView {
+  ruleOrder: AccessJudgmentRuleType[]
+}
+
 export interface LotInterceptView {
   entryRules: InterceptRuleType[]
   exitRules: InterceptRuleType[]
@@ -340,6 +346,29 @@ export function updateLotIntercept(
   )
 }
 
+export function getAccessJudgment(
+  lotId: string,
+  locale: string,
+): Promise<ApiResponse<AccessJudgmentView>> {
+  return apiCall(`/api/v1/lots/${lotId}/access-judgment`, { method: 'GET' }, locale)
+}
+
+export function updateAccessJudgment(
+  lotId: string,
+  payload: AccessJudgmentView,
+  locale: string,
+): Promise<ApiResponse<AccessJudgmentView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/access-judgment`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
 export interface PageView<T> {
   items: T[]
   total: number
@@ -515,9 +544,41 @@ export interface InternalVehicleView {
 }
 
 export interface ImportInternalVehiclesResponse {
-  batchId: string
+  batchId: string | null
   imported: number
   skipped: number
+}
+
+async function downloadImportTemplateFile(path: string, locale: string, filename: string): Promise<void> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: 'GET',
+    headers: headers(locale, { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+  })
+  if (response.status === 401) {
+    clearSession()
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as ApiResponse<unknown> | null
+    throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)
+  }
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+export async function downloadInternalVehicleImportTemplate(
+  lotId: string,
+  locale: string,
+): Promise<void> {
+  await downloadImportTemplateFile(
+    `/api/v1/lots/${lotId}/internal-vehicles/import-template`,
+    locale,
+    'internal-vehicles-template.xlsx',
+  )
 }
 
 export async function importInternalVehicles(
@@ -702,6 +763,36 @@ export function updateWhitelistVehicle(
   )
 }
 
+export async function downloadWhitelistImportTemplate(lotId: string, locale: string): Promise<void> {
+  await downloadImportTemplateFile(
+    `/api/v1/lots/${lotId}/whitelist-vehicles/import-template`,
+    locale,
+    'whitelist-template.xlsx',
+  )
+}
+
+export async function importWhitelistVehicles(
+  lotId: string,
+  file: File,
+  locale: string,
+): Promise<ApiResponse<ImportInternalVehiclesResponse>> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch(`${API_BASE}/api/v1/lots/${lotId}/whitelist-vehicles/import`, {
+    method: 'POST',
+    headers: headers(locale),
+    body: form,
+  })
+  const body = (await response.json().catch(() => null)) as ApiResponse<ImportInternalVehiclesResponse> | null
+  if (response.status === 401) {
+    clearSession()
+  }
+  if (!response.ok || body == null) {
+    throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)
+  }
+  return body
+}
+
 export function deleteWhitelistVehicle(
   lotId: string,
   vehicleId: string,
@@ -792,12 +883,117 @@ export function updateBlacklistVehicle(
   )
 }
 
+export async function downloadBlacklistImportTemplate(lotId: string, locale: string): Promise<void> {
+  await downloadImportTemplateFile(
+    `/api/v1/lots/${lotId}/blacklist-vehicles/import-template`,
+    locale,
+    'blacklist-template.xlsx',
+  )
+}
+
+export async function importBlacklistVehicles(
+  lotId: string,
+  file: File,
+  locale: string,
+): Promise<ApiResponse<ImportInternalVehiclesResponse>> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch(`${API_BASE}/api/v1/lots/${lotId}/blacklist-vehicles/import`, {
+    method: 'POST',
+    headers: headers(locale),
+    body: form,
+  })
+  const body = (await response.json().catch(() => null)) as ApiResponse<ImportInternalVehiclesResponse> | null
+  if (response.status === 401) {
+    clearSession()
+  }
+  if (!response.ok || body == null) {
+    throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)
+  }
+  return body
+}
+
 export function deleteBlacklistVehicle(
   lotId: string,
   vehicleId: string,
   locale: string,
 ): Promise<ApiResponse<null>> {
   return apiCall(`/api/v1/lots/${lotId}/blacklist-vehicles/${vehicleId}`, { method: 'DELETE' }, locale)
+}
+
+export interface PatternAllowlistView {
+  id: string
+  lotId: string
+  name: string
+  pattern: string
+  remark: string | null
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export function listPatternAllowlist(
+  lotId: string,
+  locale: string,
+  params: { keyword?: string; page?: number; size?: number } = {},
+): Promise<ApiResponse<PageView<PatternAllowlistView>>> {
+  const query = new URLSearchParams()
+  if (params.keyword) query.set('keyword', params.keyword)
+  if (params.page != null) query.set('page', String(params.page))
+  if (params.size != null) query.set('size', String(params.size))
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return apiCall(`/api/v1/lots/${lotId}/pattern-allowlist${suffix}`, { method: 'GET' }, locale)
+}
+
+export function createPatternAllowlistEntry(
+  lotId: string,
+  payload: {
+    name: string
+    pattern: string
+    remark?: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<PatternAllowlistView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/pattern-allowlist`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updatePatternAllowlistEntry(
+  lotId: string,
+  entryId: string,
+  payload: {
+    name: string
+    pattern: string
+    remark?: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<PatternAllowlistView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/pattern-allowlist/${entryId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function deletePatternAllowlistEntry(
+  lotId: string,
+  entryId: string,
+  locale: string,
+): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/lots/${lotId}/pattern-allowlist/${entryId}`, { method: 'DELETE' }, locale)
 }
 
 export function changePassword(

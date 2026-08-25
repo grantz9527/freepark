@@ -1,5 +1,6 @@
 package com.freepark.local.web;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -141,6 +142,17 @@ class InternalVehicleControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(1));
+    }
+
+    @Test
+    void adminCanDownloadImportTemplate() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token);
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles/import-template")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
     }
 
     private byte[] buildVehicleExcel() throws Exception {

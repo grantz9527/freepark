@@ -43,7 +43,21 @@ import {
   listLanePlateIntercept,
   saveLanePlateIntercept,
 } from '@/hardware/lanePlateIntercept'
-import { siteAllowedPlateColors } from '@/site/settings'
+import {
+  clearLaneSimEvents,
+  listLaneSimEvents,
+  simulateLaneEvent,
+  type LaneSimDirection,
+  type LaneSimEvent,
+} from '@/hardware/laneSimEvents'
+import {
+  buildSimEventImage,
+  createRecognitionRecord,
+  markRecognitionAbnormal,
+} from '@/hardware/recognitionRecords'
+import { applyRecognitionToParkingSession, hasOpenParkingSession } from '@/hardware/parkingSessions'
+import { isRegisteredInternalVehicle } from '@/lib/internalVehicleAccess'
+import { siteAllowedPlateColors, siteDefaultPlateColor } from '@/site/settings'
 
 const LOT_STORAGE_KEY = 'freepark.lanes.lotId'
 
@@ -90,7 +104,17 @@ const bindIotDeviceId = ref('')
 const bindIotDirection = ref<IotBindDirection | ''>('')
 const bindIotError = ref('')
 
-const laneTypeOptions: LaneType[] = ['ENTRANCE', 'EXIT', 'BIDIRECTIONAL']
+const simLane = ref<LaneView | null>(null)
+const simPlate = ref('')
+const simPlateColor = ref<PlateColor>(siteDefaultPlateColor.value)
+const simDirection = ref<LaneSimDirection | ''>('')
+const simError = ref('')
+const simBusy = ref(false)
+const simEvents = ref<LaneSimEvent[]>([])
+const simLogs = ref<string[]>([])
+
+const laneTypeOptions: LaneType[] = ['ENTRANCE', 'EXIT']
+const plateColorOptions = computed(() => siteAllowedPlateColors.value)
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const isEditing = computed(() => editingLaneId.value !== null)
@@ -625,6 +649,192 @@ function onUnbindFrigate(cameraId: string): void {
   frigateCameras.value = unbindFrigateCamera(cameraId, frigateCameras.value)
 }
 
+function refreshSimEvents(): void {
+  if (!simLane.value) {
+    simEvents.value = []
+    return
+  }
+  simEvents.value = listLaneSimEvents(simLane.value.id)
+}
+
+function pushSimLog(message: string): void {
+  const stamp = new Date().toLocaleTimeString()
+  simLogs.value = [`[${stamp}] ${message}`, ...simLogs.value].slice(0, 40)
+}
+
+function defaultSimDirection(lane: LaneView): LaneSimDirection | '' {
+  if (lane.laneType === 'EXIT') {
+    return 'EXIT'
+  }
+  if (lane.laneType === 'ENTRANCE') {
+    return 'ENTRANCE'
+  }
+  return ''
+}
+
+function openSimPanel(lane: LaneView): void {
+  simLane.value = lane
+  simPlate.value = ''
+  simPlateColor.value = siteDefaultPlateColor.value
+  simDirection.value = defaultSimDirection(lane)
+  simError.value = ''
+  simBusy.value = false
+  simLogs.value = []
+  refreshSimEvents()
+}
+
+function closeSimPanel(): void {
+  simLane.value = null
+  simPlate.value = ''
+  simPlateColor.value = siteDefaultPlateColor.value
+  simDirection.value = ''
+  simError.value = ''
+  simBusy.value = false
+  simEvents.value = []
+  simLogs.value = []
+}
+
+function simDirectionLabel(direction: LaneSimDirection): string {
+  return direction === 'EXIT' ? t('lanes.simExit') : t('lanes.simEntrance')
+}
+
+function simResultLabel(result: LaneSimEvent['result']): string {
+  return result === 'INTERCEPTED' ? t('lanes.simResultIntercepted') : t('lanes.simResultAllowed')
+}
+
+function linkedSimBarriers(lane: LaneView, direction: LaneSimDirection): BarrierDevice[] {
+  return listBarrierDevices().filter((item) => {
+    if (item.laneId !== lane.id || item.linkStatus !== 'CONNECTED') {
+      return false
+    }
+    if (!item.bindDirection) {
+      return true
+    }
+    return item.bindDirection === direction
+  })
+}
+
+async function onSimulate(): Promise<void> {
+  if (!simLane.value) {
+    return
+  }
+  const plate = simPlate.value.trim()
+  if (!plate) {
+    simError.value = t('lanes.simPlateRequired')
+    return
+  }
+  let direction = simDirection.value
+  if (!direction) {
+    simError.value = t('lanes.simDirectionRequired')
+    return
+  }
+  simError.value = ''
+  simBusy.value = true
+  try {
+    const lot = lots.value.find((item) => item.id === simLane.value!.lotId)
+    const interceptColors = getLanePlateIntercept(simLane.value.id)
+    const openSession = hasOpenParkingSession(simLane.value.lotId, plate)
+    let registeredInternal = true
+    if (lot?.lotType === 'INTERNAL' && direction === 'ENTRANCE') {
+      registeredInternal = await isRegisteredInternalVehicle(simLane.value.lotId, plate, locale.value)
+    }
+    const event = simulateLaneEvent({
+      laneId: simLane.value.id,
+      lotId: simLane.value.lotId,
+      plateNumber: plate,
+      plateColor: simPlateColor.value,
+      direction,
+      lotType: lot?.lotType,
+      isRegisteredInternalVehicle: registeredInternal,
+      interceptColors,
+      hasOpenSession: direction === 'EXIT' ? openSession : undefined,
+    })
+    refreshSimEvents()
+    pushSimLog(
+      t('lanes.simLogEvent', {
+        direction: simDirectionLabel(event.direction),
+        plate: event.plateNumber,
+        color: plateColorLabel(event.plateColor),
+      }),
+    )
+    if (event.result === 'INTERCEPTED') {
+      if (event.remark === 'not_internal_vehicle') {
+        simError.value = t('lanes.simInternalRejected')
+        pushSimLog(t('lanes.simLogInternalRejected', { plate: event.plateNumber }))
+        createRecognitionRecord({
+          lotId: simLane.value.lotId,
+          lotName: simLane.value.lotName,
+          laneId: simLane.value.id,
+          laneName: simLane.value.name,
+          plateNumber: event.plateNumber,
+          plateColor: event.plateColor,
+          eventTime: event.createdAt,
+          eventImage: buildSimEventImage(event.plateNumber, event.plateColor),
+          eventType: 'DEVICE',
+          direction: event.direction,
+          abnormal: true,
+          abnormalReason: 'not_internal_vehicle',
+          sourceSimEventId: event.id,
+        })
+        pushSimLog(t('lanes.simLogRecognitionNotInternal', { plate: event.plateNumber }))
+      } else {
+        pushSimLog(t('lanes.simLogIntercepted', { plate: event.plateNumber }))
+      }
+      return
+    }
+    if (event.direction === 'ENTRANCE') {
+      pushSimLog(t('lanes.simLogEntry', { plate: event.plateNumber }))
+    } else {
+      pushSimLog(t('lanes.simLogExit', { plate: event.plateNumber }))
+    }
+    const recognition = createRecognitionRecord({
+      lotId: simLane.value.lotId,
+      lotName: simLane.value.lotName,
+      laneId: simLane.value.id,
+      laneName: simLane.value.name,
+      plateNumber: event.plateNumber,
+      plateColor: event.plateColor,
+      eventTime: event.createdAt,
+      eventImage: buildSimEventImage(event.plateNumber, event.plateColor),
+      eventType: 'DEVICE',
+      direction: event.direction,
+      sourceSimEventId: event.id,
+    })
+    pushSimLog(t('lanes.simLogRecognition', { plate: event.plateNumber }))
+    const flow = applyRecognitionToParkingSession(recognition)
+    if (flow.kind === 'entry') {
+      pushSimLog(t('lanes.simLogSessionOpened', { plate: event.plateNumber }))
+    } else if (flow.kind === 'exit_matched') {
+      pushSimLog(t('lanes.simLogSessionClosed', { plate: event.plateNumber }))
+    } else if (flow.kind === 'exit_unmatched') {
+      markRecognitionAbnormal(recognition.id, 'exit_unmatched')
+      pushSimLog(t('lanes.simLogSessionUnmatched', { plate: event.plateNumber }))
+    }
+    const barriers = linkedSimBarriers(simLane.value, event.direction)
+    if (barriers.length > 0) {
+      pushSimLog(
+        t('lanes.simLogBarrier', {
+          plate: event.plateNumber,
+          devices: barriers.map((item) => item.name).join(' · '),
+        }),
+      )
+    } else {
+      pushSimLog(t('lanes.simLogNoBarrier'))
+    }
+  } finally {
+    simBusy.value = false
+  }
+}
+
+function onClearSimEvents(): void {
+  if (!simLane.value) {
+    return
+  }
+  clearLaneSimEvents(simLane.value.id)
+  refreshSimEvents()
+  pushSimLog(t('lanes.simLogCleared'))
+}
+
 onMounted(reload)
 </script>
 
@@ -697,6 +907,9 @@ onMounted(reload)
               <td>{{ formatTime(item.updatedAt) }}</td>
               <td class="col-actions">
                 <div class="action-group">
+                  <button type="button" class="link-btn" @click="openSimPanel(item)">
+                    {{ t('lanes.simulate') }}
+                  </button>
                   <button type="button" class="link-btn" @click="openBarrierPanel(item)">
                     {{ t('lanes.manageBarriers') }}
                   </button>
@@ -1075,6 +1288,115 @@ onMounted(reload)
         </div>
       </div>
     </div>
+
+    <div v-if="simLane" class="modal-backdrop" @click.self="closeSimPanel">
+      <div class="modal wide">
+        <div class="modal-head">
+          <h3>{{ t('lanes.simTitle') }} · {{ simLane.name }}</h3>
+          <button
+            type="button"
+            class="modal-close"
+            :aria-label="t('lanes.cancel')"
+            @click="closeSimPanel"
+          >
+            ×
+          </button>
+        </div>
+        <p class="hint">{{ t('lanes.simHint') }}</p>
+        <p class="banner planning">{{ t('lanes.simPlanning') }}</p>
+        <div class="sim-form">
+          <label>
+            <span>{{ t('lanes.simPlate') }}</span>
+            <input
+              v-model="simPlate"
+              type="text"
+              autocomplete="off"
+              :placeholder="t('lanes.simPlatePlaceholder')"
+              @keyup.enter="onSimulate"
+            />
+          </label>
+          <label>
+            <span>{{ t('lanes.simPlateColor') }}</span>
+            <select v-model="simPlateColor">
+              <option v-for="color in plateColorOptions" :key="color" :value="color">
+                {{ plateColorLabel(color) }}
+              </option>
+            </select>
+          </label>
+          <label>
+            <span>{{ t('lanes.simDirection') }}</span>
+            <select v-model="simDirection">
+              <option value="">{{ t('lanes.simDirectionPlaceholder') }}</option>
+              <option value="ENTRANCE">{{ t('lanes.simEntrance') }}</option>
+              <option value="EXIT">{{ t('lanes.simExit') }}</option>
+            </select>
+            <span v-if="simLane.laneType !== 'BIDIRECTIONAL'" class="field-hint">
+              {{
+                t('lanes.simDirectionAuto', {
+                  type: laneTypeLabel(simLane.laneType),
+                  action: simDirectionLabel(defaultSimDirection(simLane) || 'ENTRANCE'),
+                })
+              }}
+            </span>
+          </label>
+        </div>
+        <p v-if="simError" class="form-error">{{ simError }}</p>
+        <div class="actions start">
+          <button type="button" :disabled="simBusy" @click="onSimulate">
+            {{ simBusy ? t('lanes.simSubmitting') : t('lanes.simSubmit') }}
+          </button>
+          <button
+            v-if="simEvents.length > 0"
+            type="button"
+            class="ghost"
+            :disabled="simBusy"
+            @click="onClearSimEvents"
+          >
+            {{ t('lanes.simClear') }}
+          </button>
+        </div>
+
+        <div v-if="simLogs.length > 0" class="sim-log">
+          <strong>{{ t('lanes.simLogTitle') }}</strong>
+          <ul>
+            <li v-for="(line, index) in simLogs" :key="`${index}-${line}`">{{ line }}</li>
+          </ul>
+        </div>
+
+        <div class="sim-history">
+          <strong>{{ t('lanes.simHistoryTitle') }}</strong>
+          <table v-if="simEvents.length > 0">
+            <thead>
+              <tr>
+                <th>{{ t('lanes.simColTime') }}</th>
+                <th>{{ t('lanes.simColDirection') }}</th>
+                <th>{{ t('lanes.simColPlate') }}</th>
+                <th>{{ t('lanes.simColColor') }}</th>
+                <th>{{ t('lanes.simColResult') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in simEvents" :key="item.id">
+                <td>{{ formatTime(item.createdAt) }}</td>
+                <td>{{ simDirectionLabel(item.direction) }}</td>
+                <td>{{ item.plateNumber }}</td>
+                <td>{{ plateColorLabel(item.plateColor) }}</td>
+                <td>
+                  <span class="pill" :class="item.result === 'ALLOWED' ? 'ok' : 'fail'">
+                    {{ simResultLabel(item.result) }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="field-hint">{{ t('lanes.simHistoryEmpty') }}</p>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="ghost" @click="closeSimPanel">{{ t('lanes.cancel') }}</button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -1280,6 +1602,31 @@ tbody tr:last-child td {
   margin: 0;
 }
 
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.modal-close {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  color: var(--text);
+  background: #f2f4f3;
+}
+
 .hint {
   margin: -0.25rem 0 0;
   color: var(--muted);
@@ -1361,6 +1708,11 @@ select {
   gap: 0.5rem;
 }
 
+.actions.start {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
 .actions button {
   border: 0;
   border-radius: 8px;
@@ -1377,6 +1729,41 @@ select {
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
+}
+
+.sim-form {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  align-items: end;
+}
+
+.sim-log,
+.sim-history {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.sim-log ul {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  list-style: none;
+  max-height: 9rem;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f7faf8;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.sim-log li + li {
+  margin-top: 0.35rem;
+}
+
+.sim-history table {
+  width: 100%;
 }
 
 .sr-only {

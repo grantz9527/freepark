@@ -1,9 +1,17 @@
 package com.freepark.local.domain;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 
 @Entity
@@ -41,6 +49,13 @@ public class ParkingLot extends BaseEntity {
     @Column(nullable = false)
     private boolean exitInterceptBlacklist = false;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "lot_access_judgment_order", joinColumns = @JoinColumn(name = "lot_id"))
+    @OrderColumn(name = "sort_order")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "rule_type", nullable = false, length = 32)
+    private List<AccessJudgmentRuleType> accessJudgmentOrder = new ArrayList<>(AccessJudgmentRuleType.defaultOrder());
+
     protected ParkingLot() {
     }
 
@@ -57,6 +72,7 @@ public class ParkingLot extends BaseEntity {
         this.address = address;
         this.totalSpaces = totalSpaces;
         this.enabled = enabled;
+        this.accessJudgmentOrder = new ArrayList<>(AccessJudgmentRuleType.defaultOrder());
     }
 
     public String getName() {
@@ -97,6 +113,27 @@ public class ParkingLot extends BaseEntity {
 
     public boolean isExitInterceptBlacklist() {
         return exitInterceptBlacklist;
+    }
+
+    public List<AccessJudgmentRuleType> getAccessJudgmentOrder() {
+        return accessJudgmentOrder;
+    }
+
+    public List<AccessJudgmentRuleType> effectiveAccessJudgmentOrder() {
+        if (accessJudgmentOrder == null || accessJudgmentOrder.isEmpty()) {
+            return AccessJudgmentRuleType.defaultOrder();
+        }
+        if (accessJudgmentOrder.size() != AccessJudgmentRuleType.values().length) {
+            return AccessJudgmentRuleType.defaultOrder();
+        }
+        if (!java.util.EnumSet.copyOf(accessJudgmentOrder).equals(java.util.EnumSet.allOf(AccessJudgmentRuleType.class))) {
+            return AccessJudgmentRuleType.defaultOrder();
+        }
+        return List.copyOf(accessJudgmentOrder);
+    }
+
+    public void updateAccessJudgmentOrder(List<AccessJudgmentRuleType> ruleOrder) {
+        this.accessJudgmentOrder = new ArrayList<>(ruleOrder);
     }
 
     public void updateDetails(

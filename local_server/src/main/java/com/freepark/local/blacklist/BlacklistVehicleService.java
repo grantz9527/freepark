@@ -14,16 +14,20 @@ import org.springframework.transaction.annotation.Transactional;
 import com.freepark.local.common.api.PageView;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
+import com.freepark.local.common.importing.VehicleSpreadsheetImportSupport;
+import com.freepark.local.domain.BlacklistVehicle;
+import com.freepark.local.domain.BlacklistVehicleRepository;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
 import com.freepark.local.domain.ParkingLot;
 import com.freepark.local.domain.ParkingLotRepository;
+import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.UserRole;
-import com.freepark.local.domain.BlacklistVehicle;
-import com.freepark.local.domain.BlacklistVehicleRepository;
+import com.freepark.local.internalvehicle.ImportInternalVehiclesResponse;
 import com.freepark.local.sitesettings.SystemSettingsService;
 
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class BlacklistVehicleService {
@@ -127,6 +131,74 @@ public class BlacklistVehicleService {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         vehicles.delete(vehicle);
+    }
+
+    @Transactional
+    public ImportInternalVehiclesResponse importVehicles(UUID requesterId, UUID lotId, MultipartFile file) {
+        requireAdmin(requesterId);
+        ParkingLot lot = requireLot(lotId);
+        List<String[]> rows = VehicleSpreadsheetImportSupport.readRows(
+                file, VehicleSpreadsheetImportSupport.ACCESS_LIST_COLUMN_COUNT);
+        List<PlateColor> allowedColors = systemSettings.getAllowedPlateColors();
+        PlateColor defaultColor = systemSettings.getDefaultPlateColor();
+        var zoneId = systemSettings.getTimezone();
+        int imported = 0;
+        int skipped = 0;
+        for (String[] cells : rows) {
+            String plate = VehicleSpreadsheetImportSupport.cell(cells, 0);
+            String owner = VehicleSpreadsheetImportSupport.cell(cells, 1);
+            if (plate.isEmpty() || plate.length() > 20 || owner.isEmpty() || owner.length() > 80) {
+                skipped++;
+                continue;
+            }
+            PlateColor color = defaultColor;
+            String colorToken = VehicleSpreadsheetImportSupport.cell(cells, 2);
+            if (!colorToken.isEmpty()) {
+                PlateColor parsed = VehicleSpreadsheetImportSupport.parsePlateColor(colorToken);
+                if (parsed == null) {
+                    skipped++;
+                    continue;
+                }
+                color = parsed;
+            }
+            if (!allowedColors.contains(color)) {
+                skipped++;
+                continue;
+            }
+            Instant startTime = VehicleSpreadsheetImportSupport.parseDateTime(
+                    VehicleSpreadsheetImportSupport.cell(cells, 6), zoneId);
+            Instant endTime = VehicleSpreadsheetImportSupport.parseDateTime(
+                    VehicleSpreadsheetImportSupport.cell(cells, 7), zoneId);
+            if (startTime == null || endTime == null || !endTime.isAfter(startTime)) {
+                skipped++;
+                continue;
+            }
+            if (vehicles.existsByLotIdAndPlateNumberIgnoreCase(lotId, plate)) {
+                skipped++;
+                continue;
+            }
+            BlacklistVehicle vehicle = new BlacklistVehicle(
+                    lot,
+                    plate,
+                    color,
+                    owner,
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 3)),
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 4)),
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 5)),
+                    startTime,
+                    endTime,
+                    true);
+            vehicles.save(vehicle);
+            imported++;
+        }
+        return new ImportInternalVehiclesResponse(null, imported, skipped);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] buildImportTemplate(UUID lotId) {
+        requireLot(lotId);
+        return VehicleSpreadsheetImportSupport.buildTemplate(
+                "黑名单", VehicleSpreadsheetImportSupport.ACCESS_LIST_TEMPLATE_COLUMNS);
     }
 
     private Specification<BlacklistVehicle> buildSpec(UUID lotId, String plate) {

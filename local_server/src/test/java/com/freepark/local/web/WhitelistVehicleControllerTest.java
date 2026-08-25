@@ -1,5 +1,7 @@
 package com.freepark.local.web;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -8,10 +10,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,6 +73,14 @@ class WhitelistVehicleControllerTest {
                 .andExpect(jsonPath("$.data.startTime").value("2026-08-23T00:00:00Z"))
                 .andExpect(jsonPath("$.data.endTime").value("2026-12-31T23:59:59Z"));
 
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles")
+                        .header("Authorization", "Bearer " + token)
+                        .param("plate", "12345"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].plateNumber").value("京A12345"))
+                .andExpect(jsonPath("$.data.items[0].ownerName").value("张三"));
+
         mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .param("plate", "12345"))
@@ -92,6 +106,15 @@ class WhitelistVehicleControllerTest {
                 .andExpect(jsonPath("$.data.enabled").value(false))
                 .andExpect(jsonPath("$.data.startTime").value("2026-02-01T00:00:00Z"))
                 .andExpect(jsonPath("$.data.endTime").value("2026-07-31T23:59:59Z"));
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles")
+                        .header("Authorization", "Bearer " + token)
+                        .param("plate", "99999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].plateNumber").value("京B99999"))
+                .andExpect(jsonPath("$.data.items[0].plateColor").value("YELLOW"))
+                .andExpect(jsonPath("$.data.items[0].enabled").value(false));
 
         mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
@@ -139,5 +162,58 @@ class WhitelistVehicleControllerTest {
                         .content("{\"plateNumber\":\"京C11111\",\"plateColor\":\"BLUE\",\"ownerName\":\"赵六\",\"startTime\":\"2026-01-01T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("forbidden"));
+    }
+
+    @Test
+    void adminCanImportWhitelistAndDownloadTemplate() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token);
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles/import-template")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+
+        byte[] excel = buildAccessListExcel();
+        mockMvc.perform(multipart("/api/v1/lots/" + lotId + "/whitelist-vehicles/import")
+                        .file(new MockMultipartFile(
+                                "file",
+                                "whitelist.xlsx",
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                excel))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.imported").value(1))
+                .andExpect(jsonPath("$.data.skipped").value(1));
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1));
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1));
+    }
+
+    private byte[] buildAccessListExcel() throws Exception {
+        String[][] rows = {
+            { "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "开始时间", "结束时间" },
+            { "京A10001", "张三", "BLUE", "13800000000", "访客", "", "2026-01-01 00:00", "2026-12-31 23:59" },
+            { "京A10001", "李四", "BLUE", "", "", "", "2026-01-01 00:00", "2026-12-31 23:59" },
+        };
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("whitelist");
+            for (int r = 0; r < rows.length; r++) {
+                Row row = sheet.createRow(r);
+                for (int c = 0; c < rows[r].length; c++) {
+                    row.createCell(c).setCellValue(rows[r][c]);
+                }
+            }
+            workbook.write(out);
+            return out.toByteArray();
+        }
     }
 }

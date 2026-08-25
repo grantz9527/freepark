@@ -1,17 +1,9 @@
 package com.freepark.local.internalvehicle;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
@@ -22,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.freepark.local.common.api.PageView;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
+import com.freepark.local.common.importing.VehicleSpreadsheetImportSupport;
 import com.freepark.local.domain.InternalVehicle;
 import com.freepark.local.domain.InternalVehicleRepository;
 import com.freepark.local.domain.LocalUser;
@@ -143,23 +136,24 @@ public class InternalVehicleService {
     public ImportInternalVehiclesResponse importVehicles(UUID requesterId, UUID lotId, MultipartFile file) {
         requireAdmin(requesterId);
         ParkingLot lot = requireLot(lotId);
-        List<String[]> rows = readRows(file);
+        List<String[]> rows = VehicleSpreadsheetImportSupport.readRows(
+                file, VehicleSpreadsheetImportSupport.INTERNAL_COLUMN_COUNT);
         UUID batchId = UUID.randomUUID();
         List<PlateColor> allowedColors = systemSettings.getAllowedPlateColors();
         PlateColor defaultColor = systemSettings.getDefaultPlateColor();
         int imported = 0;
         int skipped = 0;
         for (String[] cells : rows) {
-            String plate = cell(cells, 0);
-            String owner = cell(cells, 1);
+            String plate = VehicleSpreadsheetImportSupport.cell(cells, 0);
+            String owner = VehicleSpreadsheetImportSupport.cell(cells, 1);
             if (plate.isEmpty() || plate.length() > 20 || owner.isEmpty() || owner.length() > 80) {
                 skipped++;
                 continue;
             }
             PlateColor color = defaultColor;
-            String colorToken = cell(cells, 2);
+            String colorToken = VehicleSpreadsheetImportSupport.cell(cells, 2);
             if (!colorToken.isEmpty()) {
-                PlateColor parsed = parsePlateColor(colorToken);
+                PlateColor parsed = VehicleSpreadsheetImportSupport.parsePlateColor(colorToken);
                 if (parsed == null) {
                     skipped++;
                     continue;
@@ -179,9 +173,9 @@ public class InternalVehicleService {
                     plate,
                     color,
                     owner,
-                    normalizeOptional(cell(cells, 3)),
-                    normalizeOptional(cell(cells, 4)),
-                    normalizeOptional(cell(cells, 5)),
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 3)),
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 4)),
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 5)),
                     true);
             vehicle.setBatchId(batchId);
             vehicles.save(vehicle);
@@ -190,87 +184,11 @@ public class InternalVehicleService {
         return new ImportInternalVehiclesResponse(batchId, imported, skipped);
     }
 
-    private List<String[]> readRows(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        }
-        List<String[]> rows = new ArrayList<>();
-        DataFormatter formatter = new DataFormatter();
-        try (InputStream in = file.getInputStream();
-                Workbook workbook = WorkbookFactory.create(in)) {
-            Sheet sheet = workbook.getSheetAt(0);
-            for (Row row : sheet) {
-                String[] cells = new String[6];
-                for (int i = 0; i < 6; i++) {
-                    Cell cell = row.getCell(i);
-                    cells[i] = cell == null ? "" : formatter.formatCellValue(cell).trim();
-                }
-                if (cells[0].isEmpty() && cells[1].isEmpty()) {
-                    continue;
-                }
-                if (isHeaderRow(cells[0])) {
-                    continue;
-                }
-                rows.add(cells);
-            }
-        } catch (IOException | RuntimeException ex) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        }
-        if (rows.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        }
-        return rows;
-    }
-
-    private boolean isHeaderRow(String firstCell) {
-        String header = firstCell.trim().toLowerCase();
-        return header.equals("车牌号")
-                || header.equals("車牌號")
-                || header.equals("plate")
-                || header.equals("plate number")
-                || header.equals("车牌");
-    }
-
-    private String cell(String[] cells, int index) {
-        return index < cells.length && cells[index] != null ? cells[index].trim() : "";
-    }
-
-    private PlateColor parsePlateColor(String token) {
-        String value = token.trim().toUpperCase();
-        for (PlateColor color : PlateColor.values()) {
-            if (color.name().equals(value)) {
-                return color;
-            }
-        }
-        switch (value) {
-            case "BLUE":
-            case "蓝色":
-            case "蓝":
-                return PlateColor.BLUE;
-            case "YELLOW":
-            case "黄色":
-            case "黄":
-            case "黄绿":
-                return PlateColor.YELLOW;
-            case "GREEN":
-            case "绿色":
-            case "绿":
-            case "新能源":
-                return PlateColor.GREEN;
-            case "YELLOW_GREEN":
-            case "黄绿色":
-                return PlateColor.YELLOW_GREEN;
-            case "WHITE":
-            case "白色":
-            case "白":
-                return PlateColor.WHITE;
-            case "BLACK":
-            case "黑色":
-            case "黑":
-                return PlateColor.BLACK;
-            default:
-                return null;
-        }
+    @Transactional(readOnly = true)
+    public byte[] buildImportTemplate(UUID lotId) {
+        requireLot(lotId);
+        return VehicleSpreadsheetImportSupport.buildTemplate(
+                "内部车辆", VehicleSpreadsheetImportSupport.INTERNAL_TEMPLATE_COLUMNS);
     }
 
     @Transactional

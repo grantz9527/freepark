@@ -1,5 +1,7 @@
 package com.freepark.local.web;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -8,10 +10,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -139,5 +145,53 @@ class BlacklistVehicleControllerTest {
                         .content("{\"plateNumber\":\"京C11111\",\"plateColor\":\"BLUE\",\"ownerName\":\"赵六\",\"startTime\":\"2026-01-01T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("forbidden"));
+    }
+
+    @Test
+    void adminCanImportBlacklistAndDownloadTemplate() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token);
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/blacklist-vehicles/import-template")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+
+        byte[] excel = buildAccessListExcel();
+        mockMvc.perform(multipart("/api/v1/lots/" + lotId + "/blacklist-vehicles/import")
+                        .file(new MockMultipartFile(
+                                "file",
+                                "blacklist.xlsx",
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                excel))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.imported").value(1))
+                .andExpect(jsonPath("$.data.skipped").value(1));
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/blacklist-vehicles")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1));
+    }
+
+    private byte[] buildAccessListExcel() throws Exception {
+        String[][] rows = {
+            { "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "开始时间", "结束时间" },
+            { "京A20001", "王五", "GREEN", "", "", "", "2026-01-01 00:00", "2026-12-31 23:59" },
+            { "京A20001", "赵六", "GREEN", "", "", "", "2026-01-01 00:00", "2026-12-31 23:59" },
+        };
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("blacklist");
+            for (int r = 0; r < rows.length; r++) {
+                Row row = sheet.createRow(r);
+                for (int c = 0; c < rows[r].length; c++) {
+                    row.createCell(c).setCellValue(rows[r][c]);
+                }
+            }
+            workbook.write(out);
+            return out.toByteArray();
+        }
     }
 }

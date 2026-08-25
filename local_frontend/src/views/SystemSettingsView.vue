@@ -157,10 +157,10 @@ onMounted(() => {
   <section class="page">
     <p v-if="loading" class="hint">{{ t('systemSettings.loading') }}</p>
     <form v-else class="page-form" @submit.prevent="onSubmit">
-      <article class="card">
+      <article class="card card-regional">
         <h3>{{ t('systemSettings.regional') }}</h3>
         <p class="hint">{{ t('systemSettings.regionalHint') }}</p>
-        <div class="form">
+        <div class="form form-row">
           <label>
             <span>{{ t('systemSettings.defaultLanguage') }}</span>
             <select v-model="defaultLocale">
@@ -180,10 +180,26 @@ onMounted(() => {
         </div>
       </article>
 
-      <article class="card">
+      <article class="card card-storage">
+        <h3>{{ t('systemSettings.storage') }}</h3>
+        <p class="hint">{{ t('systemSettings.storageHint') }}</p>
+        <div class="form">
+          <label>
+            <span>{{ t('systemSettings.imageStoragePath') }}</span>
+            <input
+              v-model="imageStoragePath"
+              type="text"
+              maxlength="512"
+              :placeholder="t('systemSettings.imageStoragePathPlaceholder')"
+            />
+          </label>
+        </div>
+      </article>
+
+      <article class="card card-plates">
         <h3>{{ t('systemSettings.plateColors') }}</h3>
         <p class="hint">{{ t('systemSettings.plateColorsHint') }}</p>
-        <div class="form">
+        <div class="form plates-layout">
           <div class="field-block">
             <span class="field-label">{{ t('systemSettings.allowedPlateColors') }}</span>
             <div class="color-grid">
@@ -201,7 +217,7 @@ onMounted(() => {
               </label>
             </div>
           </div>
-          <label>
+          <label class="default-color">
             <span>{{ t('systemSettings.defaultPlateColor') }}</span>
             <select v-model="defaultPlateColor">
               <option
@@ -216,23 +232,7 @@ onMounted(() => {
         </div>
       </article>
 
-      <article class="card">
-        <h3>{{ t('systemSettings.storage') }}</h3>
-        <p class="hint">{{ t('systemSettings.storageHint') }}</p>
-        <div class="form">
-          <label>
-            <span>{{ t('systemSettings.imageStoragePath') }}</span>
-            <input
-              v-model="imageStoragePath"
-              type="text"
-              maxlength="512"
-              :placeholder="t('systemSettings.imageStoragePathPlaceholder')"
-            />
-          </label>
-        </div>
-      </article>
-
-      <article class="card">
+      <article class="card card-usage">
         <h3>{{ t('systemSettings.usage') }}</h3>
         <p class="hint">{{ t('systemSettings.usageHint') }}</p>
         <ul class="usage-list">
@@ -245,11 +245,13 @@ onMounted(() => {
       </article>
 
       <div class="form-footer">
-        <p v-if="updatedAt" class="meta">
-          {{ t('systemSettings.lastUpdated') }}: {{ formatUpdatedAt(updatedAt) }}
-        </p>
-        <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
-        <p v-if="successMessage" class="message ok">{{ successMessage }}</p>
+        <div class="footer-meta">
+          <p v-if="updatedAt" class="meta">
+            {{ t('systemSettings.lastUpdated') }}: {{ formatUpdatedAt(updatedAt) }}
+          </p>
+          <p v-if="errorMessage" class="message error">{{ errorMessage }}</p>
+          <p v-if="successMessage" class="message ok">{{ successMessage }}</p>
+        </div>
         <button type="submit" :disabled="submitting">
           {{ submitting ? t('systemSettings.saving') : t('systemSettings.save') }}
         </button>
@@ -262,12 +264,14 @@ onMounted(() => {
 .page {
   display: grid;
   gap: 0.9rem;
-  max-width: 640px;
+  width: 100%;
 }
 
 .page-form {
   display: grid;
   gap: 0.9rem;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  align-items: stretch;
 }
 
 .card {
@@ -276,6 +280,14 @@ onMounted(() => {
   border-radius: 12px;
   padding: 1.2rem 1.25rem;
   box-shadow: var(--shadow);
+}
+
+.card-plates {
+  grid-column: 1 / -1;
+}
+
+.card-usage {
+  grid-column: 1 / -1;
 }
 
 .card h3 {
@@ -295,19 +307,28 @@ onMounted(() => {
 }
 
 .usage-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.45rem 1.25rem;
   margin: 0;
   padding-left: 1.2rem;
   color: var(--muted);
   font-size: 0.9rem;
 }
 
-.usage-list li + li {
-  margin-top: 0.35rem;
-}
-
 .form {
   display: grid;
   gap: 0.75rem;
+}
+
+.form-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.plates-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 16rem);
+  align-items: start;
+  gap: 1.25rem;
 }
 
 .field-block {
@@ -321,7 +342,7 @@ onMounted(() => {
 
 .color-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
   gap: 0.45rem 0.75rem;
 }
 
@@ -343,17 +364,31 @@ label {
 
 select,
 input[type='text'] {
+  width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 0.75rem;
   background: #fff;
   color: var(--text);
   font: inherit;
+  box-sizing: border-box;
 }
 
 .form-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0.25rem 0.1rem 0;
+}
+
+.footer-meta {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.55rem;
+  min-width: min(100%, 20rem);
+  flex: 1;
 }
 
 .message {
@@ -376,13 +411,43 @@ input[type='text'] {
 button {
   border: 0;
   border-radius: 8px;
-  padding: 0.65rem 0.9rem;
+  padding: 0.65rem 1.2rem;
   font-weight: 600;
   color: #fff;
   background: var(--accent);
+  justify-self: end;
 }
 
 button:disabled {
   opacity: 0.7;
+}
+
+@media (max-width: 960px) {
+  .page-form {
+    grid-template-columns: 1fr;
+  }
+
+  .plates-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .usage-list {
+    grid-template-columns: 1fr;
+  }
+
+  .form-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  button {
+    width: 100%;
+  }
 }
 </style>

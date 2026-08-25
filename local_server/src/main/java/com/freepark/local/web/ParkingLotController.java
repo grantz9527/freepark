@@ -15,10 +15,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.freepark.local.common.api.ApiResponse;
 import com.freepark.local.common.i18n.MessageService;
+import com.freepark.local.lot.AccessJudgmentView;
 import com.freepark.local.lot.CreateLotRequest;
 import com.freepark.local.lot.LotInterceptView;
 import com.freepark.local.lot.LotView;
 import com.freepark.local.lot.ParkingLotService;
+import com.freepark.local.lot.UpdateAccessJudgmentRequest;
 import com.freepark.local.lot.UpdateLotInterceptRequest;
 import com.freepark.local.lot.UpdateLotRequest;
 
@@ -69,5 +71,20 @@ public class ParkingLotController {
         return ApiResponse.ok(
                 messages,
                 parkingLotService.updateLotIntercept(UUID.fromString(jwt.getSubject()), lotId, request));
+    }
+
+    @GetMapping("/{lotId}/access-judgment")
+    public ApiResponse<AccessJudgmentView> getAccessJudgment(@PathVariable UUID lotId) {
+        return ApiResponse.ok(messages, parkingLotService.getAccessJudgment(lotId));
+    }
+
+    @PutMapping("/{lotId}/access-judgment")
+    public ApiResponse<AccessJudgmentView> updateAccessJudgment(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID lotId,
+            @Valid @RequestBody UpdateAccessJudgmentRequest request) {
+        return ApiResponse.ok(
+                messages,
+                parkingLotService.updateAccessJudgment(UUID.fromString(jwt.getSubject()), lotId, request));
     }
 }

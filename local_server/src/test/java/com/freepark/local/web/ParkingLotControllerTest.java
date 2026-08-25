@@ -218,4 +218,44 @@ class ParkingLotControllerTest {
                 .andExpect(jsonPath("$.data.exitRules.length()").value(1))
                 .andExpect(jsonPath("$.data.exitRules[0]").value("BLACKLIST"));
     }
+
+    @Test
+    void adminCanReadAndUpdateAccessJudgmentOrder() throws Exception {
+        String token = adminToken();
+        String code = "lot_" + System.nanoTime();
+
+        MvcResult create = mockMvc.perform(post("/api/v1/lots")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Judgment Lot\",\"code\":\"" + code
+                                + "\",\"lotType\":\"INTERNAL\",\"totalSpaces\":10}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String lotId = jsonMapper.readTree(create.getResponse().getContentAsString())
+                .get("data").get("id").asString();
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/access-judgment")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ruleOrder.length()").value(3))
+                .andExpect(jsonPath("$.data.ruleOrder[0]").value("BLACKLIST"))
+                .andExpect(jsonPath("$.data.ruleOrder[1]").value("WHITELIST"))
+                .andExpect(jsonPath("$.data.ruleOrder[2]").value("PATTERN_ALLOWLIST"));
+
+        mockMvc.perform(put("/api/v1/lots/" + lotId + "/access-judgment")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ruleOrder\":[\"WHITELIST\",\"PATTERN_ALLOWLIST\",\"BLACKLIST\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ruleOrder[0]").value("WHITELIST"))
+                .andExpect(jsonPath("$.data.ruleOrder[1]").value("PATTERN_ALLOWLIST"))
+                .andExpect(jsonPath("$.data.ruleOrder[2]").value("BLACKLIST"));
+
+        mockMvc.perform(put("/api/v1/lots/" + lotId + "/access-judgment")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ruleOrder\":[\"BLACKLIST\",\"BLACKLIST\",\"WHITELIST\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("access_judgment_invalid_order"));
+    }
 }

@@ -4,6 +4,9 @@ import java.util.UUID;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.freepark.local.common.api.ApiResponse;
 import com.freepark.local.common.api.PageView;
@@ -21,6 +25,7 @@ import com.freepark.local.blacklist.CreateBlacklistVehicleRequest;
 import com.freepark.local.blacklist.UpdateBlacklistVehicleRequest;
 import com.freepark.local.blacklist.BlacklistVehicleService;
 import com.freepark.local.blacklist.BlacklistVehicleView;
+import com.freepark.local.internalvehicle.ImportInternalVehiclesResponse;
 
 import jakarta.validation.Valid;
 
@@ -65,6 +70,26 @@ public class BlacklistVehicleController {
                 messages,
                 blacklistVehicleService.updateVehicle(
                         UUID.fromString(jwt.getSubject()), lotId, vehicleId, request));
+    }
+
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<ImportInternalVehiclesResponse> importVehicles(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID lotId,
+            @RequestParam("file") MultipartFile file) {
+        return ApiResponse.ok(
+                messages,
+                blacklistVehicleService.importVehicles(UUID.fromString(jwt.getSubject()), lotId, file));
+    }
+
+    @GetMapping("/import-template")
+    public ResponseEntity<byte[]> downloadImportTemplate(@PathVariable UUID lotId) {
+        byte[] body = blacklistVehicleService.buildImportTemplate(lotId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"blacklist-template.xlsx\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(body);
     }
 
     @DeleteMapping("/{vehicleId}")

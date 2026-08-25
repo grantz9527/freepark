@@ -7,6 +7,7 @@ import {
   createInternalVehicle,
   deleteInternalVehicle,
   deleteInternalVehicleBatch,
+  downloadInternalVehicleImportTemplate,
   importInternalVehicles,
   listInternalVehicles,
   listLots,
@@ -55,8 +56,10 @@ const formEnabled = ref(true)
 const formError = ref('')
 
 const showImport = ref(false)
+const importInput = ref<HTMLInputElement | null>(null)
 const importFile = ref<File | null>(null)
 const importing = ref(false)
+const downloadingTemplate = ref(false)
 const importError = ref('')
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
@@ -235,21 +238,51 @@ async function onDelete(vehicle: InternalVehicleView): Promise<void> {
 }
 
 function openImportForm(): void {
+  if (!selectedLotId.value) {
+    return
+  }
   importFile.value = null
   importError.value = ''
+  successMessage.value = ''
   showImport.value = true
 }
 
 function closeImport(): void {
+  if (importing.value) {
+    return
+  }
   showImport.value = false
   importFile.value = null
   importError.value = ''
+  if (importInput.value) {
+    importInput.value.value = ''
+  }
 }
 
 function onFileChange(event: Event): void {
   const input = event.target as HTMLInputElement
   importFile.value = input.files?.[0] ?? null
   importError.value = ''
+}
+
+async function downloadImportTemplate(): Promise<void> {
+  if (!selectedLotId.value) {
+    return
+  }
+  downloadingTemplate.value = true
+  importError.value = ''
+  try {
+    await downloadInternalVehicleImportTemplate(selectedLotId.value, locale.value)
+  } catch (error) {
+    importError.value =
+      error instanceof ApiError ? error.message : t('internalVehicles.downloadTemplateFailed')
+  } finally {
+    downloadingTemplate.value = false
+  }
+}
+
+function openImportFilePicker(): void {
+  importInput.value?.click()
 }
 
 async function onSubmitImport(): Promise<void> {
@@ -359,9 +392,7 @@ onMounted(reload)
 
       <div v-if="isAdmin" class="action-bar">
         <button type="button" class="primary" @click="openCreateForm">{{ t('internalVehicles.create') }}</button>
-        <button type="button" class="primary import-btn" @click="openImportForm">
-          {{ t('internalVehicles.import') }}
-        </button>
+        <button type="button" class="outline" @click="openImportForm">{{ t('internalVehicles.import') }}</button>
       </div>
 
       <div class="table-card">
@@ -485,24 +516,50 @@ onMounted(reload)
       </form>
     </div>
 
-    <div v-if="showImport" class="modal-backdrop">
+    <div v-if="showImport" class="modal-backdrop" @click.self="closeImport">
       <form class="modal import-modal" @submit.prevent="onSubmitImport">
-        <h3>{{ t('internalVehicles.importTitle') }}</h3>
+        <div class="modal-header">
+          <h3>{{ t('internalVehicles.importTitle') }}</h3>
+          <button type="button" class="modal-close" :aria-label="t('internalVehicles.cancel')" @click="closeImport">
+            ×
+          </button>
+        </div>
         <p class="hint">{{ t('internalVehicles.importHint') }}</p>
+        <div class="import-toolbar">
+          <button type="button" class="outline" :disabled="downloadingTemplate" @click="downloadImportTemplate">
+            {{
+              downloadingTemplate
+                ? t('internalVehicles.downloadingTemplate')
+                : t('internalVehicles.downloadTemplate')
+            }}
+          </button>
+        </div>
         <label class="file-field">
           <span>{{ t('internalVehicles.importFileLabel') }}</span>
-          <input type="file" accept=".xlsx,.xls" @change="onFileChange" />
+          <button type="button" class="ghost file-picker" @click="openImportFilePicker">
+            {{ importFile ? t('internalVehicles.importChangeFile') : t('internalVehicles.importChooseFile') }}
+          </button>
+          <input
+            ref="importInput"
+            type="file"
+            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+            class="hidden-file"
+            @change="onFileChange"
+          />
           <p v-if="importFile" class="import-file">{{ importFile.name }}</p>
         </label>
         <p v-if="importError" class="form-error">{{ importError }}</p>
         <div class="actions">
-          <button type="button" class="ghost" @click="closeImport">{{ t('internalVehicles.cancel') }}</button>
-          <button type="submit" :disabled="importing">
+          <button type="button" class="ghost" :disabled="importing" @click="closeImport">
+            {{ t('internalVehicles.cancel') }}
+          </button>
+          <button type="submit" :disabled="importing || !importFile">
             {{ importing ? t('internalVehicles.importing') : t('internalVehicles.importSubmit') }}
           </button>
         </div>
       </form>
     </div>
+
   </section>
 </template>
 
@@ -567,6 +624,53 @@ onMounted(reload)
 
 .action-bar {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.outline {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-weight: 600;
+  background: #fff;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.outline:hover:not(:disabled) {
+  background: #f2f8f5;
+}
+
+.outline:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.hidden-file {
+  display: none;
+}
+
+.file-field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.file-picker {
+  justify-self: start;
+}
+
+.import-file {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  word-break: break-all;
+}
+
+.import-toolbar {
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
@@ -581,16 +685,6 @@ onMounted(reload)
   color: #fff;
   background: var(--accent);
   cursor: pointer;
-}
-
-.import-btn {
-  background: #fff;
-  color: var(--accent);
-  border: 1px solid var(--accent) !important;
-}
-
-.import-btn:hover {
-  background: #f2f8f5;
 }
 
 .ghost {
@@ -678,23 +772,6 @@ th {
   font-family: ui-monospace, monospace;
   color: #6b7280;
   background: #f2f4f3;
-}
-
-.file-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.file-field input[type='file'] {
-  padding: 0.5rem;
-}
-
-.import-file {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.88rem;
-  word-break: break-all;
 }
 
 .empty {
@@ -792,8 +869,36 @@ th {
   margin: 0;
 }
 
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.modal-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+}
+
+.modal-close:hover {
+  color: var(--text);
+}
+
 .import-modal {
   width: min(560px, 100%);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 label {

@@ -93,6 +93,28 @@ public class ParkingLotService {
         return LotInterceptView.from(lots.save(lot));
     }
 
+    @Transactional(readOnly = true)
+    public AccessJudgmentView getAccessJudgment(UUID lotId) {
+        ParkingLot lot = lots.findById(lotId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        return AccessJudgmentView.from(lot);
+    }
+
+    @Transactional
+    public AccessJudgmentView updateAccessJudgment(
+            UUID requesterId, UUID lotId, UpdateAccessJudgmentRequest request) {
+        requireAdmin(requesterId);
+        ParkingLot lot = lots.findById(lotId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        try {
+            AccessJudgmentView.validateOrder(request.ruleOrder());
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.ACCESS_JUDGMENT_INVALID_ORDER);
+        }
+        lot.updateAccessJudgmentOrder(request.ruleOrder());
+        return AccessJudgmentView.from(lots.save(lot));
+    }
+
     private void requireAdmin(UUID userId) {
         LocalUser user = users.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));

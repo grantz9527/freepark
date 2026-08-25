@@ -14,32 +14,41 @@ import org.springframework.transaction.annotation.Transactional;
 import com.freepark.local.common.api.PageView;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
+import com.freepark.local.common.importing.VehicleSpreadsheetImportSupport;
+import com.freepark.local.domain.InternalVehicle;
+import com.freepark.local.domain.InternalVehicleRepository;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
 import com.freepark.local.domain.ParkingLot;
 import com.freepark.local.domain.ParkingLotRepository;
+import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.UserRole;
 import com.freepark.local.domain.WhitelistVehicle;
 import com.freepark.local.domain.WhitelistVehicleRepository;
+import com.freepark.local.internalvehicle.ImportInternalVehiclesResponse;
 import com.freepark.local.sitesettings.SystemSettingsService;
 
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class WhitelistVehicleService {
 
     private final ParkingLotRepository lots;
     private final WhitelistVehicleRepository vehicles;
+    private final InternalVehicleRepository internalVehicles;
     private final LocalUserRepository users;
     private final SystemSettingsService systemSettings;
 
     public WhitelistVehicleService(
             ParkingLotRepository lots,
             WhitelistVehicleRepository vehicles,
+            InternalVehicleRepository internalVehicles,
             LocalUserRepository users,
             SystemSettingsService systemSettings) {
         this.lots = lots;
         this.vehicles = vehicles;
+        this.internalVehicles = internalVehicles;
         this.users = users;
         this.systemSettings = systemSettings;
     }
@@ -81,7 +90,9 @@ public class WhitelistVehicleService {
                 startTime,
                 request.endTime(),
                 enabled);
-        return WhitelistVehicleView.from(vehicles.save(vehicle));
+        WhitelistVehicle saved = vehicles.save(vehicle);
+        syncToInternalVehicle(lot, saved);
+        return WhitelistVehicleView.from(saved);
     }
 
     @Transactional
@@ -97,6 +108,7 @@ public class WhitelistVehicleService {
         if (!vehicle.getLot().getId().equals(lotId)) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
+        String previousPlateNumber = vehicle.getPlateNumber();
         String plateNumber = request.plateNumber().trim();
         if (vehicles.existsByLotIdAndPlateNumberIgnoreCaseAndIdNot(lotId, plateNumber, vehicleId)) {
             throw new BusinessException(ErrorCode.WHITELIST_VEHICLE_PLATE_EXISTS);
@@ -114,7 +126,9 @@ public class WhitelistVehicleService {
                 startTime,
                 request.endTime(),
                 enabled);
-        return WhitelistVehicleView.from(vehicles.save(vehicle));
+        WhitelistVehicle saved = vehicles.save(vehicle);
+        syncToInternalVehicle(requireLot(lotId), saved, previousPlateNumber);
+        return WhitelistVehicleView.from(saved);
     }
 
     @Transactional
@@ -127,6 +141,114 @@ public class WhitelistVehicleService {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         vehicles.delete(vehicle);
+    }
+
+    @Transactional
+    public ImportInternalVehiclesResponse importVehicles(UUID requesterId, UUID lotId, MultipartFile file) {
+        requireAdmin(requesterId);
+        ParkingLot lot = requireLot(lotId);
+        List<String[]> rows = VehicleSpreadsheetImportSupport.readRows(
+                file, VehicleSpreadsheetImportSupport.ACCESS_LIST_COLUMN_COUNT);
+        List<PlateColor> allowedColors = systemSettings.getAllowedPlateColors();
+        PlateColor defaultColor = systemSettings.getDefaultPlateColor();
+        var zoneId = systemSettings.getTimezone();
+        int imported = 0;
+        int skipped = 0;
+        for (String[] cells : rows) {
+            String plate = VehicleSpreadsheetImportSupport.cell(cells, 0);
+            String owner = VehicleSpreadsheetImportSupport.cell(cells, 1);
+            if (plate.isEmpty() || plate.length() > 20 || owner.isEmpty() || owner.length() > 80) {
+                skipped++;
+                continue;
+            }
+            PlateColor color = defaultColor;
+            String colorToken = VehicleSpreadsheetImportSupport.cell(cells, 2);
+            if (!colorToken.isEmpty()) {
+                PlateColor parsed = VehicleSpreadsheetImportSupport.parsePlateColor(colorToken);
+                if (parsed == null) {
+                    skipped++;
+                    continue;
+                }
+                color = parsed;
+            }
+            if (!allowedColors.contains(color)) {
+                skipped++;
+                continue;
+            }
+            Instant startTime = VehicleSpreadsheetImportSupport.parseDateTime(
+                    VehicleSpreadsheetImportSupport.cell(cells, 6), zoneId);
+            Instant endTime = VehicleSpreadsheetImportSupport.parseDateTime(
+                    VehicleSpreadsheetImportSupport.cell(cells, 7), zoneId);
+            if (startTime == null || endTime == null || !endTime.isAfter(startTime)) {
+                skipped++;
+                continue;
+            }
+            if (vehicles.existsByLotIdAndPlateNumberIgnoreCase(lotId, plate)) {
+                skipped++;
+                continue;
+            }
+            WhitelistVehicle vehicle = new WhitelistVehicle(
+                    lot,
+                    plate,
+                    color,
+                    owner,
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 3)),
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 4)),
+                    normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 5)),
+                    startTime,
+                    endTime,
+                    true);
+            WhitelistVehicle saved = vehicles.save(vehicle);
+            syncToInternalVehicle(lot, saved);
+            imported++;
+        }
+        return new ImportInternalVehiclesResponse(null, imported, skipped);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] buildImportTemplate(UUID lotId) {
+        requireLot(lotId);
+        return VehicleSpreadsheetImportSupport.buildTemplate(
+                "白名单", VehicleSpreadsheetImportSupport.ACCESS_LIST_TEMPLATE_COLUMNS);
+    }
+
+    private void syncToInternalVehicle(ParkingLot lot, WhitelistVehicle whitelist) {
+        syncToInternalVehicle(lot, whitelist, null);
+    }
+
+    private void syncToInternalVehicle(ParkingLot lot, WhitelistVehicle whitelist, String previousPlateNumber) {
+        String plateNumber = whitelist.getPlateNumber();
+        InternalVehicle internal = internalVehicles
+                .findByLotIdAndPlateNumberIgnoreCase(lot.getId(), plateNumber)
+                .orElse(null);
+        if (internal == null
+                && previousPlateNumber != null
+                && !previousPlateNumber.equalsIgnoreCase(plateNumber)) {
+            internal = internalVehicles
+                    .findByLotIdAndPlateNumberIgnoreCase(lot.getId(), previousPlateNumber.trim())
+                    .orElse(null);
+        }
+        if (internal == null) {
+            internalVehicles.save(new InternalVehicle(
+                    lot,
+                    plateNumber,
+                    whitelist.getPlateColor(),
+                    whitelist.getOwnerName(),
+                    whitelist.getPhone(),
+                    whitelist.getDepartment(),
+                    whitelist.getRemark(),
+                    whitelist.isEnabled()));
+            return;
+        }
+        internal.updateDetails(
+                plateNumber,
+                whitelist.getPlateColor(),
+                whitelist.getOwnerName(),
+                whitelist.getPhone(),
+                whitelist.getDepartment(),
+                whitelist.getRemark(),
+                whitelist.isEnabled());
+        internalVehicles.save(internal);
     }
 
     private Specification<WhitelistVehicle> buildSpec(UUID lotId, String plate) {

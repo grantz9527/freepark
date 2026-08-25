@@ -20,7 +20,8 @@
     "lanes": "إدارة الممرات",
     "barriers": "إدارة البوابات",
     "sectionSystem": "النظام",
-    "logout": "تسجيل الخروج"
+    "logout": "تسجيل الخروج",
+    "patternAllowlist": "Pattern allowlist"
   },
   "login": {
     "title": "تسجيل الدخول",
@@ -50,7 +51,8 @@
     "moduleBlacklist": "Manage access blacklist vehicles",
     "moduleOperators": "إدارة حسابات الموظفين",
     "moduleSettings": "الحساب وكلمة المرور",
-    "moduleSystemSettings": "تكوين معلمات النظام العامة"
+    "moduleSystemSettings": "تكوين معلمات النظام العامة",
+    "modulePatternAllowlist": "Manage regex rules for special plate access"
   },
   "page": {
     "comingSoon": "قريبًا",
@@ -507,5 +509,51 @@
     "searchNoResults": "لا توجد بوابات مطابقة",
     "panelTitle": "بوابات المسار",
     "panelHint": "تُضبط البوابات على المسار. يمكن للمسار ربط موقف أو موقفين."
+  },
+  "patternAllowlist": {
+    "create": "Add pattern rule",
+    "createTitle": "Add pattern allow rule",
+    "editTitle": "Edit pattern allow rule",
+    "colIndex": "#",
+    "colName": "Name",
+    "colPattern": "Regex pattern",
+    "colRemark": "Remark",
+    "colActions": "Actions",
+    "statusActive": "Enabled",
+    "statusDisabled": "Disabled",
+    "searchPlaceholder": "Search name, pattern, or remark…",
+    "empty": "No pattern allowlist rules",
+    "emptyHint": "No special plate allow rules for this lot yet.",
+    "emptyHintAdmin": "Click \"Add pattern rule\" for police cars, garbage trucks, etc.",
+    "loading": "Loading…",
+    "loadFailed": "Failed to load pattern allowlist",
+    "formRequired": "Name and regex pattern are required",
+    "formInvalidPattern": "Invalid regular expression",
+    "formHint": "Use the helper below, or enter a regex directly (e.g. .*警$ for police plates).",
+    "helperTitle": "Pattern helper",
+    "helperHint": "Don't know regex? Pick a match type, enter a keyword, then fill the pattern.",
+    "helperModeStartsWith": "Starts with",
+    "helperModeEndsWith": "Ends with",
+    "helperModeContains": "Contains",
+    "helperKeyword": "Keyword",
+    "helperKeywordPlaceholder": "e.g. 警, 京A",
+    "helperApply": "Fill pattern",
+    "helperPreview": "Preview",
+    "helperTestPlate": "Test plate",
+    "helperTestPlaceholder": "Try a plate number",
+    "helperTestMatch": "Would allow",
+    "helperTestNoMatch": "No match",
+    "helperKeywordRequired": "Enter a keyword first",
+    "namePlaceholder": "e.g. Police car, Garbage truck",
+    "patternPlaceholder": "e.g. .*警$",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "saveSuccess": "Saved",
+    "saveFailed": "Save failed",
+    "deleteSuccess": "Deleted",
+    "deleteFailed": "Delete failed"
   }
 }

@@ -6,6 +6,8 @@ import {
   ApiError,
   createBlacklistVehicle,
   deleteBlacklistVehicle,
+  downloadBlacklistImportTemplate,
+  importBlacklistVehicles,
   listBlacklistVehicles,
   listLots,
   updateBlacklistVehicle,
@@ -13,6 +15,7 @@ import {
   type LotView,
   type PlateColor,
 } from '@/api/client'
+import VehicleListImportModal from '@/components/VehicleListImportModal.vue'
 import { getUser } from '@/auth/session'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { useSiteTime } from '@/composables/useSiteTime'
@@ -53,6 +56,12 @@ const formStartTime = ref('')
 const formEndTime = ref('')
 const formEnabled = ref(true)
 const formError = ref('')
+
+const showImport = ref(false)
+const importFile = ref<File | null>(null)
+const importing = ref(false)
+const downloadingTemplate = ref(false)
+const importError = ref('')
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const isEditing = computed(() => editingId.value !== null)
@@ -245,6 +254,67 @@ async function onDelete(vehicle: BlacklistVehicleView): Promise<void> {
   }
 }
 
+function openImportForm(): void {
+  if (!selectedLotId.value) {
+    return
+  }
+  importFile.value = null
+  importError.value = ''
+  successMessage.value = ''
+  showImport.value = true
+}
+
+function closeImport(): void {
+  if (importing.value) {
+    return
+  }
+  showImport.value = false
+  importFile.value = null
+  importError.value = ''
+}
+
+function onImportFileChange(file: File | null): void {
+  importFile.value = file
+  importError.value = ''
+}
+
+async function downloadImportTemplate(): Promise<void> {
+  if (!selectedLotId.value) {
+    return
+  }
+  downloadingTemplate.value = true
+  importError.value = ''
+  try {
+    await downloadBlacklistImportTemplate(selectedLotId.value, locale.value)
+  } catch (error) {
+    importError.value = error instanceof ApiError ? error.message : t('blacklist.downloadTemplateFailed')
+  } finally {
+    downloadingTemplate.value = false
+  }
+}
+
+async function onSubmitImport(): Promise<void> {
+  if (!selectedLotId.value || !importFile.value) {
+    importError.value = t('blacklist.importFileRequired')
+    return
+  }
+  importing.value = true
+  importError.value = ''
+  try {
+    const result = await importBlacklistVehicles(selectedLotId.value, importFile.value, locale.value)
+    successMessage.value = t('blacklist.importSuccess', {
+      imported: result.data.imported,
+      skipped: result.data.skipped,
+    })
+    closeImport()
+    await loadVehiclesOnly()
+  } catch (error) {
+    importError.value = error instanceof ApiError ? error.message : t('blacklist.importFailed')
+  } finally {
+    importing.value = false
+  }
+}
+
 function goToPage(target: number): void {
   const next = Math.min(Math.max(target, 0), pageCount.value - 1)
   if (next === page.value) {
@@ -303,6 +373,7 @@ onMounted(reload)
 
       <div v-if="isAdmin" class="action-bar">
         <button type="button" class="primary" @click="openCreateForm">{{ t('blacklist.create') }}</button>
+        <button type="button" class="outline" @click="openImportForm">{{ t('blacklist.import') }}</button>
       </div>
 
       <div class="table-card">
@@ -429,6 +500,19 @@ onMounted(reload)
         </div>
       </form>
     </div>
+
+    <VehicleListImportModal
+      scope="blacklist"
+      :open="showImport"
+      :importing="importing"
+      :downloading-template="downloadingTemplate"
+      :import-error="importError"
+      :import-file="importFile"
+      @close="closeImport"
+      @submit="onSubmitImport"
+      @download-template="downloadImportTemplate"
+      @file-change="onImportFileChange"
+    />
   </section>
 </template>
 
@@ -494,6 +578,20 @@ onMounted(reload)
 .action-bar {
   display: flex;
   gap: 0.5rem;
+}
+
+.outline {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-weight: 600;
+  background: #fff;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.outline:hover {
+  background: #f2f8f5;
 }
 
 .primary,

@@ -8,10 +8,14 @@ import HomeView from '@/views/HomeView.vue'
 import InternalVehiclesView from '@/views/InternalVehiclesView.vue'
 import WhitelistView from '@/views/WhitelistView.vue'
 import BlacklistView from '@/views/BlacklistView.vue'
+import PatternAllowlistView from '@/views/PatternAllowlistView.vue'
+import AccessJudgmentConfigView from '@/views/AccessJudgmentConfigView.vue'
 import LotsView from '@/views/LotsView.vue'
 import LotInterceptConfigView from '@/views/LotInterceptConfigView.vue'
 import LoginView from '@/views/LoginView.vue'
 import OperatorsView from '@/views/OperatorsView.vue'
+import RecognitionRecordsView from '@/views/RecognitionRecordsView.vue'
+import ParkingSessionsView from '@/views/ParkingSessionsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import SystemSettingsView from '@/views/SystemSettingsView.vue'
 import SpacesView from '@/views/SpacesView.vue'
@@ -19,7 +23,6 @@ import LanesView from '@/views/LanesView.vue'
 import BarrierDockingView from '@/views/BarrierDockingView.vue'
 import FrigateDockingView from '@/views/FrigateDockingView.vue'
 import IotDockingView from '@/views/IotDockingView.vue'
-import ComingSoonView from '@/views/ComingSoonView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -67,19 +70,35 @@ const router = createRouter({
           meta: { titleKey: 'nav.blacklist' },
         },
         {
+          path: 'pattern-allowlist',
+          name: 'patternAllowlist',
+          component: PatternAllowlistView,
+          meta: { titleKey: 'nav.patternAllowlist' },
+        },
+        {
+          path: 'access-judgment',
+          name: 'accessJudgment',
+          component: AccessJudgmentConfigView,
+          meta: {
+            titleKey: 'nav.accessJudgment',
+            breadcrumbKeys: ['nav.sectionAccess', 'nav.accessJudgment'],
+            parentNav: { groupId: 'access', childName: 'accessJudgment' },
+          },
+        },
+        {
           path: 'parking',
           redirect: { name: 'recognitionRecords' },
         },
         {
           path: 'parking/recognition-records',
           name: 'recognitionRecords',
-          component: ComingSoonView,
+          component: RecognitionRecordsView,
           meta: { titleKey: 'nav.recognitionRecords' },
         },
         {
           path: 'parking/sessions',
           name: 'parkingSessions',
-          component: ComingSoonView,
+          component: ParkingSessionsView,
           meta: { titleKey: 'nav.parkingSessions' },
         },
         {
