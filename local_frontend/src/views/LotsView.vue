@@ -178,6 +178,10 @@ function openInterceptConfig(lot: LotView): void {
   void router.push({ name: 'lotIntercept', params: { lotId: lot.id } })
 }
 
+function openLaneConfig(lot: LotView): void {
+  void router.push({ name: 'lanes', query: { lotId: lot.id } })
+}
+
 function lotTypeLabel(type: LotType): string {
   const key = `lotTypes.${type}`
   const label = t(key)
@@ -237,6 +241,9 @@ onMounted(loadLots)
                 </button>
                 <button type="button" class="link-btn" @click="openInterceptConfig(item)">
                   {{ t('lots.interceptConfig') }}
+                </button>
+                <button type="button" class="link-btn" @click="openLaneConfig(item)">
+                  {{ t('lots.laneConfig') }}
                 </button>
               </div>
             </td>
@@ -380,7 +387,7 @@ th {
 }
 
 .col-actions {
-  width: 11rem;
+  width: 17rem;
   text-align: end;
 }
 

@@ -15,6 +15,7 @@ public record InternalVehicleView(
         String phone,
         String department,
         String remark,
+        UUID batchId,
         boolean enabled,
         Instant createdAt,
         Instant updatedAt) {
@@ -29,6 +30,7 @@ public record InternalVehicleView(
                 vehicle.getPhone(),
                 vehicle.getDepartment(),
                 vehicle.getRemark(),
+                vehicle.getBatchId(),
                 vehicle.isEnabled(),
                 vehicle.getCreatedAt(),
                 vehicle.getUpdatedAt());

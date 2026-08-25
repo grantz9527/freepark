@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import {
@@ -48,6 +48,7 @@ import { siteAllowedPlateColors } from '@/site/settings'
 const LOT_STORAGE_KEY = 'freepark.lanes.lotId'
 
 const { t, locale } = useI18n()
+const route = useRoute()
 const { formatTime } = useSiteTime()
 const { plateColorLabel } = usePlateColorLabel()
 
@@ -126,6 +127,15 @@ async function loadLots(): Promise<void> {
   lots.value = result.data
   if (lots.value.length === 0) {
     selectedLotId.value = ''
+    return
+  }
+  const queryLotId = typeof route.query.lotId === 'string' ? route.query.lotId : ''
+  if (queryLotId) {
+    const queryMatch = lots.value.find((lot) => lot.id === queryLotId)
+    selectedLotId.value = queryMatch?.id ?? ''
+    if (selectedLotId.value) {
+      sessionStorage.setItem(LOT_STORAGE_KEY, selectedLotId.value)
+    }
     return
   }
   const stored = sessionStorage.getItem(LOT_STORAGE_KEY)

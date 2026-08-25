@@ -6,6 +6,8 @@ import {
   ApiError,
   createInternalVehicle,
   deleteInternalVehicle,
+  deleteInternalVehicleBatch,
+  importInternalVehicles,
   listInternalVehicles,
   listLots,
   updateInternalVehicle,
@@ -51,6 +53,11 @@ const formDepartment = ref('')
 const formRemark = ref('')
 const formEnabled = ref(true)
 const formError = ref('')
+
+const showImport = ref(false)
+const importFile = ref<File | null>(null)
+const importing = ref(false)
+const importError = ref('')
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const isEditing = computed(() => editingId.value !== null)
@@ -227,6 +234,73 @@ async function onDelete(vehicle: InternalVehicleView): Promise<void> {
   }
 }
 
+function openImportForm(): void {
+  importFile.value = null
+  importError.value = ''
+  showImport.value = true
+}
+
+function closeImport(): void {
+  showImport.value = false
+  importFile.value = null
+  importError.value = ''
+}
+
+function onFileChange(event: Event): void {
+  const input = event.target as HTMLInputElement
+  importFile.value = input.files?.[0] ?? null
+  importError.value = ''
+}
+
+async function onSubmitImport(): Promise<void> {
+  if (!selectedLotId.value) {
+    return
+  }
+  if (!importFile.value) {
+    importError.value = t('internalVehicles.importFileRequired')
+    return
+  }
+  importing.value = true
+  importError.value = ''
+  try {
+    const result = await importInternalVehicles(selectedLotId.value, importFile.value, locale.value)
+    successMessage.value = t('internalVehicles.importSuccess', {
+      imported: result.data.imported,
+      skipped: result.data.skipped,
+    })
+    closeImport()
+    await loadVehiclesOnly()
+  } catch (error) {
+    importError.value = error instanceof ApiError ? error.message : t('internalVehicles.importFailed')
+  } finally {
+    importing.value = false
+  }
+}
+
+function shortBatchId(batchId: string): string {
+  return batchId.slice(0, 8)
+}
+
+async function onDeleteBatch(vehicle: InternalVehicleView): Promise<void> {
+  if (!selectedLotId.value || !vehicle.batchId) {
+    return
+  }
+  if (!window.confirm(t('internalVehicles.batchDeleteConfirm'))) {
+    return
+  }
+  submitting.value = true
+  errorMessage.value = ''
+  try {
+    const result = await deleteInternalVehicleBatch(selectedLotId.value, vehicle.batchId, locale.value)
+    successMessage.value = t('internalVehicles.batchDeleteSuccess', { deleted: result.data })
+    await loadVehiclesOnly()
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('internalVehicles.batchDeleteFailed')
+  } finally {
+    submitting.value = false
+  }
+}
+
 function goToPage(target: number): void {
   const next = Math.min(Math.max(target, 0), pageCount.value - 1)
   if (next === page.value) {
@@ -285,6 +359,9 @@ onMounted(reload)
 
       <div v-if="isAdmin" class="action-bar">
         <button type="button" class="primary" @click="openCreateForm">{{ t('internalVehicles.create') }}</button>
+        <button type="button" class="primary import-btn" @click="openImportForm">
+          {{ t('internalVehicles.import') }}
+        </button>
       </div>
 
       <div class="table-card">
@@ -297,6 +374,7 @@ onMounted(reload)
               <th>{{ t('internalVehicles.colOwner') }}</th>
               <th>{{ t('internalVehicles.colPhone') }}</th>
               <th>{{ t('internalVehicles.colDepartment') }}</th>
+              <th>{{ t('internalVehicles.colBatch') }}</th>
               <th>{{ t('page.colStatus') }}</th>
               <th>{{ t('page.colUpdated') }}</th>
               <th v-if="isAdmin" class="col-actions">{{ t('internalVehicles.colActions') }}</th>
@@ -311,6 +389,12 @@ onMounted(reload)
               <td>{{ item.phone || '—' }}</td>
               <td>{{ item.department || '—' }}</td>
               <td>
+                <span v-if="item.batchId" class="batch-tag" :title="item.batchId">
+                  {{ shortBatchId(item.batchId) }}
+                </span>
+                <span v-else>—</span>
+              </td>
+              <td>
                 <span class="pill" :class="item.enabled ? 'ok' : 'fail'">
                   {{ item.enabled ? t('internalVehicles.statusActive') : t('internalVehicles.statusDisabled') }}
                 </span>
@@ -319,6 +403,9 @@ onMounted(reload)
               <td v-if="isAdmin" class="col-actions">
                 <button type="button" class="link-btn" @click="openEditForm(item)">
                   {{ t('internalVehicles.edit') }}
+                </button>
+                <button v-if="item.batchId" type="button" class="link-btn danger" @click="onDeleteBatch(item)">
+                  {{ t('internalVehicles.batchDelete') }}
                 </button>
                 <button type="button" class="link-btn danger" @click="onDelete(item)">
                   {{ t('internalVehicles.delete') }}
@@ -393,6 +480,25 @@ onMounted(reload)
           <button type="button" class="ghost" @click="closeForm">{{ t('internalVehicles.cancel') }}</button>
           <button type="submit" :disabled="submitting">
             {{ submitting ? t('internalVehicles.saving') : t('internalVehicles.save') }}
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div v-if="showImport" class="modal-backdrop">
+      <form class="modal import-modal" @submit.prevent="onSubmitImport">
+        <h3>{{ t('internalVehicles.importTitle') }}</h3>
+        <p class="hint">{{ t('internalVehicles.importHint') }}</p>
+        <label class="file-field">
+          <span>{{ t('internalVehicles.importFileLabel') }}</span>
+          <input type="file" accept=".xlsx,.xls" @change="onFileChange" />
+          <p v-if="importFile" class="import-file">{{ importFile.name }}</p>
+        </label>
+        <p v-if="importError" class="form-error">{{ importError }}</p>
+        <div class="actions">
+          <button type="button" class="ghost" @click="closeImport">{{ t('internalVehicles.cancel') }}</button>
+          <button type="submit" :disabled="importing">
+            {{ importing ? t('internalVehicles.importing') : t('internalVehicles.importSubmit') }}
           </button>
         </div>
       </form>
@@ -477,6 +583,16 @@ onMounted(reload)
   cursor: pointer;
 }
 
+.import-btn {
+  background: #fff;
+  color: var(--accent);
+  border: 1px solid var(--accent) !important;
+}
+
+.import-btn:hover {
+  background: #f2f8f5;
+}
+
 .ghost {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -519,7 +635,7 @@ th {
 }
 
 .col-actions {
-  width: 9rem;
+  width: 13rem;
   text-align: end;
 }
 
@@ -552,6 +668,33 @@ th {
 .pill.fail {
   color: var(--danger);
   background: #fdecec;
+}
+
+.batch-tag {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+  font-family: ui-monospace, monospace;
+  color: #6b7280;
+  background: #f2f4f3;
+}
+
+.file-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.file-field input[type='file'] {
+  padding: 0.5rem;
+}
+
+.import-file {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  word-break: break-all;
 }
 
 .empty {
@@ -647,6 +790,10 @@ th {
 
 .modal h3 {
   margin: 0;
+}
+
+.import-modal {
+  width: min(560px, 100%);
 }
 
 label {

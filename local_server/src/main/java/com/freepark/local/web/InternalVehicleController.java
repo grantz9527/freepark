@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,11 +14,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.freepark.local.common.api.ApiResponse;
 import com.freepark.local.common.api.PageView;
 import com.freepark.local.common.i18n.MessageService;
 import com.freepark.local.internalvehicle.CreateInternalVehicleRequest;
+import com.freepark.local.internalvehicle.ImportInternalVehiclesResponse;
 import com.freepark.local.internalvehicle.InternalVehicleService;
 import com.freepark.local.internalvehicle.InternalVehicleView;
 import com.freepark.local.internalvehicle.UpdateInternalVehicleRequest;
@@ -65,6 +68,27 @@ public class InternalVehicleController {
                 messages,
                 internalVehicleService.updateVehicle(
                         UUID.fromString(jwt.getSubject()), lotId, vehicleId, request));
+    }
+
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<ImportInternalVehiclesResponse> importVehicles(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID lotId,
+            @RequestParam("file") MultipartFile file) {
+        return ApiResponse.ok(
+                messages,
+                internalVehicleService.importVehicles(
+                        UUID.fromString(jwt.getSubject()), lotId, file));
+    }
+
+    @DeleteMapping("/batch/{batchId}")
+    public ApiResponse<Integer> deleteBatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID lotId,
+            @PathVariable UUID batchId) {
+        int deleted = internalVehicleService.deleteVehiclesByBatch(
+                UUID.fromString(jwt.getSubject()), lotId, batchId);
+        return ApiResponse.ok(messages, deleted);
     }
 
     @DeleteMapping("/{vehicleId}")

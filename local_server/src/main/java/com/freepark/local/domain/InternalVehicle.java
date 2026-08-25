@@ -1,5 +1,7 @@
 package com.freepark.local.domain;
 
+import java.util.UUID;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -38,6 +40,9 @@ public class InternalVehicle extends BaseEntity {
 
     @Column(length = 255)
     private String remark;
+
+    @Column(name = "batch_id")
+    private UUID batchId;
 
     @Column(nullable = false)
     private boolean enabled = true;
@@ -90,6 +95,14 @@ public class InternalVehicle extends BaseEntity {
 
     public String getRemark() {
         return remark;
+    }
+
+    public UUID getBatchId() {
+        return batchId;
+    }
+
+    public void setBatchId(UUID batchId) {
+        this.batchId = batchId;
     }
 
     public boolean isEnabled() {

@@ -2,16 +2,23 @@ package com.freepark.local.web;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayOutputStream;
+
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
@@ -92,5 +99,68 @@ class InternalVehicleControllerTest {
         mockMvc.perform(delete("/api/v1/lots/" + lotId + "/internal-vehicles/" + vehicleId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void adminCanImportAndDeleteVehicleBatch() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token);
+
+        mockMvc.perform(post("/api/v1/lots/" + lotId + "/internal-vehicles")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plateNumber\":\"京A00001\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\"}"))
+                .andExpect(status().isOk());
+
+        byte[] excel = buildVehicleExcel();
+        MvcResult importResult = mockMvc.perform(multipart("/api/v1/lots/" + lotId + "/internal-vehicles/import")
+                        .file(new MockMultipartFile(
+                                "file",
+                                "vehicles.xlsx",
+                                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                excel))
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.imported").value(2))
+                .andExpect(jsonPath("$.data.skipped").value(1))
+                .andReturn();
+        String batchId = jsonMapper.readTree(importResult.getResponse().getContentAsString())
+                .get("data").get("batchId").asString();
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(3));
+
+        mockMvc.perform(delete("/api/v1/lots/" + lotId + "/internal-vehicles/batch/" + batchId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(2));
+
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(1));
+    }
+
+    private byte[] buildVehicleExcel() throws Exception {
+        String[][] rows = {
+            { "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注" },
+            { "京A00001", "张三", "", "", "", "" },
+            { "京A00002", "王五", "BLUE", "13800000000", "行政部", "" },
+            { "京A00003", "赵六", "绿色", "", "", "" },
+        };
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+                ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("vehicles");
+            for (int r = 0; r < rows.length; r++) {
+                Row row = sheet.createRow(r);
+                for (int c = 0; c < rows[r].length; c++) {
+                    row.createCell(c).setCellValue(rows[r][c]);
+                }
+            }
+            workbook.write(out);
+            return out.toByteArray();
+        }
     }
 }

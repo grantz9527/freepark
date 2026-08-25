@@ -1,5 +1,6 @@
 package com.freepark.local.domain;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,4 +12,6 @@ public interface InternalVehicleRepository
     boolean existsByLotIdAndPlateNumberIgnoreCase(UUID lotId, String plateNumber);
 
     boolean existsByLotIdAndPlateNumberIgnoreCaseAndIdNot(UUID lotId, String plateNumber, UUID id);
+
+    List<InternalVehicle> findAllByLotIdAndBatchId(UUID lotId, UUID batchId);
 }

@@ -508,9 +508,46 @@ export interface InternalVehicleView {
   phone: string | null
   department: string | null
   remark: string | null
+  batchId: string | null
   enabled: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface ImportInternalVehiclesResponse {
+  batchId: string
+  imported: number
+  skipped: number
+}
+
+export async function importInternalVehicles(
+  lotId: string,
+  file: File,
+  locale: string,
+): Promise<ApiResponse<ImportInternalVehiclesResponse>> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch(`${API_BASE}/api/v1/lots/${lotId}/internal-vehicles/import`, {
+    method: 'POST',
+    headers: headers(locale),
+    body: form,
+  })
+  const body = (await response.json().catch(() => null)) as ApiResponse<ImportInternalVehiclesResponse> | null
+  if (response.status === 401) {
+    clearSession()
+  }
+  if (!response.ok || body == null) {
+    throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)
+  }
+  return body
+}
+
+export function deleteInternalVehicleBatch(
+  lotId: string,
+  batchId: string,
+  locale: string,
+): Promise<ApiResponse<number>> {
+  return apiCall(`/api/v1/lots/${lotId}/internal-vehicles/batch/${batchId}`, { method: 'DELETE' }, locale)
 }
 
 export function listInternalVehicles(
