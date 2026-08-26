@@ -4,6 +4,16 @@ Use AI and related open-source tools to build an I18N (internationalized) parkin
 
 用 AI 与开源工具构建一套国际化（I18N）停车系统，帮助全球用户更高效地解决停车问题。
 
+## What is it / 项目定位
+
+FreePark is an on-premise **edge computing** parking system: `local_server` + `local_frontend` run entirely at the site. Vehicle recognition, lane / booth control, whitelist / blacklist, access judgment, and parking flow all close the loop locally without depending on a cloud service.
+
+FreePark 是一套部署在车场本地的**停车场边缘计算**系统：`local_server` 与 `local_frontend` 完全运行在车场端，车牌识别、通道 / 岗亭控制、白名单 / 黑名单、通行判定与停车流水等均在场端本地闭环处理，不依赖云端。
+
+**If you do not need charging / billing, you can use this project directly**: access control (whitelist / blacklist / pattern allowlist), manual recognition supplement, barrier and booth gate open / close, parking flow, and more are available out of the box — no billing module is required.
+
+**如果没有收费需求，本仓库可直接投入使用**：白名单 / 黑名单 / 正则名单通行控制、人工识别补录、道闸与岗亭开闸 / 关闸、停车流水等能力开箱即用，无需额外接入收费模块。
+
 ## Vision / 愿景
 
 - Make it easier to find, share, and manage parking spaces across countries and cities.
@@ -20,14 +30,11 @@ Use AI and related open-source tools to build an I18N (internationalized) parkin
 
 ## Backend / 后端
 
-Both backends use Java 21, Spring Data JPA, MySQL, and HTTP I18N (`Accept-Language` or `?lang=`).
+The backend uses Java 21, Spring Data JPA, MySQL, and HTTP I18N (`Accept-Language` or `?lang=`).
 
-两套后端都使用 Java 21、Spring Data JPA、MySQL，并支持接口国际化。
+后端使用 Java 21、Spring Data JPA、MySQL，并支持接口国际化。
 
-- [`cloud_server`](cloud_server/README.md): cloud service, default port `8080`
-- [`cloud_frontend_mnt`](cloud_frontend_mnt/README.md): Vue 3 + vue-i18n cloud admin console, default port `5174`
-- [`cloud_frontend_user`](cloud_frontend_user/README.md): Vue 3 + vue-i18n cloud user app, default port `5175`
-- [`local_server`](local_server/README.md): on-premise / site service, default port `8081`
+- [`local_server`](local_server/README.md): on-premise / edge service, default port `8081`
 - [`local_frontend`](local_frontend/README.md): Vue 3 + vue-i18n console for `local_server`, default port `5173`
 
 ## Status / 当前状态

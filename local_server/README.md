@@ -4,9 +4,9 @@ FreePark on-premise backend. Java 21, Spring Boot 4.1, Spring Data JPA, MySQL, a
 
 FreePark 本地/场端后端。使用 Java 21、Spring Boot 4.1、Spring Data JPA、MySQL，并在接口层支持国际化。
 
-Default port is **8081** so it can run next to `cloud_server` (8080).
+Default port is **8081**.
 
-默认端口为 **8081**，可与 `cloud_server`（8080）同时运行。
+默认端口为 **8081**。
 
 ## Stack
 
