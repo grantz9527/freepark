@@ -93,6 +93,18 @@ public class InternalVehicleController {
                 .body(body);
     }
 
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> exportVehicles(
+            @PathVariable UUID lotId,
+            @RequestParam(required = false) String plate) {
+        byte[] body = internalVehicleService.exportVehicles(lotId, plate);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"internal-vehicles.xlsx\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(body);
+    }
+
     @DeleteMapping("/batch/{batchId}")
     public ApiResponse<Integer> deleteBatch(
             @AuthenticationPrincipal Jwt jwt,

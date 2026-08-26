@@ -8,10 +8,12 @@ import {
   deleteInternalVehicle,
   deleteInternalVehicleBatch,
   downloadInternalVehicleImportTemplate,
+  exportInternalVehicles,
   importInternalVehicles,
   listInternalVehicles,
   listLots,
   updateInternalVehicle,
+  type InternalVehicleType,
   type InternalVehicleView,
   type LotView,
   type PlateColor,
@@ -29,6 +31,12 @@ const { formatTime } = useSiteTime()
 const { plateColorLabel } = usePlateColorLabel()
 
 const plateColorOptions = computed(() => siteAllowedPlateColors.value)
+
+const vehicleTypeOptions: InternalVehicleType[] = ['TENANT', 'OWNER', 'APPOINTMENT', 'VISITOR', 'OTHER']
+
+function vehicleTypeLabel(type: InternalVehicleType): string {
+  return t(`internalVehicles.type${type}`)
+}
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -49,6 +57,7 @@ const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formPlate = ref('')
 const formPlateColor = ref<PlateColor>('BLUE')
+const formType = ref<InternalVehicleType>('OTHER')
 const formOwnerName = ref('')
 const formPhone = ref('')
 const formDepartment = ref('')
@@ -62,6 +71,7 @@ const importFile = ref<File | null>(null)
 const importing = ref(false)
 const downloadingTemplate = ref(false)
 const importError = ref('')
+const exporting = ref(false)
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const isEditing = computed(() => editingId.value !== null)
@@ -155,6 +165,7 @@ function resetForm(): void {
   editingId.value = null
   formPlate.value = ''
   formPlateColor.value = siteDefaultPlateColor.value
+  formType.value = 'OTHER'
   formOwnerName.value = ''
   formPhone.value = ''
   formDepartment.value = ''
@@ -172,6 +183,7 @@ function openEditForm(vehicle: InternalVehicleView): void {
   editingId.value = vehicle.id
   formPlate.value = vehicle.plateNumber
   formPlateColor.value = vehicle.plateColor
+  formType.value = vehicle.type
   formOwnerName.value = vehicle.ownerName
   formPhone.value = vehicle.phone ?? ''
   formDepartment.value = vehicle.department ?? ''
@@ -200,6 +212,7 @@ async function onSubmit(): Promise<void> {
     plateNumber: formPlate.value.trim(),
     plateColor: formPlateColor.value,
     ownerName: formOwnerName.value.trim(),
+    type: formType.value,
     phone: formPhone.value.trim() || undefined,
     department: formDepartment.value.trim() || undefined,
     remark: formRemark.value.trim() || undefined,
@@ -235,6 +248,22 @@ async function onDelete(vehicle: InternalVehicleView): Promise<void> {
     errorMessage.value = error instanceof ApiError ? error.message : t('internalVehicles.deleteFailed')
   } finally {
     submitting.value = false
+  }
+}
+
+async function onExport(): Promise<void> {
+  if (!selectedLotId.value) {
+    return
+  }
+  exporting.value = true
+  errorMessage.value = ''
+  try {
+    await exportInternalVehicles(selectedLotId.value, locale.value, appliedPlate.value || undefined)
+    successMessage.value = t('internalVehicles.exportSuccess')
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('internalVehicles.exportFailed')
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -394,6 +423,9 @@ onMounted(reload)
       <div v-if="isAdmin" class="action-bar">
         <button type="button" class="primary" @click="openCreateForm">{{ t('internalVehicles.create') }}</button>
         <button type="button" class="outline" @click="openImportForm">{{ t('internalVehicles.import') }}</button>
+        <button type="button" class="outline" :disabled="exporting" @click="onExport">
+          {{ exporting ? t('internalVehicles.exporting') : t('internalVehicles.export') }}
+        </button>
       </div>
 
       <div class="table-card">
@@ -403,6 +435,7 @@ onMounted(reload)
               <th>{{ t('internalVehicles.colIndex') }}</th>
               <th>{{ t('internalVehicles.colPlate') }}</th>
               <th>{{ t('internalVehicles.colOwner') }}</th>
+              <th>{{ t('internalVehicles.colType') }}</th>
               <th>{{ t('internalVehicles.colPhone') }}</th>
               <th>{{ t('internalVehicles.colDepartment') }}</th>
               <th>{{ t('internalVehicles.colBatch') }}</th>
@@ -418,6 +451,7 @@ onMounted(reload)
                 <PlateBadge :plate-number="item.plateNumber" :plate-color="item.plateColor" />
               </td>
               <td>{{ item.ownerName }}</td>
+              <td>{{ vehicleTypeLabel(item.type) }}</td>
               <td>{{ item.phone || '—' }}</td>
               <td>{{ item.department || '—' }}</td>
               <td>
@@ -484,6 +518,14 @@ onMounted(reload)
           <select v-model="formPlateColor">
             <option v-for="color in plateColorOptions" :key="color" :value="color">
               {{ plateColorLabel(color) }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span>{{ t('internalVehicles.colType') }}</span>
+          <select v-model="formType">
+            <option v-for="type in vehicleTypeOptions" :key="type" :value="type">
+              {{ vehicleTypeLabel(type) }}
             </option>
           </select>
         </label>

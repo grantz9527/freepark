@@ -1,6 +1,8 @@
 package com.freepark.local.whitelist;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -17,6 +19,7 @@ import com.freepark.local.common.exception.ErrorCode;
 import com.freepark.local.common.importing.VehicleSpreadsheetImportSupport;
 import com.freepark.local.domain.InternalVehicle;
 import com.freepark.local.domain.InternalVehicleRepository;
+import com.freepark.local.domain.InternalVehicleType;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
 import com.freepark.local.domain.ParkingLot;
@@ -33,6 +36,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class WhitelistVehicleService {
+
+    private static final DateTimeFormatter EXPORT_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ParkingLotRepository lots;
     private final WhitelistVehicleRepository vehicles;
@@ -84,6 +89,7 @@ public class WhitelistVehicleService {
                 plateNumber,
                 request.plateColor(),
                 request.ownerName(),
+                request.type(),
                 normalizeOptional(request.phone()),
                 normalizeOptional(request.department()),
                 normalizeOptional(request.remark()),
@@ -120,6 +126,7 @@ public class WhitelistVehicleService {
                 plateNumber,
                 request.plateColor(),
                 request.ownerName(),
+                request.type(),
                 normalizeOptional(request.phone()),
                 normalizeOptional(request.department()),
                 normalizeOptional(request.remark()),
@@ -148,7 +155,7 @@ public class WhitelistVehicleService {
         requireAdmin(requesterId);
         ParkingLot lot = requireLot(lotId);
         List<String[]> rows = VehicleSpreadsheetImportSupport.readRows(
-                file, VehicleSpreadsheetImportSupport.ACCESS_LIST_COLUMN_COUNT);
+                file, VehicleSpreadsheetImportSupport.WHITELIST_COLUMN_COUNT);
         List<PlateColor> allowedColors = systemSettings.getAllowedPlateColors();
         PlateColor defaultColor = systemSettings.getDefaultPlateColor();
         var zoneId = systemSettings.getTimezone();
@@ -183,6 +190,12 @@ public class WhitelistVehicleService {
                 skipped++;
                 continue;
             }
+            InternalVehicleType type = VehicleSpreadsheetImportSupport.parseInternalVehicleType(
+                    VehicleSpreadsheetImportSupport.cell(cells, 8));
+            if (type == null) {
+                skipped++;
+                continue;
+            }
             if (vehicles.existsByLotIdAndPlateNumberIgnoreCase(lotId, plate)) {
                 skipped++;
                 continue;
@@ -192,6 +205,7 @@ public class WhitelistVehicleService {
                     plate,
                     color,
                     owner,
+                    type,
                     normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 3)),
                     normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 4)),
                     normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 5)),
@@ -209,7 +223,31 @@ public class WhitelistVehicleService {
     public byte[] buildImportTemplate(UUID lotId) {
         requireLot(lotId);
         return VehicleSpreadsheetImportSupport.buildTemplate(
-                "白名单", VehicleSpreadsheetImportSupport.ACCESS_LIST_TEMPLATE_COLUMNS);
+                "白名单", VehicleSpreadsheetImportSupport.WHITELIST_TEMPLATE_COLUMNS);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportVehicles(UUID lotId, String plate) {
+        requireLot(lotId);
+        String trimmedPlate = plate == null ? null : plate.trim();
+        List<WhitelistVehicle> result = vehicles.findAll(buildSpec(lotId, trimmedPlate));
+        ZoneId zoneId = systemSettings.getTimezone();
+        List<String[]> rows = new ArrayList<>();
+        for (WhitelistVehicle v : result) {
+            rows.add(new String[] {
+                    v.getPlateNumber(),
+                    v.getOwnerName(),
+                    v.getPlateColor().name(),
+                    nullToEmpty(v.getPhone()),
+                    nullToEmpty(v.getDepartment()),
+                    nullToEmpty(v.getRemark()),
+                    formatInstant(v.getStartTime(), zoneId),
+                    formatInstant(v.getEndTime(), zoneId),
+                    v.getType().name(),
+            });
+        }
+        return VehicleSpreadsheetImportSupport.buildExport(
+                "白名单", VehicleSpreadsheetImportSupport.WHITELIST_TEMPLATE_COLUMNS, rows);
     }
 
     private void syncToInternalVehicle(ParkingLot lot, WhitelistVehicle whitelist) {
@@ -234,6 +272,7 @@ public class WhitelistVehicleService {
                     plateNumber,
                     whitelist.getPlateColor(),
                     whitelist.getOwnerName(),
+                    whitelist.getType(),
                     whitelist.getPhone(),
                     whitelist.getDepartment(),
                     whitelist.getRemark(),
@@ -244,6 +283,7 @@ public class WhitelistVehicleService {
                 plateNumber,
                 whitelist.getPlateColor(),
                 whitelist.getOwnerName(),
+                whitelist.getType(),
                 whitelist.getPhone(),
                 whitelist.getDepartment(),
                 whitelist.getRemark(),
@@ -276,6 +316,14 @@ public class WhitelistVehicleService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String formatInstant(Instant instant, ZoneId zoneId) {
+        return instant == null ? "" : EXPORT_TIME_FORMATTER.withZone(zoneId).format(instant);
     }
 
     private ParkingLot requireLot(UUID lotId) {

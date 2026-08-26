@@ -7,11 +7,13 @@ import {
   createWhitelistVehicle,
   deleteWhitelistVehicle,
   downloadWhitelistImportTemplate,
+  exportWhitelistVehicles,
   importWhitelistVehicles,
   listWhitelistVehicles,
   listLots,
   updateWhitelistVehicle,
   type WhitelistVehicleView,
+  type InternalVehicleType,
   type LotView,
   type PlateColor,
 } from '@/api/client'
@@ -29,6 +31,12 @@ const { formatTime, toDateTimeLocal, fromDateTimeLocal, defaultDateTimeLocal } =
 const { plateColorLabel } = usePlateColorLabel()
 
 const plateColorOptions = computed(() => siteAllowedPlateColors.value)
+
+const vehicleTypeOptions: InternalVehicleType[] = ['TENANT', 'OWNER', 'APPOINTMENT', 'VISITOR', 'OTHER']
+
+function vehicleTypeLabel(type: InternalVehicleType): string {
+  return t(`whitelist.type${type}`)
+}
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -49,6 +57,7 @@ const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formPlate = ref('')
 const formPlateColor = ref<PlateColor>('BLUE')
+const formType = ref<InternalVehicleType>('OTHER')
 const formOwnerName = ref('')
 const formPhone = ref('')
 const formDepartment = ref('')
@@ -63,6 +72,7 @@ const importFile = ref<File | null>(null)
 const importing = ref(false)
 const downloadingTemplate = ref(false)
 const importError = ref('')
+const exporting = ref(false)
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const isEditing = computed(() => editingId.value !== null)
@@ -156,6 +166,7 @@ function resetForm(): void {
   editingId.value = null
   formPlate.value = ''
   formPlateColor.value = siteDefaultPlateColor.value
+  formType.value = 'OTHER'
   formOwnerName.value = ''
   formPhone.value = ''
   formDepartment.value = ''
@@ -175,6 +186,7 @@ function openEditForm(vehicle: WhitelistVehicleView): void {
   editingId.value = vehicle.id
   formPlate.value = vehicle.plateNumber
   formPlateColor.value = vehicle.plateColor
+  formType.value = vehicle.type
   formOwnerName.value = vehicle.ownerName
   formPhone.value = vehicle.phone ?? ''
   formDepartment.value = vehicle.department ?? ''
@@ -215,6 +227,7 @@ async function onSubmit(): Promise<void> {
     plateNumber: formPlate.value.trim(),
     plateColor: formPlateColor.value,
     ownerName: formOwnerName.value.trim(),
+    type: formType.value,
     phone: formPhone.value.trim() || undefined,
     department: formDepartment.value.trim() || undefined,
     remark: formRemark.value.trim() || undefined,
@@ -252,6 +265,22 @@ async function onDelete(vehicle: WhitelistVehicleView): Promise<void> {
     errorMessage.value = error instanceof ApiError ? error.message : t('whitelist.deleteFailed')
   } finally {
     submitting.value = false
+  }
+}
+
+async function onExport(): Promise<void> {
+  if (!selectedLotId.value) {
+    return
+  }
+  exporting.value = true
+  errorMessage.value = ''
+  try {
+    await exportWhitelistVehicles(selectedLotId.value, locale.value, appliedPlate.value || undefined)
+    successMessage.value = t('whitelist.exportSuccess')
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('whitelist.exportFailed')
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -375,6 +404,9 @@ onMounted(reload)
       <div v-if="isAdmin" class="action-bar">
         <button type="button" class="primary" @click="openCreateForm">{{ t('whitelist.create') }}</button>
         <button type="button" class="outline" @click="openImportForm">{{ t('whitelist.import') }}</button>
+        <button type="button" class="outline" :disabled="exporting" @click="onExport">
+          {{ exporting ? t('whitelist.exporting') : t('whitelist.export') }}
+        </button>
       </div>
 
       <div class="table-card">
@@ -384,6 +416,7 @@ onMounted(reload)
               <th>{{ t('whitelist.colIndex') }}</th>
               <th>{{ t('whitelist.colPlate') }}</th>
               <th>{{ t('whitelist.colOwner') }}</th>
+              <th>{{ t('whitelist.colType') }}</th>
               <th>{{ t('whitelist.colPhone') }}</th>
               <th>{{ t('whitelist.colDepartment') }}</th>
               <th>{{ t('whitelist.colStartTime') }}</th>
@@ -400,6 +433,7 @@ onMounted(reload)
                 <PlateBadge :plate-number="item.plateNumber" :plate-color="item.plateColor" />
               </td>
               <td>{{ item.ownerName }}</td>
+              <td>{{ vehicleTypeLabel(item.type) }}</td>
               <td>{{ item.phone || '—' }}</td>
               <td>{{ item.department || '—' }}</td>
               <td>{{ formatTime(item.startTime) || '—' }}</td>
@@ -459,6 +493,14 @@ onMounted(reload)
           <select v-model="formPlateColor">
             <option v-for="color in plateColorOptions" :key="color" :value="color">
               {{ plateColorLabel(color) }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span>{{ t('whitelist.colType') }}</span>
+          <select v-model="formType">
+            <option v-for="type in vehicleTypeOptions" :key="type" :value="type">
+              {{ vehicleTypeLabel(type) }}
             </option>
           </select>
         </label>

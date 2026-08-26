@@ -175,6 +175,35 @@ class BlacklistVehicleControllerTest {
                 .andExpect(jsonPath("$.data.total").value(1));
     }
 
+    @Test
+    void adminCanExportBlacklistVehicles() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token);
+
+        mockMvc.perform(post("/api/v1/lots/" + lotId + "/blacklist-vehicles")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"startTime\":\"2026-08-23T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
+                .andExpect(status().isOk());
+
+        MvcResult export = mockMvc.perform(get("/api/v1/lots/" + lotId + "/blacklist-vehicles/export")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"blacklist-vehicles.xlsx\""))
+                .andReturn();
+
+        byte[] body = export.getResponse().getContentAsByteArray();
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(body))) {
+            Row row = workbook.getSheetAt(0).getRow(1);
+            org.junit.jupiter.api.Assertions.assertNotNull(row);
+            org.junit.jupiter.api.Assertions.assertEquals("京A12345", row.getCell(0).getStringCellValue());
+            org.junit.jupiter.api.Assertions.assertEquals("BLUE", row.getCell(2).getStringCellValue());
+            org.junit.jupiter.api.Assertions.assertFalse(row.getCell(6).getStringCellValue().isEmpty());
+            org.junit.jupiter.api.Assertions.assertFalse(row.getCell(7).getStringCellValue().isEmpty());
+        }
+    }
+
     private byte[] buildAccessListExcel() throws Exception {
         String[][] rows = {
             { "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "开始时间", "结束时间" },

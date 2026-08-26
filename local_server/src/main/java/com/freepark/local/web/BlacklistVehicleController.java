@@ -92,6 +92,18 @@ public class BlacklistVehicleController {
                 .body(body);
     }
 
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> exportVehicles(
+            @PathVariable UUID lotId,
+            @RequestParam(required = false) String plate) {
+        byte[] body = blacklistVehicleService.exportVehicles(lotId, plate);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"blacklist-vehicles.xlsx\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(body);
+    }
+
     @DeleteMapping("/{vehicleId}")
     public ApiResponse<Void> delete(
             @AuthenticationPrincipal Jwt jwt,

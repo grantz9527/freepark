@@ -7,6 +7,7 @@ import {
   createBlacklistVehicle,
   deleteBlacklistVehicle,
   downloadBlacklistImportTemplate,
+  exportBlacklistVehicles,
   importBlacklistVehicles,
   listBlacklistVehicles,
   listLots,
@@ -63,6 +64,7 @@ const importFile = ref<File | null>(null)
 const importing = ref(false)
 const downloadingTemplate = ref(false)
 const importError = ref('')
+const exporting = ref(false)
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const isEditing = computed(() => editingId.value !== null)
@@ -255,6 +257,22 @@ async function onDelete(vehicle: BlacklistVehicleView): Promise<void> {
   }
 }
 
+async function onExport(): Promise<void> {
+  if (!selectedLotId.value) {
+    return
+  }
+  exporting.value = true
+  errorMessage.value = ''
+  try {
+    await exportBlacklistVehicles(selectedLotId.value, locale.value, appliedPlate.value || undefined)
+    successMessage.value = t('blacklist.exportSuccess')
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('blacklist.exportFailed')
+  } finally {
+    exporting.value = false
+  }
+}
+
 function openImportForm(): void {
   if (!selectedLotId.value) {
     return
@@ -375,6 +393,9 @@ onMounted(reload)
       <div v-if="isAdmin" class="action-bar">
         <button type="button" class="primary" @click="openCreateForm">{{ t('blacklist.create') }}</button>
         <button type="button" class="outline" @click="openImportForm">{{ t('blacklist.import') }}</button>
+        <button type="button" class="outline" :disabled="exporting" @click="onExport">
+          {{ exporting ? t('blacklist.exporting') : t('blacklist.export') }}
+        </button>
       </div>
 
       <div class="table-card">

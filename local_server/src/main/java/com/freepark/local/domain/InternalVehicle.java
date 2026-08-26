@@ -2,6 +2,8 @@ package com.freepark.local.domain;
 
 import java.util.UUID;
 
+import org.hibernate.annotations.ColumnDefault;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -32,6 +34,11 @@ public class InternalVehicle extends BaseEntity {
     @Column(name = "owner_name", nullable = false, length = 80)
     private String ownerName;
 
+    @Enumerated(EnumType.STRING)
+    @ColumnDefault("'OTHER'")
+    @Column(name = "vehicle_type", nullable = false, length = 16)
+    private InternalVehicleType type = InternalVehicleType.OTHER;
+
     @Column(length = 32)
     private String phone;
 
@@ -55,6 +62,7 @@ public class InternalVehicle extends BaseEntity {
             String plateNumber,
             PlateColor plateColor,
             String ownerName,
+            InternalVehicleType type,
             String phone,
             String department,
             String remark,
@@ -63,6 +71,7 @@ public class InternalVehicle extends BaseEntity {
         this.plateNumber = plateNumber.trim();
         this.plateColor = plateColor == null ? PlateColor.BLUE : plateColor;
         this.ownerName = ownerName.trim();
+        this.type = type == null ? InternalVehicleType.OTHER : type;
         this.phone = phone;
         this.department = department;
         this.remark = remark;
@@ -83,6 +92,10 @@ public class InternalVehicle extends BaseEntity {
 
     public String getOwnerName() {
         return ownerName;
+    }
+
+    public InternalVehicleType getType() {
+        return type;
     }
 
     public String getPhone() {
@@ -113,6 +126,7 @@ public class InternalVehicle extends BaseEntity {
             String plateNumber,
             PlateColor plateColor,
             String ownerName,
+            InternalVehicleType type,
             String phone,
             String department,
             String remark,
@@ -120,6 +134,7 @@ public class InternalVehicle extends BaseEntity {
         this.plateNumber = plateNumber.trim();
         this.plateColor = plateColor == null ? PlateColor.BLUE : plateColor;
         this.ownerName = ownerName.trim();
+        this.type = type == null ? InternalVehicleType.OTHER : type;
         this.phone = phone;
         this.department = department;
         this.remark = remark;

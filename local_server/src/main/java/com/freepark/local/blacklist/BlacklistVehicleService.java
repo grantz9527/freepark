@@ -1,6 +1,8 @@
 package com.freepark.local.blacklist;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +33,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class BlacklistVehicleService {
+
+    private static final DateTimeFormatter EXPORT_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ParkingLotRepository lots;
     private final BlacklistVehicleRepository vehicles;
@@ -201,6 +205,29 @@ public class BlacklistVehicleService {
                 "黑名单", VehicleSpreadsheetImportSupport.ACCESS_LIST_TEMPLATE_COLUMNS);
     }
 
+    @Transactional(readOnly = true)
+    public byte[] exportVehicles(UUID lotId, String plate) {
+        requireLot(lotId);
+        String trimmedPlate = plate == null ? null : plate.trim();
+        List<BlacklistVehicle> result = vehicles.findAll(buildSpec(lotId, trimmedPlate));
+        ZoneId zoneId = systemSettings.getTimezone();
+        List<String[]> rows = new ArrayList<>();
+        for (BlacklistVehicle v : result) {
+            rows.add(new String[] {
+                    v.getPlateNumber(),
+                    v.getOwnerName(),
+                    v.getPlateColor().name(),
+                    nullToEmpty(v.getPhone()),
+                    nullToEmpty(v.getDepartment()),
+                    nullToEmpty(v.getRemark()),
+                    formatInstant(v.getStartTime(), zoneId),
+                    formatInstant(v.getEndTime(), zoneId),
+            });
+        }
+        return VehicleSpreadsheetImportSupport.buildExport(
+                "黑名单", VehicleSpreadsheetImportSupport.ACCESS_LIST_TEMPLATE_COLUMNS, rows);
+    }
+
     private Specification<BlacklistVehicle> buildSpec(UUID lotId, String plate) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -226,6 +253,14 @@ public class BlacklistVehicleService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String formatInstant(Instant instant, ZoneId zoneId) {
+        return instant == null ? "" : EXPORT_TIME_FORMATTER.withZone(zoneId).format(instant);
     }
 
     private ParkingLot requireLot(UUID lotId) {

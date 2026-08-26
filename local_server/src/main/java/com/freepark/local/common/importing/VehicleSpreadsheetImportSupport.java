@@ -23,20 +23,27 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
+import com.freepark.local.domain.InternalVehicleType;
 import com.freepark.local.domain.PlateColor;
 
 public final class VehicleSpreadsheetImportSupport {
 
-    public static final int INTERNAL_COLUMN_COUNT = 6;
+    public static final int INTERNAL_COLUMN_COUNT = 7;
 
     public static final int ACCESS_LIST_COLUMN_COUNT = 8;
 
+    public static final int WHITELIST_COLUMN_COUNT = 9;
+
     public static final String[] INTERNAL_TEMPLATE_COLUMNS = {
-            "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注"
+            "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "类型"
     };
 
     public static final String[] ACCESS_LIST_TEMPLATE_COLUMNS = {
             "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "开始时间", "结束时间"
+    };
+
+    public static final String[] WHITELIST_TEMPLATE_COLUMNS = {
+            "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "开始时间", "结束时间", "类型"
     };
 
     private static final DateTimeFormatter[] DATE_TIME_FORMATTERS = {
@@ -105,6 +112,29 @@ public final class VehicleSpreadsheetImportSupport {
         }
     }
 
+    public static byte[] buildExport(String sheetName, String[] columns, List<String[]> rows) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+                ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet(sheetName);
+            Row header = sheet.createRow(0);
+            for (int i = 0; i < columns.length; i++) {
+                header.createCell(i).setCellValue(columns[i]);
+                sheet.setColumnWidth(i, 4200);
+            }
+            for (int r = 0; r < rows.size(); r++) {
+                Row row = sheet.createRow(r + 1);
+                String[] cells = rows.get(r);
+                for (int i = 0; i < cells.length; i++) {
+                    row.createCell(i).setCellValue(cells[i] == null ? "" : cells[i]);
+                }
+            }
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException ex) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR);
+        }
+    }
+
     public static boolean isHeaderRow(String firstCell) {
         String header = firstCell.trim().toLowerCase();
         return header.equals("车牌号")
@@ -151,6 +181,42 @@ public final class VehicleSpreadsheetImportSupport {
             case "黑色":
             case "黑":
                 return PlateColor.BLACK;
+            default:
+                return null;
+        }
+    }
+
+    public static InternalVehicleType parseInternalVehicleType(String token) {
+        if (token == null || token.isBlank()) {
+            return InternalVehicleType.OTHER;
+        }
+        String value = token.trim().toUpperCase();
+        for (InternalVehicleType type : InternalVehicleType.values()) {
+            if (type.name().equals(value)) {
+                return type;
+            }
+        }
+        switch (value) {
+            case "TENANT":
+            case "租户":
+            case "租戶":
+                return InternalVehicleType.TENANT;
+            case "OWNER":
+            case "业主":
+            case "業主":
+                return InternalVehicleType.OWNER;
+            case "APPOINTMENT":
+            case "预约":
+            case "預約":
+                return InternalVehicleType.APPOINTMENT;
+            case "VISITOR":
+            case "访客":
+            case "訪客":
+                return InternalVehicleType.VISITOR;
+            case "OTHER":
+            case "其它":
+            case "其他":
+                return InternalVehicleType.OTHER;
             default:
                 return null;
         }

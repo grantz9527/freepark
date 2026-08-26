@@ -558,12 +558,15 @@ export async function importSpaces(
 
 export type PlateColor = string
 
+export type InternalVehicleType = 'TENANT' | 'OWNER' | 'APPOINTMENT' | 'VISITOR' | 'OTHER'
+
 export interface InternalVehicleView {
   id: string
   lotId: string
   plateNumber: string
   plateColor: PlateColor
   ownerName: string
+  type: InternalVehicleType
   phone: string | null
   department: string | null
   remark: string | null
@@ -608,6 +611,52 @@ export async function downloadInternalVehicleImportTemplate(
     `/api/v1/lots/${lotId}/internal-vehicles/import-template`,
     locale,
     'internal-vehicles-template.xlsx',
+  )
+}
+
+function exportQuery(plate?: string): string {
+  const trimmed = plate?.trim()
+  return trimmed ? `?plate=${encodeURIComponent(trimmed)}` : ''
+}
+
+function exportFilename(prefix: string): string {
+  const date = new Date().toISOString().slice(0, 10)
+  return `${prefix}-${date}.xlsx`
+}
+
+export async function exportInternalVehicles(
+  lotId: string,
+  locale: string,
+  plate?: string,
+): Promise<void> {
+  await downloadImportTemplateFile(
+    `/api/v1/lots/${lotId}/internal-vehicles/export${exportQuery(plate)}`,
+    locale,
+    exportFilename('internal-vehicles'),
+  )
+}
+
+export async function exportWhitelistVehicles(
+  lotId: string,
+  locale: string,
+  plate?: string,
+): Promise<void> {
+  await downloadImportTemplateFile(
+    `/api/v1/lots/${lotId}/whitelist-vehicles/export${exportQuery(plate)}`,
+    locale,
+    exportFilename('whitelist-vehicles'),
+  )
+}
+
+export async function exportBlacklistVehicles(
+  lotId: string,
+  locale: string,
+  plate?: string,
+): Promise<void> {
+  await downloadImportTemplateFile(
+    `/api/v1/lots/${lotId}/blacklist-vehicles/export${exportQuery(plate)}`,
+    locale,
+    exportFilename('blacklist-vehicles'),
   )
 }
 
@@ -660,6 +709,7 @@ export function createInternalVehicle(
     plateNumber: string
     plateColor: PlateColor
     ownerName: string
+    type?: InternalVehicleType
     phone?: string
     department?: string
     remark?: string
@@ -685,6 +735,7 @@ export function updateInternalVehicle(
     plateNumber: string
     plateColor: PlateColor
     ownerName: string
+    type?: InternalVehicleType
     phone?: string
     department?: string
     remark?: string
@@ -717,6 +768,7 @@ export interface WhitelistVehicleView {
   plateNumber: string
   plateColor: PlateColor
   ownerName: string
+  type: InternalVehicleType
   phone: string | null
   department: string | null
   remark: string | null
@@ -746,6 +798,7 @@ export function createWhitelistVehicle(
     plateNumber: string
     plateColor: PlateColor
     ownerName: string
+    type?: InternalVehicleType
     phone?: string
     department?: string
     remark?: string
@@ -773,6 +826,7 @@ export function updateWhitelistVehicle(
     plateNumber: string
     plateColor: PlateColor
     ownerName: string
+    type?: InternalVehicleType
     phone?: string
     department?: string
     remark?: string

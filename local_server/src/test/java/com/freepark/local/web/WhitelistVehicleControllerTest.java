@@ -66,10 +66,11 @@ class WhitelistVehicleControllerTest {
         mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"phone\":\"13800000000\",\"department\":\"访客\",\"startTime\":\"2026-08-23T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
+                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"VISITOR\",\"phone\":\"13800000000\",\"department\":\"访客\",\"startTime\":\"2026-08-23T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.plateNumber").value("京A12345"))
                 .andExpect(jsonPath("$.data.plateColor").value("BLUE"))
+                .andExpect(jsonPath("$.data.type").value("VISITOR"))
                 .andExpect(jsonPath("$.data.startTime").value("2026-08-23T00:00:00Z"))
                 .andExpect(jsonPath("$.data.endTime").value("2026-12-31T23:59:59Z"));
 
@@ -79,7 +80,8 @@ class WhitelistVehicleControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.items[0].plateNumber").value("京A12345"))
-                .andExpect(jsonPath("$.data.items[0].ownerName").value("张三"));
+                .andExpect(jsonPath("$.data.items[0].ownerName").value("张三"))
+                .andExpect(jsonPath("$.data.items[0].type").value("VISITOR"));
 
         mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
@@ -90,7 +92,7 @@ class WhitelistVehicleControllerTest {
         MvcResult create = mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京B88888\",\"plateColor\":\"GREEN\",\"ownerName\":\"李四\",\"startTime\":\"2026-01-01T00:00:00Z\",\"endTime\":\"2026-06-30T23:59:59Z\"}"))
+                        .content("{\"plateNumber\":\"京B88888\",\"plateColor\":\"GREEN\",\"ownerName\":\"李四\",\"type\":\"TENANT\",\"startTime\":\"2026-01-01T00:00:00Z\",\"endTime\":\"2026-06-30T23:59:59Z\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         String vehicleId = jsonMapper.readTree(create.getResponse().getContentAsString())
@@ -99,10 +101,11 @@ class WhitelistVehicleControllerTest {
         mockMvc.perform(put("/api/v1/lots/" + lotId + "/whitelist-vehicles/" + vehicleId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京B99999\",\"plateColor\":\"YELLOW\",\"ownerName\":\"李四\",\"enabled\":false,\"startTime\":\"2026-02-01T00:00:00Z\",\"endTime\":\"2026-07-31T23:59:59Z\"}"))
+                        .content("{\"plateNumber\":\"京B99999\",\"plateColor\":\"YELLOW\",\"ownerName\":\"李四\",\"type\":\"OWNER\",\"enabled\":false,\"startTime\":\"2026-02-01T00:00:00Z\",\"endTime\":\"2026-07-31T23:59:59Z\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.plateNumber").value("京B99999"))
                 .andExpect(jsonPath("$.data.plateColor").value("YELLOW"))
+                .andExpect(jsonPath("$.data.type").value("OWNER"))
                 .andExpect(jsonPath("$.data.enabled").value(false))
                 .andExpect(jsonPath("$.data.startTime").value("2026-02-01T00:00:00Z"))
                 .andExpect(jsonPath("$.data.endTime").value("2026-07-31T23:59:59Z"));
@@ -114,6 +117,7 @@ class WhitelistVehicleControllerTest {
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.items[0].plateNumber").value("京B99999"))
                 .andExpect(jsonPath("$.data.items[0].plateColor").value("YELLOW"))
+                .andExpect(jsonPath("$.data.items[0].type").value("OWNER"))
                 .andExpect(jsonPath("$.data.items[0].enabled").value(false));
 
         mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
@@ -197,11 +201,41 @@ class WhitelistVehicleControllerTest {
                 .andExpect(jsonPath("$.data.total").value(1));
     }
 
+    @Test
+    void adminCanExportWhitelistVehicles() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token);
+
+        mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"TENANT\",\"department\":\"访客\",\"startTime\":\"2026-08-23T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
+                .andExpect(status().isOk());
+
+        MvcResult export = mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles/export")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"whitelist-vehicles.xlsx\""))
+                .andReturn();
+
+        byte[] body = export.getResponse().getContentAsByteArray();
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(body))) {
+            Row row = workbook.getSheetAt(0).getRow(1);
+            org.junit.jupiter.api.Assertions.assertNotNull(row);
+            org.junit.jupiter.api.Assertions.assertEquals("京A12345", row.getCell(0).getStringCellValue());
+            org.junit.jupiter.api.Assertions.assertEquals("BLUE", row.getCell(2).getStringCellValue());
+            org.junit.jupiter.api.Assertions.assertFalse(row.getCell(6).getStringCellValue().isEmpty());
+            org.junit.jupiter.api.Assertions.assertFalse(row.getCell(7).getStringCellValue().isEmpty());
+            org.junit.jupiter.api.Assertions.assertEquals("TENANT", row.getCell(8).getStringCellValue());
+        }
+    }
+
     private byte[] buildAccessListExcel() throws Exception {
         String[][] rows = {
-            { "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "开始时间", "结束时间" },
-            { "京A10001", "张三", "BLUE", "13800000000", "访客", "", "2026-01-01 00:00", "2026-12-31 23:59" },
-            { "京A10001", "李四", "BLUE", "", "", "", "2026-01-01 00:00", "2026-12-31 23:59" },
+            { "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "开始时间", "结束时间", "类型" },
+            { "京A10001", "张三", "BLUE", "13800000000", "访客", "", "2026-01-01 00:00", "2026-12-31 23:59", "租户" },
+            { "京A10001", "李四", "BLUE", "", "", "", "2026-01-01 00:00", "2026-12-31 23:59", "" },
         };
         try (XSSFWorkbook workbook = new XSSFWorkbook();
                 java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {

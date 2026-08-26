@@ -17,6 +17,7 @@ import com.freepark.local.common.exception.ErrorCode;
 import com.freepark.local.common.importing.VehicleSpreadsheetImportSupport;
 import com.freepark.local.domain.InternalVehicle;
 import com.freepark.local.domain.InternalVehicleRepository;
+import com.freepark.local.domain.InternalVehicleType;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
 import com.freepark.local.domain.ParkingLot;
@@ -83,6 +84,7 @@ public class InternalVehicleService {
                 plateNumber,
                 request.plateColor(),
                 request.ownerName(),
+                request.type(),
                 normalizeOptional(request.phone()),
                 normalizeOptional(request.department()),
                 normalizeOptional(request.remark()),
@@ -113,6 +115,7 @@ public class InternalVehicleService {
                 plateNumber,
                 request.plateColor(),
                 request.ownerName(),
+                request.type(),
                 normalizeOptional(request.phone()),
                 normalizeOptional(request.department()),
                 normalizeOptional(request.remark()),
@@ -164,6 +167,12 @@ public class InternalVehicleService {
                 skipped++;
                 continue;
             }
+            InternalVehicleType type = VehicleSpreadsheetImportSupport.parseInternalVehicleType(
+                    VehicleSpreadsheetImportSupport.cell(cells, 6));
+            if (type == null) {
+                skipped++;
+                continue;
+            }
             if (vehicles.existsByLotIdAndPlateNumberIgnoreCase(lotId, plate)) {
                 skipped++;
                 continue;
@@ -173,6 +182,7 @@ public class InternalVehicleService {
                     plate,
                     color,
                     owner,
+                    type,
                     normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 3)),
                     normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 4)),
                     normalizeOptional(VehicleSpreadsheetImportSupport.cell(cells, 5)),
@@ -189,6 +199,27 @@ public class InternalVehicleService {
         requireLot(lotId);
         return VehicleSpreadsheetImportSupport.buildTemplate(
                 "内部车辆", VehicleSpreadsheetImportSupport.INTERNAL_TEMPLATE_COLUMNS);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportVehicles(UUID lotId, String plate) {
+        requireLot(lotId);
+        String trimmedPlate = plate == null ? null : plate.trim();
+        List<InternalVehicle> result = vehicles.findAll(buildSpec(lotId, trimmedPlate));
+        List<String[]> rows = new ArrayList<>();
+        for (InternalVehicle v : result) {
+            rows.add(new String[] {
+                    v.getPlateNumber(),
+                    v.getOwnerName(),
+                    v.getPlateColor().name(),
+                    nullToEmpty(v.getPhone()),
+                    nullToEmpty(v.getDepartment()),
+                    nullToEmpty(v.getRemark()),
+                    v.getType().name(),
+            });
+        }
+        return VehicleSpreadsheetImportSupport.buildExport(
+                "内部车辆", VehicleSpreadsheetImportSupport.INTERNAL_TEMPLATE_COLUMNS, rows);
     }
 
     @Transactional
@@ -221,6 +252,10 @@ public class InternalVehicleService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private ParkingLot requireLot(UUID lotId) {

@@ -3,6 +3,7 @@ package com.freepark.local.whitelist;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.freepark.local.domain.InternalVehicleType;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.WhitelistVehicle;
 
@@ -12,6 +13,7 @@ public record WhitelistVehicleView(
         String plateNumber,
         PlateColor plateColor,
         String ownerName,
+        InternalVehicleType type,
         String phone,
         String department,
         String remark,
@@ -28,6 +30,7 @@ public record WhitelistVehicleView(
                 vehicle.getPlateNumber(),
                 vehicle.getPlateColor(),
                 vehicle.getOwnerName(),
+                vehicle.getType(),
                 vehicle.getPhone(),
                 vehicle.getDepartment(),
                 vehicle.getRemark(),

@@ -2,19 +2,26 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { ApiError, listLots, type LotView } from '@/api/client'
+import { ApiError, listLanes, listLots, type LaneView, type LotView, type PlateColor } from '@/api/client'
 import PlateBadge from '@/components/PlateBadge.vue'
+import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { useSiteTime } from '@/composables/useSiteTime'
+import { applyRecognitionToParkingSession } from '@/hardware/parkingSessions'
 import {
+  createRecognitionRecord,
   listRecognitionRecords,
+  markRecognitionAbnormal,
+  type RecognitionDirection,
   type RecognitionEventType,
   type RecognitionRecord,
 } from '@/hardware/recognitionRecords'
+import { siteAllowedPlateColors, siteDefaultPlateColor } from '@/site/settings'
 
 const LOT_STORAGE_KEY = 'freepark.recognitionRecords.lotId'
 
 const { t, locale } = useI18n()
-const { formatTime } = useSiteTime()
+const { formatTime, fromDateTimeLocal, defaultDateTimeLocal } = useSiteTime()
+const { plateColorLabel } = usePlateColorLabel()
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -26,15 +33,28 @@ const eventTypeFilter = ref<RecognitionEventType | ''>('')
 const abnormalOnly = ref(false)
 const records = ref<RecognitionRecord[]>([])
 const previewImage = ref<string | null>(null)
+const lanes = ref<LaneView[]>([])
+const plateColorOptions = computed(() => siteAllowedPlateColors.value)
 
-const filteredRecords = computed(() =>
-  listRecognitionRecords({
+const showForm = ref(false)
+const submitting = ref(false)
+const successMessage = ref('')
+const formPlate = ref('')
+const formPlateColor = ref<PlateColor>(siteDefaultPlateColor.value)
+const formDirection = ref<RecognitionDirection>('ENTRANCE')
+const formLaneId = ref('')
+const formEventTime = ref('')
+const formError = ref('')
+
+function refreshRecords(): void {
+  // localStorage 非响应式，需每次直接读取，避免 computed 缓存导致新增记录不刷新
+  records.value = listRecognitionRecords({
     lotId: selectedLotId.value || undefined,
     keyword: appliedKeyword.value || undefined,
     eventType: eventTypeFilter.value || undefined,
     abnormalOnly: abnormalOnly.value || undefined,
-  }),
-)
+  })
+}
 
 async function loadLots(): Promise<void> {
   const result = await listLots(locale.value)
@@ -48,8 +68,18 @@ async function loadLots(): Promise<void> {
   selectedLotId.value = match?.id ?? lots.value[0]?.id ?? ''
 }
 
-function refreshRecords(): void {
-  records.value = filteredRecords.value
+async function loadLanes(): Promise<void> {
+  lanes.value = []
+  formLaneId.value = ''
+  if (!selectedLotId.value) {
+    return
+  }
+  try {
+    const result = await listLanes(locale.value, selectedLotId.value)
+    lanes.value = result.data
+  } catch {
+    lanes.value = []
+  }
 }
 
 async function reload(): Promise<void> {
@@ -57,6 +87,7 @@ async function reload(): Promise<void> {
   errorMessage.value = ''
   try {
     await loadLots()
+    await loadLanes()
     refreshRecords()
   } catch (error) {
     errorMessage.value =
@@ -66,12 +97,13 @@ async function reload(): Promise<void> {
   }
 }
 
-function onLotChange(): void {
+async function onLotChange(): Promise<void> {
   sessionStorage.setItem(LOT_STORAGE_KEY, selectedLotId.value)
   appliedKeyword.value = ''
   searchInput.value = ''
   eventTypeFilter.value = ''
   abnormalOnly.value = false
+  await loadLanes()
   refreshRecords()
 }
 
@@ -128,6 +160,61 @@ function closePreview(): void {
   previewImage.value = null
 }
 
+function openAddForm(): void {
+  formPlate.value = ''
+  formPlateColor.value = siteDefaultPlateColor.value
+  formDirection.value = 'ENTRANCE'
+  formLaneId.value = ''
+  formEventTime.value = defaultDateTimeLocal()
+  formError.value = ''
+  showForm.value = true
+}
+
+function closeForm(): void {
+  showForm.value = false
+}
+
+async function onSubmit(): Promise<void> {
+  if (!selectedLotId.value) {
+    return
+  }
+  const plate = formPlate.value.trim()
+  if (!plate) {
+    formError.value = t('recognitionRecords.plateRequired')
+    return
+  }
+  const eventTime = fromDateTimeLocal(formEventTime.value) || undefined
+  submitting.value = true
+  try {
+    const lot = lots.value.find((item) => item.id === selectedLotId.value)
+    const lane = lanes.value.find((item) => item.id === formLaneId.value) ?? null
+    const recognition = createRecognitionRecord({
+      lotId: selectedLotId.value,
+      lotName: lot?.name ?? '',
+      laneId: lane?.id ?? null,
+      laneName: lane?.name ?? null,
+      plateNumber: plate,
+      plateColor: formPlateColor.value,
+      eventTime,
+      eventType: 'MANUAL',
+      direction: formDirection.value,
+    })
+    // 与停车流水联动：入场生成在场流水，出场匹配并关闭流水，未匹配标记异常
+    const flow = applyRecognitionToParkingSession(recognition)
+    if (flow.kind === 'exit_unmatched') {
+      markRecognitionAbnormal(recognition.id, 'exit_unmatched')
+    }
+    showForm.value = false
+    refreshRecords()
+    successMessage.value = t('recognitionRecords.saveSuccess')
+    window.setTimeout(() => {
+      successMessage.value = ''
+    }, 3000)
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(reload)
 </script>
 
@@ -143,9 +230,18 @@ onMounted(reload)
           <option v-for="lot in lots" :key="lot.id" :value="lot.id">{{ lot.name }}</option>
         </select>
       </label>
+      <button
+        v-if="selectedLotId"
+        type="button"
+        class="primary"
+        @click="openAddForm"
+      >
+        {{ t('recognitionRecords.addRecord') }}
+      </button>
     </div>
 
     <p v-if="errorMessage" class="banner error">{{ errorMessage }}</p>
+    <p v-if="successMessage" class="banner success">{{ successMessage }}</p>
 
     <div v-if="!selectedLotId" class="table-card empty-card">
       <div class="empty">
@@ -240,6 +336,59 @@ onMounted(reload)
       </div>
     </template>
 
+    <div v-if="showForm" class="modal-backdrop">
+      <form class="modal" @submit.prevent="onSubmit">
+        <h3>{{ t('recognitionRecords.addTitle') }}</h3>
+        <p class="modal-hint">{{ t('recognitionRecords.addHint') }}</p>
+        <label>
+          <span>{{ t('recognitionRecords.colPlate') }}</span>
+          <input
+            v-model="formPlate"
+            type="text"
+            autocomplete="off"
+            :placeholder="t('recognitionRecords.searchPlaceholder')"
+          />
+        </label>
+        <div class="time-row">
+          <label>
+            <span>{{ t('recognitionRecords.colDirection') }}</span>
+            <select v-model="formDirection">
+              <option value="ENTRANCE">{{ t('recognitionRecords.directionEntrance') }}</option>
+              <option value="EXIT">{{ t('recognitionRecords.directionExit') }}</option>
+            </select>
+          </label>
+          <label>
+            <span>{{ t('recognitionRecords.colPlateColor') }}</span>
+            <select v-model="formPlateColor">
+              <option v-for="color in plateColorOptions" :key="color" :value="color">
+                {{ plateColorLabel(color) }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span>{{ t('recognitionRecords.colLane') }}</span>
+          <select v-model="formLaneId">
+            <option value="">{{ t('recognitionRecords.lanePlaceholder') }}</option>
+            <option v-for="lane in lanes" :key="lane.id" :value="lane.id">{{ lane.name }}</option>
+          </select>
+        </label>
+        <label>
+          <span>{{ t('recognitionRecords.colEventTime') }}</span>
+          <input v-model="formEventTime" type="datetime-local" />
+        </label>
+        <p v-if="formError" class="form-error">{{ formError }}</p>
+        <div class="actions">
+          <button type="button" class="ghost" @click="closeForm">
+            {{ t('recognitionRecords.cancel') }}
+          </button>
+          <button type="submit" :disabled="submitting">
+            {{ submitting ? t('recognitionRecords.saving') : t('recognitionRecords.save') }}
+          </button>
+        </div>
+      </form>
+    </div>
+
     <div v-if="previewImage" class="modal-backdrop" @click="closePreview">
       <div class="preview-modal" @click.stop>
         <img :src="previewImage" alt="" class="preview-img" />
@@ -260,6 +409,10 @@ onMounted(reload)
 }
 
 .lot-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -456,6 +609,69 @@ th {
   color: #7a5c00;
   background: #fff7e6;
   border: 1px solid #f0d9a8;
+}
+
+.banner.success {
+  color: var(--ok);
+  background: #e8f5ef;
+  border: 1px solid #b7e0cd;
+}
+
+.modal {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.modal h3 {
+  margin: 0;
+}
+
+.modal-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.modal label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.modal input,
+.modal select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  background: #fff;
+}
+
+.time-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 560px) {
+  .time-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .modal-backdrop {
