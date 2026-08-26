@@ -56,6 +56,12 @@ const navGroups = computed((): NavGroup[] => {
       label: t('nav.systemSettings'),
       icon: 'systemSettings',
     })
+    systemChildren.push({
+      to: '/system/node-config',
+      name: 'nodeConfig',
+      label: t('nav.nodeConfig'),
+      icon: 'nodeConfig',
+    })
   }
   systemChildren.push({
     to: '/settings',
@@ -395,6 +401,17 @@ function logout(): void {
                   <circle cx="8" cy="6" r="2" stroke="currentColor" stroke-width="1.8" />
                   <circle cx="16" cy="12" r="2" stroke="currentColor" stroke-width="1.8" />
                   <circle cx="10" cy="18" r="2" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else-if="item.icon === 'nodeConfig'" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="4" width="7" height="6" rx="1.5" stroke="currentColor" stroke-width="1.8" />
+                  <rect x="13" y="14" width="7" height="6" rx="1.5" stroke="currentColor" stroke-width="1.8" />
+                  <path
+                    d="M7.5 10v2a2 2 0 0 0 2 2h3"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                  />
+                  <path d="M16 14v-4a1.5 1.5 0 0 0-1.5-1.5H11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
                 </svg>
                 <svg v-else-if="item.icon === 'lanes'" viewBox="0 0 24 24" fill="none">
                   <path d="M5 20V7M19 20V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />

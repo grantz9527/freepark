@@ -7,6 +7,8 @@ import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
 import {
   BARRIER_CAMERA_TYPES,
+  BARRIER_SCREEN_LINES,
+  BARRIER_SCREEN_TYPES,
   boardProfile,
   boardsForCamera,
   commandsForBoard,
@@ -21,6 +23,8 @@ import {
   type BarrierCommand,
   type BarrierDevice,
   type BarrierLinkStatus,
+  type BarrierScreenLines,
+  type BarrierScreenType,
 } from '@/hardware/barrierDevices'
 
 interface DebugLog {
@@ -41,6 +45,8 @@ const formName = ref('')
 const formCode = ref('')
 const formCameraType = ref<BarrierCameraType>('ZHENSHI')
 const formBoardId = ref<BarrierBoardId>('ZS_IO')
+const formScreenType = ref<BarrierScreenType>('LED')
+const formScreenLines = ref<BarrierScreenLines>('L2')
 const formHost = ref('')
 const formPort = ref('80')
 const formEnabled = ref(true)
@@ -139,6 +145,8 @@ function resetForm(): void {
   formCode.value = ''
   formCameraType.value = 'ZHENSHI'
   formBoardId.value = defaultBoardId('ZHENSHI')
+  formScreenType.value = 'LED'
+  formScreenLines.value = 'L2'
   formHost.value = ''
   formPort.value = '80'
   formEnabled.value = true
@@ -156,6 +164,8 @@ function openEdit(device: BarrierDevice): void {
   formCode.value = device.code
   formCameraType.value = device.cameraType
   formBoardId.value = device.boardId
+  formScreenType.value = device.screenType
+  formScreenLines.value = device.screenLines
   formHost.value = device.host
   formPort.value = String(device.port)
   formEnabled.value = device.enabled
@@ -167,6 +177,14 @@ function onCameraTypeChange(): void {
   const boards = boardsForCamera(formCameraType.value)
   if (!boards.some((board) => board.id === formBoardId.value)) {
     formBoardId.value = defaultBoardId(formCameraType.value)
+  }
+}
+
+function onScreenTypeChange(): void {
+  if (formScreenType.value === 'NONE') {
+    formScreenLines.value = 'NONE'
+  } else if (formScreenLines.value === 'NONE') {
+    formScreenLines.value = 'L2'
   }
 }
 
@@ -207,6 +225,8 @@ function onSubmit(): void {
       code,
       cameraType: formCameraType.value,
       boardId: formBoardId.value,
+      screenType: formScreenType.value,
+      screenLines: formScreenLines.value,
       host,
       port,
       enabled: formEnabled.value,
@@ -293,6 +313,7 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
             <th>{{ t('barriers.colCode') }}</th>
             <th>{{ t('barriers.colCamera') }}</th>
             <th>{{ t('barriers.colBoard') }}</th>
+            <th>{{ t('barriers.colScreen') }}</th>
             <th>{{ t('barriers.colHost') }}</th>
             <th>{{ t('barriers.colLink') }}</th>
             <th>{{ t('barriers.colBoundLane') }}</th>
@@ -306,6 +327,7 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
             <td>{{ item.code }}</td>
             <td>{{ t(`barriers.cameras.${item.cameraType}`) }}</td>
             <td>{{ t(`barriers.boards.${item.boardId}`) }}</td>
+            <td>{{ t(`barriers.screens.${item.screenType}`) }}</td>
             <td>{{ item.host }}:{{ item.port }}</td>
             <td>
               <span class="pill" :class="statusClass(item.linkStatus)">
@@ -369,14 +391,38 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
           </select>
           <span class="field-hint">{{ selectedBoardHint }}</span>
         </label>
-        <label>
-          <span>{{ t('barriers.host') }}</span>
-          <input v-model="formHost" type="text" autocomplete="off" placeholder="192.168.1.50" />
-        </label>
-        <label>
-          <span>{{ t('barriers.port') }}</span>
-          <input v-model="formPort" type="number" min="1" max="65535" />
-        </label>
+        <div class="form-row">
+          <label>
+            <span>{{ t('barriers.screenType') }}</span>
+            <select v-model="formScreenType" @change="onScreenTypeChange">
+              <option v-for="screen in BARRIER_SCREEN_TYPES" :key="screen" :value="screen">
+                {{ t(`barriers.screens.${screen}`) }}
+              </option>
+            </select>
+          </label>
+          <label v-if="formScreenType !== 'NONE'">
+            <span>{{ t('barriers.screenLines') }}</span>
+            <select v-model="formScreenLines">
+              <option
+                v-for="line in BARRIER_SCREEN_LINES.filter((item) => item !== 'NONE')"
+                :key="line"
+                :value="line"
+              >
+                {{ t(`barriers.lines.${line}`) }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>
+            <span>{{ t('barriers.host') }}</span>
+            <input v-model="formHost" type="text" autocomplete="off" placeholder="192.168.1.50" />
+          </label>
+          <label>
+            <span>{{ t('barriers.port') }}</span>
+            <input v-model="formPort" type="number" min="1" max="65535" />
+          </label>
+        </div>
         <label class="checkbox">
           <input v-model="formEnabled" type="checkbox" />
           <span>{{ t('barriers.enabled') }}</span>
@@ -585,13 +631,22 @@ tbody tr:last-child td {
 
 .modal {
   width: min(420px, 100%);
+  max-height: calc(100dvh - 2rem);
   display: grid;
+  align-content: start;
   gap: 0.75rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.25rem;
   box-shadow: var(--shadow);
+  overflow-y: auto;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
 }
 
 .modal.wide {
@@ -722,9 +777,16 @@ input {
 }
 
 .actions {
+  position: sticky;
+  bottom: -1.25rem;
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+  margin: 0 -1.25rem -1.25rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
 }
 
 .actions button {

@@ -10,5 +10,7 @@ public interface WhitelistVehicleRepository
 
     boolean existsByLotIdAndPlateNumberIgnoreCase(UUID lotId, String plateNumber);
 
+    boolean existsByLotIdAndPlateNumberIgnoreCaseAndEnabledTrue(UUID lotId, String plateNumber);
+
     boolean existsByLotIdAndPlateNumberIgnoreCaseAndIdNot(UUID lotId, String plateNumber, UUID id);
 }

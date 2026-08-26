@@ -34,6 +34,7 @@ public enum ErrorCode {
     INVALID_PLATE_COLOR("error.settings.invalid-plate-color", HttpStatus.BAD_REQUEST),
     INVALID_PLATE_COLOR_CONFIG("error.settings.invalid-plate-color-config", HttpStatus.BAD_REQUEST),
     PLATE_COLOR_NOT_ALLOWED("error.plate-color.not-allowed", HttpStatus.BAD_REQUEST),
+    INVALID_NODE_CONFIG("error.node.invalid-config", HttpStatus.BAD_REQUEST),
     NOT_FOUND("error.not-found", HttpStatus.NOT_FOUND),
     INTERNAL_ERROR("error.internal", HttpStatus.INTERNAL_SERVER_ERROR);
 

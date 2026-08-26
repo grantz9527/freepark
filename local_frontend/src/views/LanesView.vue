@@ -8,6 +8,7 @@ import {
   createLane,
   listLanes,
   listLots,
+  postAccessDecision,
   updateLane,
   type LaneType,
   type LaneView,
@@ -56,7 +57,6 @@ import {
   markRecognitionAbnormal,
 } from '@/hardware/recognitionRecords'
 import { applyRecognitionToParkingSession, hasOpenParkingSession } from '@/hardware/parkingSessions'
-import { isRegisteredInternalVehicle } from '@/lib/internalVehicleAccess'
 import { siteAllowedPlateColors, siteDefaultPlateColor } from '@/site/settings'
 
 const LOT_STORAGE_KEY = 'freepark.lanes.lotId'
@@ -107,7 +107,7 @@ const bindIotError = ref('')
 const simLane = ref<LaneView | null>(null)
 const simPlate = ref('')
 const simPlateColor = ref<PlateColor>(siteDefaultPlateColor.value)
-const simDirection = ref<LaneSimDirection | ''>('')
+const simDirection = ref<LaneSimDirection>('ENTRANCE')
 const simError = ref('')
 const simBusy = ref(false)
 const simEvents = ref<LaneSimEvent[]>([])
@@ -662,14 +662,11 @@ function pushSimLog(message: string): void {
   simLogs.value = [`[${stamp}] ${message}`, ...simLogs.value].slice(0, 40)
 }
 
-function defaultSimDirection(lane: LaneView): LaneSimDirection | '' {
+function defaultSimDirection(lane: LaneView): LaneSimDirection {
   if (lane.laneType === 'EXIT') {
     return 'EXIT'
   }
-  if (lane.laneType === 'ENTRANCE') {
-    return 'ENTRANCE'
-  }
-  return ''
+  return 'ENTRANCE'
 }
 
 function openSimPanel(lane: LaneView): void {
@@ -687,7 +684,7 @@ function closeSimPanel(): void {
   simLane.value = null
   simPlate.value = ''
   simPlateColor.value = siteDefaultPlateColor.value
-  simDirection.value = ''
+  simDirection.value = 'ENTRANCE'
   simError.value = ''
   simBusy.value = false
   simEvents.value = []
@@ -723,31 +720,32 @@ async function onSimulate(): Promise<void> {
     simError.value = t('lanes.simPlateRequired')
     return
   }
-  let direction = simDirection.value
-  if (!direction) {
-    simError.value = t('lanes.simDirectionRequired')
-    return
-  }
+  const direction = simDirection.value
   simError.value = ''
   simBusy.value = true
   try {
-    const lot = lots.value.find((item) => item.id === simLane.value!.lotId)
     const interceptColors = getLanePlateIntercept(simLane.value.id)
     const openSession = hasOpenParkingSession(simLane.value.lotId, plate)
-    let registeredInternal = true
-    if (lot?.lotType === 'INTERNAL' && direction === 'ENTRANCE') {
-      registeredInternal = await isRegisteredInternalVehicle(simLane.value.lotId, plate, locale.value)
-    }
+    const decision = await postAccessDecision(
+      simLane.value.lotId,
+      {
+        laneId: simLane.value.id,
+        plateNumber: plate,
+        plateColor: simPlateColor.value,
+        direction,
+        interceptColors,
+        hasOpenSession: direction === 'EXIT' ? openSession : undefined,
+      },
+      locale.value,
+    )
     const event = simulateLaneEvent({
       laneId: simLane.value.id,
       lotId: simLane.value.lotId,
       plateNumber: plate,
       plateColor: simPlateColor.value,
       direction,
-      lotType: lot?.lotType,
-      isRegisteredInternalVehicle: registeredInternal,
-      interceptColors,
-      hasOpenSession: direction === 'EXIT' ? openSession : undefined,
+      result: decision.data.result,
+      remark: decision.data.remark,
     })
     refreshSimEvents()
     pushSimLog(
@@ -758,7 +756,10 @@ async function onSimulate(): Promise<void> {
       }),
     )
     if (event.result === 'INTERCEPTED') {
-      if (event.remark === 'not_internal_vehicle') {
+      if (event.remark === 'blacklisted_vehicle') {
+        simError.value = t('lanes.simBlacklisted')
+        pushSimLog(t('lanes.simLogBlacklisted', { plate: event.plateNumber }))
+      } else if (event.remark === 'not_internal_vehicle') {
         simError.value = t('lanes.simInternalRejected')
         pushSimLog(t('lanes.simLogInternalRejected', { plate: event.plateNumber }))
         createRecognitionRecord({
@@ -1117,8 +1118,8 @@ onMounted(reload)
               <th>{{ t('iot.colName') }}</th>
               <th>{{ t('iot.colCode') }}</th>
               <th>{{ t('iot.colBindDirection') }}</th>
-              <th>{{ t('iot.colModel') }}</th>
-              <th>{{ t('iot.colProtocol') }}</th>
+              <th>{{ t('iot.colDevice') }}</th>
+              <th>{{ t('iot.colBoard') }}</th>
               <th>{{ t('iot.colLink') }}</th>
               <th v-if="isAdmin" class="col-actions">{{ t('iot.colActions') }}</th>
             </tr>
@@ -1128,8 +1129,8 @@ onMounted(reload)
               <td>{{ item.name }}</td>
               <td>{{ item.code }}</td>
               <td>{{ iotDirectionText(item, iotLane) }}</td>
-              <td>{{ t(`iot.models.${item.modelId}`) }}</td>
-              <td>{{ t(`iot.protocols.${item.protocol}`) }}</td>
+              <td>{{ t(`iot.devices.${item.deviceType}`) }}</td>
+              <td>{{ t(`iot.boards.${item.boardId}`) }}</td>
               <td>
                 <span class="pill" :class="item.linkStatus === 'CONNECTED' ? 'ok' : 'fail'">
                   {{
@@ -1158,8 +1159,8 @@ onMounted(reload)
               <option value="">{{ t('iot.bindPlaceholder') }}</option>
               <option v-for="item in availableIotDevices()" :key="item.id" :value="item.id">
                 {{ item.name }} ({{ item.code }}) ·
-                {{ t(`iot.models.${item.modelId}`) }} /
-                {{ t(`iot.protocols.${item.protocol}`) }}
+                {{ t(`iot.devices.${item.deviceType}`) }} /
+                {{ t(`iot.boards.${item.boardId}`) }}
               </option>
             </select>
           </label>
@@ -1323,18 +1324,31 @@ onMounted(reload)
               </option>
             </select>
           </label>
-          <label>
+          <template v-if="simLane.laneType === 'BIDIRECTIONAL'">
+            <label>
+              <span>{{ t('lanes.simDirection') }}</span>
+              <select v-model="simDirection">
+                <option value="ENTRANCE">{{ t('lanes.simEntrance') }}</option>
+                <option value="EXIT">{{ t('lanes.simExit') }}</option>
+              </select>
+              <span class="field-hint">
+                {{
+                  t('lanes.simDirectionAuto', {
+                    type: laneTypeLabel(simLane.laneType),
+                    action: simDirectionLabel(simDirection),
+                  })
+                }}
+              </span>
+            </label>
+          </template>
+          <label v-else>
             <span>{{ t('lanes.simDirection') }}</span>
-            <select v-model="simDirection">
-              <option value="">{{ t('lanes.simDirectionPlaceholder') }}</option>
-              <option value="ENTRANCE">{{ t('lanes.simEntrance') }}</option>
-              <option value="EXIT">{{ t('lanes.simExit') }}</option>
-            </select>
-            <span v-if="simLane.laneType !== 'BIDIRECTIONAL'" class="field-hint">
+            <span class="pill ok">{{ simDirectionLabel(defaultSimDirection(simLane)) }}</span>
+            <span class="field-hint">
               {{
                 t('lanes.simDirectionAuto', {
                   type: laneTypeLabel(simLane.laneType),
-                  action: simDirectionLabel(defaultSimDirection(simLane) || 'ENTRANCE'),
+                  action: simDirectionLabel(defaultSimDirection(simLane)),
                 })
               }}
             </span>

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, listLots, type LotView } from '@/api/client'
-import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
+import PlateBadge from '@/components/PlateBadge.vue'
 import { useSiteTime } from '@/composables/useSiteTime'
 import {
   listRecognitionRecords,
@@ -15,7 +15,6 @@ const LOT_STORAGE_KEY = 'freepark.recognitionRecords.lotId'
 
 const { t, locale } = useI18n()
 const { formatTime } = useSiteTime()
-const { plateColorLabel } = usePlateColorLabel()
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -190,7 +189,6 @@ onMounted(reload)
             <tr>
               <th>{{ t('recognitionRecords.colIndex') }}</th>
               <th>{{ t('recognitionRecords.colPlate') }}</th>
-              <th>{{ t('recognitionRecords.colPlateColor') }}</th>
               <th>{{ t('recognitionRecords.colEventTime') }}</th>
               <th>{{ t('recognitionRecords.colEventImage') }}</th>
               <th>{{ t('recognitionRecords.colEventType') }}</th>
@@ -202,8 +200,9 @@ onMounted(reload)
           <tbody>
             <tr v-for="(item, index) in records" :key="item.id">
               <td>{{ index + 1 }}</td>
-              <td>{{ item.plateNumber }}</td>
-              <td>{{ plateColorLabel(item.plateColor) }}</td>
+              <td>
+                <PlateBadge :plate-number="item.plateNumber" :plate-color="item.plateColor" />
+              </td>
               <td>{{ formatTime(item.eventTime) }}</td>
               <td>
                 <button

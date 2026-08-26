@@ -7,6 +7,7 @@ import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
 import {
   IOT_DEVICE_TYPES,
+  IOT_SCREEN_TYPES,
   boardProfile,
   boardsForDevice,
   commandsForBoard,
@@ -21,6 +22,7 @@ import {
   type IotDevice,
   type IotDeviceType,
   type IotLinkStatus,
+  type IotScreenType,
 } from '@/hardware/iotDevices'
 
 interface DebugLog {
@@ -41,6 +43,7 @@ const formName = ref('')
 const formCode = ref('')
 const formDeviceType = ref<IotDeviceType>('USR')
 const formBoardId = ref<IotBoardId>('USR_RS485')
+const formScreenType = ref<IotScreenType>('LED')
 const formHost = ref('')
 const formPort = ref('20108')
 const formEnabled = ref(true)
@@ -139,6 +142,7 @@ function resetForm(): void {
   formCode.value = ''
   formDeviceType.value = 'USR'
   formBoardId.value = defaultBoardId('USR')
+  formScreenType.value = 'LED'
   formHost.value = ''
   formPort.value = '20108'
   formEnabled.value = true
@@ -156,6 +160,7 @@ function openEdit(device: IotDevice): void {
   formCode.value = device.code
   formDeviceType.value = device.deviceType
   formBoardId.value = device.boardId
+  formScreenType.value = device.screenType
   formHost.value = device.host
   formPort.value = String(device.port)
   formEnabled.value = device.enabled
@@ -207,6 +212,7 @@ function onSubmit(): void {
       code,
       deviceType: formDeviceType.value,
       boardId: formBoardId.value,
+      screenType: formScreenType.value,
       host,
       port,
       enabled: formEnabled.value,
@@ -293,6 +299,7 @@ async function sendCommand(command: IotCommand): Promise<void> {
             <th>{{ t('iot.colCode') }}</th>
             <th>{{ t('iot.colDevice') }}</th>
             <th>{{ t('iot.colBoard') }}</th>
+            <th>{{ t('iot.colScreen') }}</th>
             <th>{{ t('iot.colHost') }}</th>
             <th>{{ t('iot.colLink') }}</th>
             <th>{{ t('iot.colBoundLane') }}</th>
@@ -306,6 +313,7 @@ async function sendCommand(command: IotCommand): Promise<void> {
             <td>{{ item.code }}</td>
             <td>{{ t(`iot.devices.${item.deviceType}`) }}</td>
             <td>{{ t(`iot.boards.${item.boardId}`) }}</td>
+            <td>{{ t(`iot.screens.${item.screenType}`) }}</td>
             <td>{{ item.host }}:{{ item.port }}</td>
             <td>
               <span class="pill" :class="statusClass(item.linkStatus)">
@@ -368,6 +376,14 @@ async function sendCommand(command: IotCommand): Promise<void> {
             </option>
           </select>
           <span class="field-hint">{{ selectedBoardHint }}</span>
+        </label>
+        <label>
+          <span>{{ t('iot.screenType') }}</span>
+          <select v-model="formScreenType">
+            <option v-for="screen in IOT_SCREEN_TYPES" :key="screen" :value="screen">
+              {{ t(`iot.screens.${screen}`) }}
+            </option>
+          </select>
         </label>
         <label>
           <span>{{ t('iot.host') }}</span>
@@ -585,13 +601,16 @@ tbody tr:last-child td {
 
 .modal {
   width: min(420px, 100%);
+  max-height: calc(100dvh - 2rem);
   display: grid;
+  align-content: start;
   gap: 0.75rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.25rem;
   box-shadow: var(--shadow);
+  overflow-y: auto;
 }
 
 .modal.wide {
@@ -722,9 +741,16 @@ input {
 }
 
 .actions {
+  position: sticky;
+  bottom: -1.25rem;
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+  margin: 0 -1.25rem -1.25rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
 }
 
 .actions button {

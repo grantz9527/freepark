@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.freepark.local.accessdecision.AccessDecisionRequest;
+import com.freepark.local.accessdecision.AccessDecisionService;
+import com.freepark.local.accessdecision.AccessDecisionView;
 import com.freepark.local.common.api.ApiResponse;
 import com.freepark.local.common.i18n.MessageService;
 import com.freepark.local.lot.AccessJudgmentView;
@@ -31,10 +34,15 @@ import jakarta.validation.Valid;
 public class ParkingLotController {
 
     private final ParkingLotService parkingLotService;
+    private final AccessDecisionService accessDecisionService;
     private final MessageService messages;
 
-    public ParkingLotController(ParkingLotService parkingLotService, MessageService messages) {
+    public ParkingLotController(
+            ParkingLotService parkingLotService,
+            AccessDecisionService accessDecisionService,
+            MessageService messages) {
         this.parkingLotService = parkingLotService;
+        this.accessDecisionService = accessDecisionService;
         this.messages = messages;
     }
 
@@ -86,5 +94,12 @@ public class ParkingLotController {
         return ApiResponse.ok(
                 messages,
                 parkingLotService.updateAccessJudgment(UUID.fromString(jwt.getSubject()), lotId, request));
+    }
+
+    @PostMapping("/{lotId}/access-decision")
+    public ApiResponse<AccessDecisionView> accessDecision(
+            @PathVariable UUID lotId,
+            @Valid @RequestBody AccessDecisionRequest request) {
+        return ApiResponse.ok(messages, accessDecisionService.decide(lotId, request));
     }
 }

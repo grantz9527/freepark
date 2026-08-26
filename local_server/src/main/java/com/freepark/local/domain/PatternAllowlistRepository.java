@@ -1,5 +1,6 @@
 package com.freepark.local.domain;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -7,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 public interface PatternAllowlistRepository
         extends JpaRepository<PatternAllowlist, UUID>, JpaSpecificationExecutor<PatternAllowlist> {
+
+    List<PatternAllowlist> findByLotIdAndEnabledTrue(UUID lotId);
 
     boolean existsByLotIdAndNameIgnoreCase(UUID lotId, String name);
 

@@ -19,12 +19,18 @@ export interface BarrierBoardProfile {
 
 export type BarrierBindDirection = 'ENTRANCE' | 'EXIT'
 
+export type BarrierScreenType = 'LED' | 'LCD' | 'NONE'
+
+export type BarrierScreenLines = 'L2' | 'L4' | 'NONE'
+
 export interface BarrierDevice {
   id: string
   name: string
   code: string
   cameraType: BarrierCameraType
   boardId: BarrierBoardId
+  screenType: BarrierScreenType
+  screenLines: BarrierScreenLines
   host: string
   port: number
   enabled: boolean
@@ -37,6 +43,10 @@ export interface BarrierDevice {
 }
 
 export const BARRIER_CAMERA_TYPES: BarrierCameraType[] = ['ZHENSHI', 'HUAXIA', 'QIANYI', 'GENERIC']
+
+export const BARRIER_SCREEN_TYPES: BarrierScreenType[] = ['LED', 'LCD', 'NONE']
+
+export const BARRIER_SCREEN_LINES: BarrierScreenLines[] = ['L2', 'L4', 'NONE']
 
 export const BARRIER_BOARDS: BarrierBoardProfile[] = [
   {
@@ -116,13 +126,27 @@ function isBindDirection(value: unknown): value is BarrierBindDirection {
   return value === 'ENTRANCE' || value === 'EXIT'
 }
 
+function isScreenType(value: unknown): value is BarrierScreenType {
+  return value === 'LED' || value === 'LCD' || value === 'NONE'
+}
+
+function isScreenLines(value: unknown): value is BarrierScreenLines {
+  return value === 'L2' || value === 'L4' || value === 'NONE'
+}
+
 function normalizeDevice(item: BarrierDevice): BarrierDevice {
   const cameraType = item.cameraType ?? 'ZHENSHI'
   const allowed = boardsForCamera(cameraType).map((board) => board.id)
   const boardId = allowed.includes(item.boardId) ? item.boardId : defaultBoardId(cameraType)
+  const screenType = isScreenType(item.screenType) ? item.screenType : 'LED'
+  const screenLines = isScreenLines(item.screenLines)
+    ? item.screenLines
+    : screenType === 'NONE'
+      ? 'NONE'
+      : 'L2'
   const bindDirection =
     item.laneId && isBindDirection(item.bindDirection) ? item.bindDirection : null
-  return { ...item, cameraType, boardId, bindDirection }
+  return { ...item, cameraType, boardId, screenType, screenLines, bindDirection }
 }
 
 function loadDevices(): BarrierDevice[] {
@@ -153,6 +177,8 @@ export function saveBarrierDevice(
     code: string
     cameraType: BarrierCameraType
     boardId: BarrierBoardId
+    screenType: BarrierScreenType
+    screenLines: BarrierScreenLines
     host: string
     port: number
     enabled: boolean
@@ -163,6 +189,7 @@ export function saveBarrierDevice(
   const boardId = boardsForCamera(input.cameraType).some((board) => board.id === input.boardId)
     ? input.boardId
     : defaultBoardId(input.cameraType)
+  const screenLines = input.screenType === 'NONE' ? 'NONE' : input.screenLines
   if (input.id) {
     const next = existing.map((item) => {
       if (item.id !== input.id) {
@@ -178,6 +205,8 @@ export function saveBarrierDevice(
         name: input.name,
         cameraType: input.cameraType,
         boardId,
+        screenType: input.screenType,
+        screenLines,
         host: input.host,
         port: input.port,
         enabled: input.enabled,
@@ -195,6 +224,8 @@ export function saveBarrierDevice(
     code: input.code,
     cameraType: input.cameraType,
     boardId,
+    screenType: input.screenType,
+    screenLines,
     host: input.host,
     port: input.port,
     enabled: input.enabled,

@@ -18,6 +18,7 @@ import RecognitionRecordsView from '@/views/RecognitionRecordsView.vue'
 import ParkingSessionsView from '@/views/ParkingSessionsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import SystemSettingsView from '@/views/SystemSettingsView.vue'
+import NodeConfigView from '@/views/NodeConfigView.vue'
 import SpacesView from '@/views/SpacesView.vue'
 import LanesView from '@/views/LanesView.vue'
 import BarrierDockingView from '@/views/BarrierDockingView.vue'
@@ -140,6 +141,12 @@ const router = createRouter({
           name: 'systemSettings',
           component: SystemSettingsView,
           meta: { titleKey: 'nav.systemSettings', requiresAdmin: true },
+        },
+        {
+          path: 'system/node-config',
+          name: 'nodeConfig',
+          component: NodeConfigView,
+          meta: { titleKey: 'nav.nodeConfig', requiresAdmin: true },
         },
         {
           path: 'settings',

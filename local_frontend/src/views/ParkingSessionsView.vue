@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, listLots, type LotView } from '@/api/client'
-import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
+import PlateBadge from '@/components/PlateBadge.vue'
 import { useSiteTime } from '@/composables/useSiteTime'
 import {
   listParkingSessions,
@@ -15,7 +15,6 @@ const LOT_STORAGE_KEY = 'freepark.parkingSessions.lotId'
 
 const { t, locale } = useI18n()
 const { formatTime } = useSiteTime()
-const { plateColorLabel } = usePlateColorLabel()
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -171,7 +170,6 @@ onMounted(reload)
             <tr>
               <th>{{ t('parkingSessions.colIndex') }}</th>
               <th>{{ t('parkingSessions.colPlate') }}</th>
-              <th>{{ t('parkingSessions.colPlateColor') }}</th>
               <th>{{ t('parkingSessions.colEntryTime') }}</th>
               <th>{{ t('parkingSessions.colEntryLane') }}</th>
               <th>{{ t('parkingSessions.colEntryImage') }}</th>
@@ -185,8 +183,9 @@ onMounted(reload)
           <tbody>
             <tr v-for="(item, index) in sessions" :key="item.id">
               <td>{{ index + 1 }}</td>
-              <td>{{ item.plateNumber }}</td>
-              <td>{{ plateColorLabel(item.plateColor) }}</td>
+              <td>
+                <PlateBadge :plate-number="item.plateNumber" :plate-color="item.plateColor" />
+              </td>
               <td>{{ formatTime(item.entryTime) }}</td>
               <td>{{ item.entryLaneName || '—' }}</td>
               <td>

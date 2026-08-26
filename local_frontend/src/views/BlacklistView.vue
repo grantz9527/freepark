@@ -17,6 +17,7 @@ import {
 } from '@/api/client'
 import VehicleListImportModal from '@/components/VehicleListImportModal.vue'
 import { getUser } from '@/auth/session'
+import PlateBadge from '@/components/PlateBadge.vue'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { useSiteTime } from '@/composables/useSiteTime'
 import { siteAllowedPlateColors, siteDefaultPlateColor } from '@/site/settings'
@@ -382,7 +383,6 @@ onMounted(reload)
             <tr>
               <th>{{ t('blacklist.colIndex') }}</th>
               <th>{{ t('blacklist.colPlate') }}</th>
-              <th>{{ t('blacklist.colPlateColor') }}</th>
               <th>{{ t('blacklist.colOwner') }}</th>
               <th>{{ t('blacklist.colPhone') }}</th>
               <th>{{ t('blacklist.colDepartment') }}</th>
@@ -396,8 +396,9 @@ onMounted(reload)
           <tbody>
             <tr v-for="(item, index) in vehicles" :key="item.id">
               <td>{{ pageStart + index }}</td>
-              <td>{{ item.plateNumber }}</td>
-              <td>{{ plateColorLabel(item.plateColor) }}</td>
+              <td>
+                <PlateBadge :plate-number="item.plateNumber" :plate-color="item.plateColor" />
+              </td>
               <td>{{ item.ownerName }}</td>
               <td>{{ item.phone || '—' }}</td>
               <td>{{ item.department || '—' }}</td>

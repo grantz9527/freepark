@@ -1,4 +1,4 @@
-import type { LotType, PlateColor } from '@/api/client'
+import type { PlateColor } from '@/api/client'
 
 const STORAGE_KEY = 'freepark.planning.laneSimEvents'
 const MAX_EVENTS = 200
@@ -15,7 +15,7 @@ export interface LaneSimEvent {
   plateColor: PlateColor
   direction: LaneSimDirection
   result: LaneSimResult
-  /** Optional note keys or free text, e.g. no_open_session, not_internal_vehicle */
+  /** Optional note keys or free text, e.g. blacklisted_vehicle, whitelist_match, no_open_session */
   remark: string
   createdAt: string
 }
@@ -26,13 +26,9 @@ export interface SimulateLaneEventInput {
   plateNumber: string
   plateColor: PlateColor
   direction: LaneSimDirection
-  lotType?: LotType
-  /** Required when lotType is INTERNAL and direction is ENTRANCE. */
-  isRegisteredInternalVehicle?: boolean
-  /** Plate colors configured to intercept on this lane. */
-  interceptColors?: PlateColor[]
-  /** Whether a matching in-lot session exists (for EXIT). */
-  hasOpenSession?: boolean
+  /** Decided result from the backend access decision API. */
+  result: LaneSimResult
+  /** Optional note key from the backend decision, e.g. blacklisted_vehicle. */
   remark?: string
 }
 
@@ -104,23 +100,7 @@ export function hasOpenSimSession(lotId: string, plateNumber: string): boolean {
 
 export function simulateLaneEvent(input: SimulateLaneEventInput): LaneSimEvent {
   const plateNumber = input.plateNumber.trim().toUpperCase()
-  const interceptColors = input.interceptColors ?? []
-  let result: LaneSimResult = 'ALLOWED'
-  let remark = input.remark?.trim() ?? ''
-
-  if (
-    input.direction === 'ENTRANCE' &&
-    input.lotType === 'INTERNAL' &&
-    input.isRegisteredInternalVehicle === false
-  ) {
-    result = 'INTERCEPTED'
-    remark = remark || 'not_internal_vehicle'
-  } else if (interceptColors.includes(input.plateColor)) {
-    result = 'INTERCEPTED'
-    remark = remark || 'plate_color_intercept'
-  } else if (input.direction === 'EXIT' && input.hasOpenSession === false) {
-    remark = remark || 'no_open_session'
-  }
+  const remark = input.remark?.trim() ?? ''
 
   const event: LaneSimEvent = {
     id: newId(),
@@ -129,7 +109,7 @@ export function simulateLaneEvent(input: SimulateLaneEventInput): LaneSimEvent {
     plateNumber,
     plateColor: input.plateColor,
     direction: input.direction,
-    result,
+    result: input.result,
     remark,
     createdAt: nowIso(),
   }

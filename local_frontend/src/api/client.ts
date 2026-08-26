@@ -369,6 +369,36 @@ export function updateAccessJudgment(
   )
 }
 
+export type AccessDecisionResult = 'ALLOWED' | 'INTERCEPTED'
+
+export interface AccessDecisionView {
+  result: AccessDecisionResult
+  remark: string
+}
+
+export function postAccessDecision(
+  lotId: string,
+  payload: {
+    laneId: string
+    plateNumber: string
+    plateColor: PlateColor
+    direction: 'ENTRANCE' | 'EXIT'
+    interceptColors?: PlateColor[]
+    hasOpenSession?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<AccessDecisionView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/access-decision`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
 export interface PageView<T> {
   items: T[]
   total: number
@@ -1040,6 +1070,46 @@ export function updateSystemSettings(
 ): Promise<ApiResponse<SystemSettingsView>> {
   return apiCall(
     '/api/v1/system-settings',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export type NodeMode = 'OFFLINE' | 'EDGE'
+
+export interface NodeSettingsView {
+  mode: NodeMode
+  mqttHost: string
+  mqttPort: number
+  mqttClientId: string
+  mqttUsername: string
+  mqttPasswordSet: boolean
+  mqttTopicPrefix: string
+  updatedAt: string
+}
+
+export function getNodeSettings(locale: string): Promise<ApiResponse<NodeSettingsView>> {
+  return apiCall('/api/v1/node-settings', { method: 'GET' }, locale)
+}
+
+export function updateNodeSettings(
+  payload: {
+    mode: NodeMode
+    mqttHost: string
+    mqttPort: number
+    mqttClientId: string
+    mqttUsername: string
+    mqttPassword: string
+    mqttTopicPrefix: string
+  },
+  locale: string,
+): Promise<ApiResponse<NodeSettingsView>> {
+  return apiCall(
+    '/api/v1/node-settings',
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

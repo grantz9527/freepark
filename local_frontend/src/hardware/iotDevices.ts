@@ -19,12 +19,15 @@ export interface IotBoardProfile {
 
 export type IotBindDirection = 'ENTRANCE' | 'EXIT'
 
+export type IotScreenType = 'LED' | 'LCD' | 'NONE'
+
 export interface IotDevice {
   id: string
   name: string
   code: string
   deviceType: IotDeviceType
   boardId: IotBoardId
+  screenType: IotScreenType
   host: string
   port: number
   enabled: boolean
@@ -37,6 +40,8 @@ export interface IotDevice {
 }
 
 export const IOT_DEVICE_TYPES: IotDeviceType[] = ['USR', 'FOURFAITH', 'HONGDIAN', 'GENERIC']
+
+export const IOT_SCREEN_TYPES: IotScreenType[] = ['LED', 'LCD', 'NONE']
 
 export const IOT_BOARDS: IotBoardProfile[] = [
   {
@@ -119,6 +124,10 @@ function isDeviceType(value: unknown): value is IotDeviceType {
   return IOT_DEVICE_TYPES.includes(value as IotDeviceType)
 }
 
+function isScreenType(value: unknown): value is IotScreenType {
+  return value === 'LED' || value === 'LCD' || value === 'NONE'
+}
+
 function migrateDeviceType(item: Partial<IotDevice> & { modelId?: string }): IotDeviceType {
   if (isDeviceType(item.deviceType)) {
     return item.deviceType
@@ -150,9 +159,10 @@ function migrateBoardId(
 function normalizeDevice(item: IotDevice): IotDevice {
   const deviceType = migrateDeviceType(item)
   const boardId = migrateBoardId(item, deviceType)
+  const screenType = isScreenType(item.screenType) ? item.screenType : 'LED'
   const bindDirection =
     item.laneId && isBindDirection(item.bindDirection) ? item.bindDirection : null
-  return { ...item, deviceType, boardId, bindDirection }
+  return { ...item, deviceType, boardId, screenType, bindDirection }
 }
 
 function loadDevices(): IotDevice[] {
@@ -183,6 +193,7 @@ export function saveIotDevice(
     code: string
     deviceType: IotDeviceType
     boardId: IotBoardId
+    screenType: IotScreenType
     host: string
     port: number
     enabled: boolean
@@ -208,6 +219,7 @@ export function saveIotDevice(
         name: input.name,
         deviceType: input.deviceType,
         boardId,
+        screenType: input.screenType,
         host: input.host,
         port: input.port,
         enabled: input.enabled,
@@ -225,6 +237,7 @@ export function saveIotDevice(
     code: input.code,
     deviceType: input.deviceType,
     boardId,
+    screenType: input.screenType,
     host: input.host,
     port: input.port,
     enabled: input.enabled,
