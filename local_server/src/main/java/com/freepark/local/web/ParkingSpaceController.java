@@ -3,6 +3,9 @@ package com.freepark.local.web;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -115,6 +118,16 @@ public class ParkingSpaceController {
             @PathVariable UUID spaceId) {
         parkingSpaceService.deleteSpace(UUID.fromString(jwt.getSubject()), lotId, spaceId);
         return ApiResponse.ok(messages, null);
+    }
+
+    @GetMapping("/spaces/import-template")
+    public ResponseEntity<byte[]> downloadImportTemplate(@PathVariable UUID lotId) {
+        byte[] body = parkingSpaceService.buildImportTemplate(lotId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"spaces-template.xlsx\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(body);
     }
 
     @PostMapping("/spaces/import")

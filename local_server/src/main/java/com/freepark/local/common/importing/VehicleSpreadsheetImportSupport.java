@@ -34,6 +34,12 @@ public final class VehicleSpreadsheetImportSupport {
 
     public static final int WHITELIST_COLUMN_COUNT = 9;
 
+    public static final int SPACE_COLUMN_COUNT = 1;
+
+    public static final String[] SPACE_TEMPLATE_COLUMNS = {
+            "泊位编号"
+    };
+
     public static final String[] INTERNAL_TEMPLATE_COLUMNS = {
             "车牌号", "车主姓名", "车牌颜色", "电话", "部门", "备注", "类型"
     };
@@ -141,7 +147,13 @@ public final class VehicleSpreadsheetImportSupport {
                 || header.equals("車牌號")
                 || header.equals("plate")
                 || header.equals("plate number")
-                || header.equals("车牌");
+                || header.equals("车牌")
+                || header.equals("泊位编号")
+                || header.equals("泊位編號")
+                || header.equals("车位编号")
+                || header.equals("車位編號")
+                || header.equals("code")
+                || header.equals("space code");
     }
 
     public static String cell(String[] cells, int index) {

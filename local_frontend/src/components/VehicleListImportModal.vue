@@ -4,11 +4,13 @@ import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   open: boolean
-  scope: 'internalVehicles' | 'whitelist' | 'blacklist'
+  scope: 'internalVehicles' | 'whitelist' | 'blacklist' | 'spaces'
   importing: boolean
   downloadingTemplate: boolean
   importError: string
   importFile: File | null
+  /** Optional override for the hint paragraph (e.g. current location/area). */
+  hint?: string
 }>()
 
 const emit = defineEmits<{
@@ -42,7 +44,7 @@ function pickFile(): void {
         <h3>{{ text('importTitle') }}</h3>
         <button type="button" class="modal-close" :aria-label="text('cancel')" @click="emit('close')">×</button>
       </div>
-      <p class="hint">{{ text('importHint') }}</p>
+      <p class="hint">{{ hint ?? text('importHint') }}</p>
       <div class="import-toolbar">
         <button type="button" class="outline" :disabled="downloadingTemplate" @click="emit('downloadTemplate')">
           {{ downloadingTemplate ? text('downloadingTemplate') : text('downloadTemplate') }}

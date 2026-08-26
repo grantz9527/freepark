@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, listLots, type LotView } from '@/api/client'
@@ -27,6 +27,8 @@ const appliedKeyword = ref('')
 const statusFilter = ref<ParkingSessionStatus | ''>('')
 const sessions = ref<ParkingSession[]>([])
 const previewImage = ref<string | null>(null)
+const voidTarget = ref<ParkingSession | null>(null)
+const voidSubmitting = ref(false)
 
 async function loadLots(): Promise<void> {
   const result = await listLots(locale.value)
@@ -92,22 +94,39 @@ function statusLabel(status: ParkingSessionStatus): string {
   return t('parkingSessions.statusVoided')
 }
 
-function onVoid(session: ParkingSession): void {
-  if (!window.confirm(t('parkingSessions.voidConfirm'))) {
+function openVoidModal(session: ParkingSession): void {
+  voidTarget.value = session
+}
+
+function closeVoidModal(): void {
+  if (voidSubmitting.value) {
     return
   }
-  const updated = voidParkingSession(session.id)
-  if (!updated) {
+  voidTarget.value = null
+}
+
+function confirmVoid(): void {
+  const session = voidTarget.value
+  if (!session || voidSubmitting.value) {
     return
   }
-  // 作废关联的入场/出场识别记录
-  if (session.entryRecognitionId) {
-    markRecognitionVoided(session.entryRecognitionId)
+  voidSubmitting.value = true
+  try {
+    const updated = voidParkingSession(session.id)
+    if (!updated) {
+      return
+    }
+    if (session.entryRecognitionId) {
+      markRecognitionVoided(session.entryRecognitionId)
+    }
+    if (session.exitRecognitionId) {
+      markRecognitionVoided(session.exitRecognitionId)
+    }
+    refreshSessions()
+    voidTarget.value = null
+  } finally {
+    voidSubmitting.value = false
   }
-  if (session.exitRecognitionId) {
-    markRecognitionVoided(session.exitRecognitionId)
-  }
-  refreshSessions()
 }
 
 function durationText(session: ParkingSession): string {
@@ -139,7 +158,27 @@ function closePreview(): void {
   previewImage.value = null
 }
 
+function onVoidKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') {
+    closeVoidModal()
+  }
+}
+
+watch(voidTarget, (target) => {
+  if (target) {
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onVoidKeydown)
+  } else {
+    document.body.style.overflow = ''
+    window.removeEventListener('keydown', onVoidKeydown)
+  }
+})
+
 onMounted(reload)
+onUnmounted(() => {
+  document.body.style.overflow = ''
+  window.removeEventListener('keydown', onVoidKeydown)
+})
 </script>
 
 <template>
@@ -254,7 +293,7 @@ onMounted(reload)
                   v-if="item.status !== 'VOIDED'"
                   type="button"
                   class="link-btn"
-                  @click="onVoid(item)"
+                  @click="openVoidModal(item)"
                 >
                   {{ t('parkingSessions.void') }}
                 </button>
@@ -272,6 +311,133 @@ onMounted(reload)
         </div>
       </div>
     </template>
+
+    <Transition name="void-fade">
+      <div v-if="voidTarget" class="modal-backdrop void-backdrop" @click.self="closeVoidModal">
+        <div
+          class="void-dialog"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('parkingSessions.voidTitle')"
+          @click.stop
+        >
+          <div class="void-dialog-accent" aria-hidden="true" />
+
+          <button
+            type="button"
+            class="void-dialog-close"
+            :aria-label="t('parkingSessions.cancel')"
+            :disabled="voidSubmitting"
+            @click="closeVoidModal"
+          >
+            ×
+          </button>
+
+          <div class="void-dialog-header">
+            <div class="void-dialog-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M8 12h8" stroke-linecap="round" />
+              </svg>
+            </div>
+            <div>
+              <h3>{{ t('parkingSessions.voidTitle') }}</h3>
+              <p>{{ t('parkingSessions.voidHint') }}</p>
+            </div>
+          </div>
+
+          <div class="void-plate-row">
+            <span class="void-lot-name">{{ voidTarget.lotName }}</span>
+            <PlateBadge :plate-number="voidTarget.plateNumber" :plate-color="voidTarget.plateColor" />
+            <div class="void-plate-meta">
+              <span
+                class="pill"
+                :class="voidTarget.status === 'OPEN' ? 'ok' : voidTarget.status === 'CLOSED' ? 'closed' : 'voided'"
+              >
+                {{ statusLabel(voidTarget.status) }}
+              </span>
+              <span class="void-duration-chip">{{ durationText(voidTarget) }}</span>
+            </div>
+          </div>
+
+          <div class="void-timeline">
+            <div class="void-leg entry">
+              <span class="void-leg-tag">{{ t('parkingSessions.voidEntry') }}</span>
+              <strong>{{ formatTime(voidTarget.entryTime) }}</strong>
+              <span class="void-leg-lane">{{ voidTarget.entryLaneName || '—' }}</span>
+              <button
+                v-if="voidTarget.entryImage"
+                type="button"
+                class="void-thumb-btn"
+                @click="openPreview(voidTarget.entryImage)"
+              >
+                <img
+                  :src="voidTarget.entryImage"
+                  :alt="voidTarget.plateNumber"
+                  class="void-leg-thumb"
+                />
+              </button>
+              <span v-else class="void-no-image">{{ t('parkingSessions.noImage') }}</span>
+            </div>
+
+            <div class="void-timeline-bridge" aria-hidden="true">
+              <span class="void-bridge-line" />
+              <span class="void-bridge-arrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <span class="void-bridge-line" />
+            </div>
+
+            <div class="void-leg exit" :class="{ pending: !voidTarget.exitTime }">
+              <span class="void-leg-tag">{{ t('parkingSessions.voidExit') }}</span>
+              <strong>{{ voidTarget.exitTime ? formatTime(voidTarget.exitTime) : t('parkingSessions.voidNotExited') }}</strong>
+              <span class="void-leg-lane">{{ voidTarget.exitLaneName || '—' }}</span>
+              <button
+                v-if="voidTarget.exitImage"
+                type="button"
+                class="void-thumb-btn"
+                @click="openPreview(voidTarget.exitImage)"
+              >
+                <img
+                  :src="voidTarget.exitImage"
+                  :alt="voidTarget.plateNumber"
+                  class="void-leg-thumb"
+                />
+              </button>
+              <span v-else class="void-no-image">{{ t('parkingSessions.noImage') }}</span>
+            </div>
+          </div>
+
+          <div class="void-alert">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M12 9v4" stroke-linecap="round" />
+              <circle cx="12" cy="16" r="0.5" fill="currentColor" stroke="none" />
+              <path
+                d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <p>{{ t('parkingSessions.voidConfirm') }}</p>
+          </div>
+
+          <div class="void-dialog-actions">
+            <button type="button" class="ghost" :disabled="voidSubmitting" @click="closeVoidModal">
+              {{ t('parkingSessions.cancel') }}
+            </button>
+            <button type="button" class="danger-btn" :disabled="voidSubmitting" @click="confirmVoid">
+              <span v-if="voidSubmitting" class="void-spinner" aria-hidden="true" />
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M8 12h8" stroke-linecap="round" />
+              </svg>
+              {{ voidSubmitting ? t('parkingSessions.voidSubmitting') : t('parkingSessions.voidSubmit') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <div v-if="previewImage" class="modal-backdrop" @click="closePreview">
       <div class="preview-modal" @click.stop>
@@ -519,5 +685,365 @@ th {
 .actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.void-backdrop {
+  backdrop-filter: blur(6px);
+}
+
+.void-fade-enter-active,
+.void-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.void-fade-enter-active .void-dialog,
+.void-fade-leave-active .void-dialog {
+  transition:
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.24s ease;
+}
+
+.void-fade-enter-from,
+.void-fade-leave-to {
+  opacity: 0;
+}
+
+.void-fade-enter-from .void-dialog,
+.void-fade-leave-to .void-dialog {
+  transform: translateY(12px) scale(0.97);
+  opacity: 0;
+}
+
+.void-dialog {
+  position: relative;
+  width: min(540px, 100%);
+  display: grid;
+  gap: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 0 1.35rem 1.25rem;
+  box-shadow:
+    0 24px 64px rgba(15, 23, 20, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.65) inset;
+  overflow: hidden;
+}
+
+.void-dialog-accent {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, #f97066, var(--danger), #93370d);
+}
+
+.void-dialog-close {
+  position: absolute;
+  top: 0.85rem;
+  inset-inline-end: 0.85rem;
+  z-index: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  border-radius: 8px;
+}
+
+.void-dialog-close:hover:not(:disabled) {
+  color: var(--text);
+  background: #f2f4f3;
+}
+
+.void-dialog-close:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.void-dialog-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  align-items: start;
+  padding-top: 1.35rem;
+  padding-inline-end: 1.75rem;
+}
+
+.void-dialog-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--danger);
+  background: linear-gradient(145deg, #fff5f5, #fdecec);
+  border: 1px solid #fecdca;
+  box-shadow: 0 2px 8px rgba(180, 35, 24, 0.08);
+}
+
+.void-dialog-icon svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.void-dialog-header h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.08rem;
+  letter-spacing: -0.01em;
+}
+
+.void-dialog-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.void-plate-row {
+  display: grid;
+  justify-items: center;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f7faf8 0%, #fff 100%);
+  border: 1px solid var(--border);
+}
+
+.void-lot-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.void-plate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.void-duration-chip {
+  font-size: 0.84rem;
+  color: var(--muted);
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--border);
+}
+
+.void-timeline {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+.void-leg {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  min-width: 0;
+}
+
+.void-leg.entry {
+  border-color: #b7e4c7;
+  background: linear-gradient(180deg, #f6fffa 0%, #fff 100%);
+}
+
+.void-leg.exit {
+  border-color: #c7d7fe;
+  background: linear-gradient(180deg, #f8faff 0%, #fff 100%);
+}
+
+.void-leg.exit.pending strong {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.void-leg-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.void-leg.entry .void-leg-tag {
+  color: var(--ok);
+}
+
+.void-leg.exit .void-leg-tag {
+  color: #444ce7;
+}
+
+.void-leg strong {
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.void-leg-lane {
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.void-thumb-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  justify-self: start;
+}
+
+.void-leg-thumb {
+  width: 100%;
+  max-width: 120px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: block;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.void-thumb-btn:hover .void-leg-thumb {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(15, 23, 20, 0.12);
+}
+
+.void-no-image {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.void-timeline-bridge {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  place-items: center;
+  align-content: center;
+  gap: 0.35rem;
+  color: #98a2b3;
+  padding-top: 1.25rem;
+  min-width: 2rem;
+}
+
+.void-bridge-line {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #b7e4c7, #c7d7fe);
+  border-radius: 1px;
+}
+
+.void-bridge-arrow {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.void-alert {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.65rem;
+  align-items: start;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: #8a4b00;
+  background: #fffaeb;
+  border: 1px solid #fedf89;
+}
+
+.void-alert svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+.void-alert p {
+  margin: 0;
+}
+
+.void-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding-top: 0.15rem;
+}
+
+.danger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.55rem 1rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(180deg, #d92d20 0%, var(--danger) 100%);
+  box-shadow: 0 2px 8px rgba(180, 35, 24, 0.22);
+  cursor: pointer;
+}
+
+.danger-btn svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.danger-btn:disabled,
+.void-dialog-actions .ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.danger-btn:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.void-spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: void-spin 0.7s linear infinite;
+}
+
+@keyframes void-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 520px) {
+  .void-timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .void-timeline-bridge {
+    padding: 0;
+    grid-auto-flow: column;
+    grid-template-columns: 1fr auto 1fr;
+  }
+
+  .void-bridge-line {
+    width: 100%;
+    height: 1px;
+  }
+
+  .void-bridge-arrow {
+    transform: rotate(90deg);
+  }
 }
 </style>

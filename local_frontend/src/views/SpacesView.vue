@@ -8,6 +8,7 @@ import {
   createLocation,
   createSpace,
   deleteSpace,
+  downloadSpaceImportTemplate,
   importSpaces,
   listAreas,
   listLocations,
@@ -19,6 +20,7 @@ import {
   type LotView,
   type SpaceView,
 } from '@/api/client'
+import VehicleListImportModal from '@/components/VehicleListImportModal.vue'
 import { getUser } from '@/auth/session'
 
 const LOT_STORAGE_KEY = 'freepark.selectedLotId'
@@ -63,7 +65,11 @@ const formLocationName = ref('')
 const formAreaName = ref('')
 const formError = ref('')
 
-const importInput = ref<HTMLInputElement | null>(null)
+const showImport = ref(false)
+const importing = ref(false)
+const downloadingTemplate = ref(false)
+const importFile = ref<File | null>(null)
+const importError = ref('')
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const isEditingSpace = computed(() => editingSpaceId.value !== null)
@@ -77,6 +83,15 @@ const canLoadSpaces = computed(
 )
 const pageCount = computed(() => Math.max(1, Math.ceil(totalSpaces.value / pageSize.value)))
 const pageStart = computed(() => (totalSpaces.value === 0 ? 0 : page.value * pageSize.value + 1))
+const importHintText = computed(() => {
+  if (selectedLocation.value && selectedArea.value) {
+    return t('spaces.importHintWithContext', {
+      location: selectedLocation.value.name,
+      area: selectedArea.value.name,
+    })
+  }
+  return t('spaces.importHint')
+})
 
 function persistLotId(lotId: string): void {
   if (lotId) {
@@ -391,36 +406,74 @@ async function onSubmitArea(continueAdding = false): Promise<void> {
   }
 }
 
-function triggerImport(): void {
+function openImportForm(): void {
+  if (!selectedLotId.value) {
+    return
+  }
   if (!selectedAreaId.value) {
     errorMessage.value = t('spaces.needArea')
     return
   }
-  importInput.value?.click()
+  importFile.value = null
+  importError.value = ''
+  successMessage.value = ''
+  showImport.value = true
 }
 
-async function onImportFile(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file || !selectedLotId.value || !selectedAreaId.value) {
+function closeImport(): void {
+  if (importing.value) {
     return
   }
-  submitting.value = true
-  errorMessage.value = ''
+  showImport.value = false
+  importFile.value = null
+  importError.value = ''
+}
+
+function onImportFileChange(file: File | null): void {
+  importFile.value = file
+  importError.value = ''
+}
+
+async function downloadImportTemplate(): Promise<void> {
+  if (!selectedLotId.value) {
+    return
+  }
+  downloadingTemplate.value = true
+  importError.value = ''
+  try {
+    await downloadSpaceImportTemplate(selectedLotId.value, locale.value)
+  } catch (error) {
+    importError.value = error instanceof ApiError ? error.message : t('spaces.downloadTemplateFailed')
+  } finally {
+    downloadingTemplate.value = false
+  }
+}
+
+async function onSubmitImport(): Promise<void> {
+  if (!selectedLotId.value || !selectedAreaId.value) {
+    importError.value = t('spaces.needArea')
+    return
+  }
+  if (!importFile.value) {
+    importError.value = t('spaces.importFileRequired')
+    return
+  }
+  importing.value = true
+  importError.value = ''
   try {
     const result = await importSpaces(
       selectedLotId.value,
       selectedAreaId.value,
-      file,
+      importFile.value,
       locale.value,
     )
     successMessage.value = t('spaces.importSuccess', { count: result.data })
+    closeImport()
     await loadSpacesOnly()
   } catch (error) {
-    errorMessage.value = error instanceof ApiError ? error.message : t('spaces.importFailed')
+    importError.value = error instanceof ApiError ? error.message : t('spaces.importFailed')
   } finally {
-    submitting.value = false
+    importing.value = false
   }
 }
 
@@ -585,8 +638,7 @@ watch(successMessage, (value) => {
 
         <div v-if="isAdmin" class="action-bar">
           <button type="button" class="primary" @click="openCreateSpace">{{ t('spaces.add') }}</button>
-          <button type="button" class="outline" @click="triggerImport">{{ t('spaces.import') }}</button>
-          <input ref="importInput" type="file" accept=".txt,.csv" class="hidden-file" @change="onImportFile" />
+          <button type="button" class="outline" @click="openImportForm">{{ t('spaces.import') }}</button>
         </div>
 
         <div class="table-card">
@@ -730,6 +782,20 @@ watch(successMessage, (value) => {
         </div>
       </form>
     </div>
+
+    <VehicleListImportModal
+      scope="spaces"
+      :open="showImport"
+      :hint="importHintText"
+      :importing="importing"
+      :downloading-template="downloadingTemplate"
+      :import-error="importError"
+      :import-file="importFile"
+      @close="closeImport"
+      @submit="onSubmitImport"
+      @download-template="downloadImportTemplate"
+      @file-change="onImportFileChange"
+    />
   </section>
 </template>
 

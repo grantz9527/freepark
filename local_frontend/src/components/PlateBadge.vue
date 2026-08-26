@@ -1,9 +1,12 @@
 <template>
-  <span class="plate-wrap">
+  <span class="plate-wrap" :class="{ 'with-color-label': showColorLabel }">
     <span class="plate" :style="plateStyle(plateColor)">
       {{ plateNumber }}
     </span>
-    <span class="plate-tip">{{ colorLabel }}</span>
+    <span v-if="showColorLabel" class="plate-color-label" :style="plateStyle(plateColor)">
+      {{ colorLabel }}
+    </span>
+    <span v-else class="plate-tip">{{ colorLabel }}</span>
   </span>
 </template>
 
@@ -12,10 +15,15 @@ import { computed } from 'vue'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { plateStyle } from '@/lib/plateBadge'
 
-const props = defineProps<{
-  plateNumber: string
-  plateColor: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    plateNumber: string
+    plateColor: string
+    /** Always show plate color label with matching background (e.g. booth detail). */
+    showColorLabel?: boolean
+  }>(),
+  { showColorLabel: false },
+)
 
 const { plateColorLabel } = usePlateColorLabel()
 const colorLabel = computed(() => plateColorLabel(props.plateColor))
@@ -79,5 +87,22 @@ const colorLabel = computed(() => plateColorLabel(props.plateColor))
 .plate-wrap:hover .plate-tip {
   opacity: 1;
   visibility: visible;
+}
+
+.plate-wrap.with-color-label {
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.plate-color-label {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 </style>

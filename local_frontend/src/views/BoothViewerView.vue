@@ -9,7 +9,7 @@ import {
   type BoothLaneView,
   type BoothView,
 } from '@/api/client'
-import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
+import PlateBadge from '@/components/PlateBadge.vue'
 import { useSiteTime } from '@/composables/useSiteTime'
 import { listBarrierDevices, type BarrierDevice } from '@/hardware/barrierDevices'
 import { listRecognitionRecords, type RecognitionRecord } from '@/hardware/recognitionRecords'
@@ -18,7 +18,6 @@ const LOT_STORAGE_KEY = 'freepark.booths.lotId'
 
 const { t, locale } = useI18n()
 const { formatTime } = useSiteTime()
-const { plateColorLabel } = usePlateColorLabel()
 const route = useRoute()
 
 const loading = ref(false)
@@ -78,6 +77,14 @@ function latestRecognition(laneId: string): RecognitionRecord | null {
     .sort((a, b) => b.eventTime.localeCompare(a.eventTime))
   return records[0] ?? null
 }
+
+const laneRecognitions = computed(() => {
+  const map: Record<string, RecognitionRecord | null> = {}
+  for (const lane of booth.value?.lanes ?? []) {
+    map[lane.id] = latestRecognition(lane.id)
+  }
+  return map
+})
 
 function laneTypeLabel(laneType: string): string {
   if (laneType === 'ENTRANCE') {
@@ -154,20 +161,27 @@ onMounted(load)
           </div>
 
           <div class="recognition">
-            <template v-if="latestRecognition(lane.id)">
+            <template v-if="laneRecognitions[lane.id]">
               <div class="rec-main">
-                <span class="rec-plate">{{ latestRecognition(lane.id)!.plateNumber }}</span>
-                <span class="pill">{{ plateColorLabel(latestRecognition(lane.id)!.plateColor) }}</span>
-                <span class="pill">{{ latestRecognition(lane.id)!.direction === 'ENTRANCE' ? t('booths.directionEntrance') : t('booths.directionExit') }}</span>
-                <span v-if="latestRecognition(lane.id)!.abnormal" class="pill fail">
+                <PlateBadge
+                  show-color-label
+                  :plate-number="laneRecognitions[lane.id]!.plateNumber"
+                  :plate-color="laneRecognitions[lane.id]!.plateColor"
+                />
+                <span class="pill">{{
+                  laneRecognitions[lane.id]!.direction === 'ENTRANCE'
+                    ? t('booths.directionEntrance')
+                    : t('booths.directionExit')
+                }}</span>
+                <span v-if="laneRecognitions[lane.id]!.abnormal" class="pill fail">
                   {{ t('booths.colAbnormal') }}
                 </span>
               </div>
-              <p class="rec-time">{{ formatTime(latestRecognition(lane.id)!.eventTime) }}</p>
+              <p class="rec-time">{{ formatTime(laneRecognitions[lane.id]!.eventTime) }}</p>
               <div class="rec-media">
                 <img
-                  v-if="latestRecognition(lane.id)!.eventImage"
-                  :src="latestRecognition(lane.id)!.eventImage ?? undefined"
+                  v-if="laneRecognitions[lane.id]!.eventImage"
+                  :src="laneRecognitions[lane.id]!.eventImage ?? undefined"
                   class="rec-img"
                   alt="recognition"
                 />
@@ -334,17 +348,6 @@ onMounted(load)
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-}
-
-.rec-plate {
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 0.15rem 0.5rem;
-  border: 2px solid #111827;
-  border-radius: 6px;
-  background: #fff;
 }
 
 .rec-time {

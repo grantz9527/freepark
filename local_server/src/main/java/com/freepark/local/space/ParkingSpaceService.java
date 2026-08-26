@@ -1,9 +1,5 @@
 package com.freepark.local.space;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -18,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.freepark.local.common.api.PageView;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
+import com.freepark.local.common.importing.VehicleSpreadsheetImportSupport;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
 import com.freepark.local.domain.ParkingArea;
@@ -173,14 +170,26 @@ public class ParkingSpaceService {
         spaces.delete(space);
     }
 
+    @Transactional(readOnly = true)
+    public byte[] buildImportTemplate(UUID lotId) {
+        requireLot(lotId);
+        return VehicleSpreadsheetImportSupport.buildTemplate(
+                "泊位", VehicleSpreadsheetImportSupport.SPACE_TEMPLATE_COLUMNS);
+    }
+
     @Transactional
     public int importSpaces(UUID requesterId, UUID lotId, UUID areaId, MultipartFile file) {
         requireAdmin(requesterId);
         ParkingLot lot = requireLot(lotId);
         ParkingArea area = requireAreaForLot(lotId, areaId);
-        List<String> codes = readCodes(file);
+        List<String[]> rows = VehicleSpreadsheetImportSupport.readRows(
+                file, VehicleSpreadsheetImportSupport.SPACE_COLUMN_COUNT);
         int imported = 0;
-        for (String code : codes) {
+        for (String[] cells : rows) {
+            String code = VehicleSpreadsheetImportSupport.cell(cells, 0);
+            if (code.isEmpty()) {
+                continue;
+            }
             if (spaces.existsByLotIdAndCodeIgnoreCase(lotId, code)) {
                 continue;
             }
@@ -210,29 +219,6 @@ public class ParkingSpaceService {
             query.orderBy(cb.asc(root.get("code")));
             return cb.and(predicates.toArray(new Predicate[0]));
         };
-    }
-
-    private List<String> readCodes(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        }
-        List<String> codes = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String trimmed = line.trim();
-                if (!trimmed.isEmpty() && !trimmed.startsWith("#")) {
-                    codes.add(trimmed);
-                }
-            }
-        } catch (IOException ex) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        }
-        if (codes.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
-        }
-        return codes;
     }
 
     private ParkingLot requireLot(UUID lotId) {

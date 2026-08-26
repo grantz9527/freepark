@@ -384,11 +384,15 @@ onMounted(reload)
           <input v-model="formEventTime" type="datetime-local" />
         </label>
         <p v-if="formError" class="form-error">{{ formError }}</p>
-        <div class="actions">
-          <button type="button" class="ghost" @click="closeForm">
+        <div class="modal-actions">
+          <button type="button" class="ghost" :disabled="submitting" @click="closeForm">
             {{ t('recognitionRecords.cancel') }}
           </button>
-          <button type="submit" :disabled="submitting">
+          <button type="submit" class="save-btn" :disabled="submitting">
+            <span v-if="submitting" class="save-spinner" aria-hidden="true" />
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M5 12l5 5L20 7" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
             {{ submitting ? t('recognitionRecords.saving') : t('recognitionRecords.save') }}
           </button>
         </div>
@@ -679,10 +683,66 @@ th {
   color: var(--danger);
 }
 
-.actions {
+.modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 0.55rem;
+  padding-top: 0.15rem;
+}
+
+.modal-actions .ghost {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 1rem;
+  font-weight: 600;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.modal-actions .ghost:disabled,
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.55rem 1.1rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(180deg, #14917a 0%, var(--accent) 100%);
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.28);
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.save-btn svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.save-btn:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.save-spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: save-spin 0.7s linear infinite;
+}
+
+@keyframes save-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .modal-backdrop {

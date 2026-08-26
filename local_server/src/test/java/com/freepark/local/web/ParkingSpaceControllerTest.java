@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,6 +19,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.freepark.local.common.importing.VehicleSpreadsheetImportSupport;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -105,11 +109,19 @@ class ParkingSpaceControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
 
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/spaces/import-template")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        byte[] xlsx = VehicleSpreadsheetImportSupport.buildExport(
+                "泊位",
+                VehicleSpreadsheetImportSupport.SPACE_TEMPLATE_COLUMNS,
+                List.of(new String[] {"1-2001"}, new String[] {"1-2002"}));
         MockMultipartFile file = new MockMultipartFile(
                 "file",
-                "spaces.txt",
-                "text/plain",
-                "1-2001\n1-2002\n".getBytes());
+                "spaces.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                xlsx);
         mockMvc.perform(multipart("/api/v1/lots/" + lotId + "/spaces/import")
                         .file(file)
                         .param("areaId", areaId)

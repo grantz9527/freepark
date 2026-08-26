@@ -532,6 +532,14 @@ export function deleteSpace(lotId: string, spaceId: string, locale: string): Pro
   return apiCall(`/api/v1/lots/${lotId}/spaces/${spaceId}`, { method: 'DELETE' }, locale)
 }
 
+export async function downloadSpaceImportTemplate(lotId: string, locale: string): Promise<void> {
+  await downloadImportTemplateFile(
+    `/api/v1/lots/${lotId}/spaces/import-template`,
+    locale,
+    'spaces-template.xlsx',
+  )
+}
+
 export async function importSpaces(
   lotId: string,
   areaId: string,
