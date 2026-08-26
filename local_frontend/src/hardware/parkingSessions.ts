@@ -4,7 +4,7 @@ import type { RecognitionRecord } from '@/hardware/recognitionRecords'
 const STORAGE_KEY = 'freepark.planning.parkingSessions'
 const MAX_SESSIONS = 500
 
-export type ParkingSessionStatus = 'OPEN' | 'CLOSED'
+export type ParkingSessionStatus = 'OPEN' | 'CLOSED' | 'VOIDED'
 
 export interface ParkingSession {
   id: string
@@ -180,6 +180,30 @@ export type ParkingFlowResult =
   | { kind: 'exit_matched'; session: ParkingSession }
   | { kind: 'exit_unmatched' }
   | { kind: 'skipped' }
+
+/**
+ * Void a parking session (OPEN or CLOSED). The linked recognition records
+ * should be voided separately via markRecognitionVoided.
+ */
+export function voidParkingSession(sessionId: string): ParkingSession | null {
+  const stamp = nowIso()
+  let updated: ParkingSession | null = null
+  const next = loadSessions().map((item) => {
+    if (item.id !== sessionId || item.status === 'VOIDED') {
+      return item
+    }
+    updated = {
+      ...item,
+      status: 'VOIDED',
+      updatedAt: stamp,
+    }
+    return updated
+  })
+  if (updated) {
+    persist(next)
+  }
+  return updated
+}
 
 /**
  * Apply recognition to parking sessions:

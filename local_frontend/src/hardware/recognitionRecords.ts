@@ -23,6 +23,8 @@ export interface RecognitionRecord {
   /** True when exit could not match an open entry session, etc. */
   abnormal: boolean
   abnormalReason: string | null
+  /** True when the linked parking session was voided. */
+  voided: boolean
   sourceSimEventId?: string
   createdAt: string
 }
@@ -75,6 +77,7 @@ function normalizeRecord(item: RecognitionRecord): RecognitionRecord {
     ...item,
     abnormal: Boolean(item.abnormal),
     abnormalReason: item.abnormalReason ?? null,
+    voided: Boolean(item.voided),
   }
 }
 
@@ -157,6 +160,7 @@ export function createRecognitionRecord(input: CreateRecognitionRecordInput): Re
     direction: input.direction ?? null,
     abnormal: Boolean(input.abnormal),
     abnormalReason: input.abnormalReason ?? null,
+    voided: false,
     sourceSimEventId: input.sourceSimEventId,
     createdAt: nowIso(),
   }
@@ -177,6 +181,25 @@ export function markRecognitionAbnormal(
       ...item,
       abnormal: true,
       abnormalReason: reason,
+    }
+    return updated
+  })
+  if (updated) {
+    persist(next)
+  }
+  return updated
+}
+
+/** Mark a recognition record as voided (e.g. its linked session was voided). */
+export function markRecognitionVoided(recordId: string): RecognitionRecord | null {
+  let updated: RecognitionRecord | null = null
+  const next = loadRecords().map((item) => {
+    if (item.id !== recordId) {
+      return item
+    }
+    updated = {
+      ...item,
+      voided: true,
     }
     return updated
   })

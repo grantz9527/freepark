@@ -7,9 +7,11 @@ import PlateBadge from '@/components/PlateBadge.vue'
 import { useSiteTime } from '@/composables/useSiteTime'
 import {
   listParkingSessions,
+  voidParkingSession,
   type ParkingSession,
   type ParkingSessionStatus,
 } from '@/hardware/parkingSessions'
+import { markRecognitionVoided } from '@/hardware/recognitionRecords'
 
 const LOT_STORAGE_KEY = 'freepark.parkingSessions.lotId'
 
@@ -81,7 +83,31 @@ function onResetSearch(): void {
 }
 
 function statusLabel(status: ParkingSessionStatus): string {
-  return status === 'OPEN' ? t('parkingSessions.statusOpen') : t('parkingSessions.statusClosed')
+  if (status === 'OPEN') {
+    return t('parkingSessions.statusOpen')
+  }
+  if (status === 'CLOSED') {
+    return t('parkingSessions.statusClosed')
+  }
+  return t('parkingSessions.statusVoided')
+}
+
+function onVoid(session: ParkingSession): void {
+  if (!window.confirm(t('parkingSessions.voidConfirm'))) {
+    return
+  }
+  const updated = voidParkingSession(session.id)
+  if (!updated) {
+    return
+  }
+  // 作废关联的入场/出场识别记录
+  if (session.entryRecognitionId) {
+    markRecognitionVoided(session.entryRecognitionId)
+  }
+  if (session.exitRecognitionId) {
+    markRecognitionVoided(session.exitRecognitionId)
+  }
+  refreshSessions()
 }
 
 function durationText(session: ParkingSession): string {
@@ -156,6 +182,7 @@ onMounted(reload)
             <option value="">{{ t('parkingSessions.statusAll') }}</option>
             <option value="OPEN">{{ t('parkingSessions.statusOpen') }}</option>
             <option value="CLOSED">{{ t('parkingSessions.statusClosed') }}</option>
+            <option value="VOIDED">{{ t('parkingSessions.statusVoided') }}</option>
           </select>
         </label>
         <div class="filter-actions">
@@ -178,6 +205,7 @@ onMounted(reload)
               <th>{{ t('parkingSessions.colExitImage') }}</th>
               <th>{{ t('parkingSessions.colDuration') }}</th>
               <th>{{ t('parkingSessions.colStatus') }}</th>
+              <th>{{ t('parkingSessions.colActions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -214,9 +242,23 @@ onMounted(reload)
               </td>
               <td>{{ durationText(item) }}</td>
               <td>
-                <span class="pill" :class="item.status === 'OPEN' ? 'ok' : 'closed'">
+                <span
+                  class="pill"
+                  :class="item.status === 'OPEN' ? 'ok' : item.status === 'CLOSED' ? 'closed' : 'voided'"
+                >
                   {{ statusLabel(item.status) }}
                 </span>
+              </td>
+              <td>
+                <button
+                  v-if="item.status !== 'VOIDED'"
+                  type="button"
+                  class="link-btn"
+                  @click="onVoid(item)"
+                >
+                  {{ t('parkingSessions.void') }}
+                </button>
+                <span v-else class="muted">—</span>
               </td>
             </tr>
           </tbody>
@@ -393,6 +435,24 @@ th {
 .pill.closed {
   color: var(--muted);
   background: #eef1f0;
+}
+
+.pill.voided {
+  color: var(--danger);
+  background: #fdecec;
+}
+
+.link-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--danger);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
 }
 
 .empty {

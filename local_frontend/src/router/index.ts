@@ -20,6 +20,8 @@ import SettingsView from '@/views/SettingsView.vue'
 import SystemSettingsView from '@/views/SystemSettingsView.vue'
 import NodeConfigView from '@/views/NodeConfigView.vue'
 import SpacesView from '@/views/SpacesView.vue'
+import BoothsView from '@/views/BoothsView.vue'
+import BoothViewerView from '@/views/BoothViewerView.vue'
 import LanesView from '@/views/LanesView.vue'
 import BarrierDockingView from '@/views/BarrierDockingView.vue'
 import FrigateDockingView from '@/views/FrigateDockingView.vue'
@@ -52,6 +54,17 @@ const router = createRouter({
           },
         },
         { path: 'spaces', name: 'spaces', component: SpacesView, meta: { titleKey: 'nav.spaces' } },
+        { path: 'booths', name: 'booths', component: BoothsView, meta: { titleKey: 'nav.booths' } },
+        {
+          path: 'booths/:boothId/view',
+          name: 'boothView',
+          component: BoothViewerView,
+          meta: {
+            titleKey: 'booths.viewTitle',
+            breadcrumbKeys: ['nav.sectionOps', 'nav.booths', 'booths.viewTitle'],
+            parentNav: { groupId: 'ops', childName: 'booths' },
+          },
+        },
         {
           path: 'internal-vehicles',
           name: 'internalVehicles',

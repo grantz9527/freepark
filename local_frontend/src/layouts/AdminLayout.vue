@@ -77,6 +77,7 @@ const navGroups = computed((): NavGroup[] => {
       children: [
         { to: '/lots', name: 'lots', label: t('nav.lots'), icon: 'lots' },
         { to: '/spaces', name: 'spaces', label: t('nav.spaces'), icon: 'spaces' },
+        { to: '/booths', name: 'booths', label: t('nav.booths'), icon: 'booths' },
         {
           to: '/internal-vehicles',
           name: 'internalVehicles',
@@ -329,6 +330,10 @@ function logout(): void {
                 <svg v-else-if="item.icon === 'spaces'" viewBox="0 0 24 24" fill="none">
                   <rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8" />
                   <path d="M8 10h3.2a2.4 2.4 0 0 1 0 4.8H8V10Z" stroke="currentColor" stroke-width="1.8" />
+                </svg>
+                <svg v-else-if="item.icon === 'booths'" viewBox="0 0 24 24" fill="none">
+                  <path d="M4 11h16M6 11l1-5h10l1 5M8 11v8h8v-8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M10 19v-4h4v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
                 <svg v-else-if="item.icon === 'internalVehicles'" viewBox="0 0 24 24" fill="none">
                   <path

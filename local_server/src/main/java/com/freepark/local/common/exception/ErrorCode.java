@@ -17,6 +17,8 @@ public enum ErrorCode {
     LANE_CODE_EXISTS("error.lane.code-exists", HttpStatus.BAD_REQUEST),
     LANE_LOTS_DUPLICATE("error.lane.lots-duplicate", HttpStatus.BAD_REQUEST),
     BARRIER_CODE_EXISTS("error.barrier.code-exists", HttpStatus.BAD_REQUEST),
+    BOOTH_NAME_EXISTS("error.booth.name-exists", HttpStatus.BAD_REQUEST),
+    BOOTH_CODE_EXISTS("error.booth.code-exists", HttpStatus.BAD_REQUEST),
     SPACE_CODE_EXISTS("error.space.code-exists", HttpStatus.BAD_REQUEST),
     LOCATION_NAME_EXISTS("error.location.name-exists", HttpStatus.BAD_REQUEST),
     AREA_NAME_EXISTS("error.area.name-exists", HttpStatus.BAD_REQUEST),

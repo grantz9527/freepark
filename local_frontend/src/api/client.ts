@@ -582,6 +582,26 @@ export interface ImportInternalVehiclesResponse {
   skipped: number
 }
 
+export interface BoothLaneView {
+  id: string
+  name: string
+  code: string
+  laneType: LaneType
+}
+
+export interface BoothView {
+  id: string
+  lotId: string
+  lotName: string
+  name: string
+  code: string | null
+  location: string | null
+  enabled: boolean
+  lanes: BoothLaneView[]
+  createdAt: string
+  updatedAt: string
+}
+
 async function downloadImportTemplateFile(path: string, locale: string, filename: string): Promise<void> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'GET',
@@ -760,6 +780,72 @@ export function deleteInternalVehicle(
   locale: string,
 ): Promise<ApiResponse<null>> {
   return apiCall(`/api/v1/lots/${lotId}/internal-vehicles/${vehicleId}`, { method: 'DELETE' }, locale)
+}
+
+export function listBooths(
+  lotId: string,
+  locale: string,
+  params: { keyword?: string; page?: number; size?: number } = {},
+): Promise<ApiResponse<PageView<BoothView>>> {
+  const query = new URLSearchParams()
+  if (params.keyword) query.set('keyword', params.keyword)
+  if (params.page != null) query.set('page', String(params.page))
+  if (params.size != null) query.set('size', String(params.size))
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return apiCall(`/api/v1/lots/${lotId}/booths${suffix}`, { method: 'GET' }, locale)
+}
+
+export function createBooth(
+  lotId: string,
+  payload: {
+    name: string
+    code?: string
+    location?: string
+    enabled?: boolean
+    laneIds?: string[]
+  },
+  locale: string,
+): Promise<ApiResponse<BoothView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/booths`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateBooth(
+  lotId: string,
+  boothId: string,
+  payload: {
+    name: string
+    code?: string
+    location?: string
+    enabled?: boolean
+    laneIds?: string[]
+  },
+  locale: string,
+): Promise<ApiResponse<BoothView>> {
+  return apiCall(
+    `/api/v1/lots/${lotId}/booths/${boothId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function deleteBooth(
+  lotId: string,
+  boothId: string,
+  locale: string,
+): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/lots/${lotId}/booths/${boothId}`, { method: 'DELETE' }, locale)
 }
 
 export interface WhitelistVehicleView {

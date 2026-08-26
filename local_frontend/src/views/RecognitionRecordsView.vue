@@ -137,6 +137,9 @@ function directionLabel(direction: RecognitionRecord['direction']): string {
 }
 
 function abnormalLabel(item: RecognitionRecord): string {
+  if (item.voided) {
+    return t('recognitionRecords.voided')
+  }
   if (!item.abnormal) {
     return t('recognitionRecords.abnormalNo')
   }
@@ -317,7 +320,10 @@ onMounted(reload)
                 </span>
               </td>
               <td>
-                <span class="pill" :class="item.abnormal ? 'fail' : 'ok'">
+                <span
+                  class="pill"
+                  :class="item.voided ? 'voided' : item.abnormal ? 'fail' : 'ok'"
+                >
                   {{ abnormalLabel(item) }}
                 </span>
               </td>
@@ -576,6 +582,11 @@ th {
 .pill.fail {
   color: var(--danger);
   background: #fdecec;
+}
+
+.pill.voided {
+  color: var(--muted);
+  background: #eef1f0;
 }
 
 .empty {
