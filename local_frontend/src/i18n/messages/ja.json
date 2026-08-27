@@ -603,7 +603,14 @@
     "searchPlaceholder": "名称またはコードで検索",
     "searchNoResults": "一致するゲートがありません",
     "panelTitle": "レーンのゲート",
-    "panelHint": "ゲートはレーンに設定します。レーンは1つまたは2つの駐車場に接続できます。"
+    "panelHint": "ゲートはレーンに設定します。レーンは1つまたは2つの駐車場に接続できます。",
+    "endpoints": {
+      "title": "サーバーエンドポイント設定",
+      "push": "HTTPプッシュ（Zhenshi 500以降）",
+      "pushDesc": "カメラ管理画面の「詳細ネットワーク → HTTPプッシュ」でこのアドレスを設定してください。カメラが認識結果を自動的にプッシュします。",
+      "poll": "HTTPポーリング（旧型Zhenshiオールインワン）",
+      "pollDesc": "カメラ管理画面でこのアドレスを設定してください。デバイスが定期的にゲート開閉コマンドをポーリングします。"
+    }
   },
   "patternAllowlist": {
     "create": "Add pattern rule",

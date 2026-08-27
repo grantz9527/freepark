@@ -868,7 +868,14 @@
     "bindDirectionEntrance": "入口",
     "bindDirectionExit": "出口",
     "bindDirectionAuto": "該通道為{type}，識別一體機將按{type}綁定。",
-    "bindDirectionUnknown": "未指定"
+    "bindDirectionUnknown": "未指定",
+    "endpoints": {
+      "title": "伺服器端點設定",
+      "push": "HTTP 推送（真識 500 及更新版本）",
+      "pushDesc": "在攝影機管理後台的「進階網路 → HTTP 推送」中設定此位址。攝影機會自動推送辨識結果。",
+      "poll": "HTTP 輪詢（舊版真識一體機）",
+      "pollDesc": "在攝影機管理後台設定此位址。設備會定期輪詢開閘、關閘指令。"
+    }
   },
   "iot": {
     "planningHint": "這是前端規劃稿：先依物聯網設備型號登記 DTU / 串口伺服器，再測試連通。設備透過 RS485 下發開閘、關閘等指令。通道只能綁定已連通的設備。連通操作為模擬，後端對接稍後實現。",

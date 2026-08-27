@@ -868,7 +868,14 @@
     "bindDirectionEntrance": "入口",
     "bindDirectionExit": "出口",
     "bindDirectionAuto": "该通道为{type}，识别一体机将按{type}绑定。",
-    "bindDirectionUnknown": "未指定"
+    "bindDirectionUnknown": "未指定",
+    "endpoints": {
+      "title": "服务器对接地址",
+      "push": "HTTP 推送（臻识500等新型号）",
+      "pushDesc": "在相机后台「高级网络 → HTTP推送」中配置此地址，识别到车牌后自动推送。",
+      "poll": "HTTP 轮询（臻识老款一体机）",
+      "pollDesc": "在相机后台配置此地址，设备定期轮询获取开闸/关闸指令。"
+    }
   },
   "iot": {
     "planningHint": "这是前端规划稿：先按物联网设备型号登记 DTU / 串口服务器，再测试联通。设备通过 RS485 下发开闸、关闸等指令。通道只能绑定已联通的设备。联通操作为模拟，后端对接稍后实现。",

@@ -603,7 +603,14 @@
     "searchPlaceholder": "Rechercher par nom ou code",
     "searchNoResults": "Aucune barrière correspondante",
     "panelTitle": "Barrières de la voie",
-    "panelHint": "Les barrières se configurent sur une voie. Une voie peut relier un ou deux parkings."
+    "panelHint": "Les barrières se configurent sur une voie. Une voie peut relier un ou deux parkings.",
+    "endpoints": {
+      "title": "Configuration des points de terminaison du serveur",
+      "push": "HTTP Push (Zhenshi 500 et versions ultérieures)",
+      "pushDesc": "Configurez cette adresse dans l'administration de la caméra sous Réseau avancé → HTTP Push. La caméra envoie automatiquement les résultats de reconnaissance.",
+      "poll": "HTTP Polling (anciens tout-en-un Zhenshi)",
+      "pollDesc": "Configurez cette adresse dans l'administration de la caméra. L'appareil interroge périodiquement les commandes d'ouverture/fermeture du portail."
+    }
   },
   "patternAllowlist": {
     "create": "Add pattern rule",

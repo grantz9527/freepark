@@ -13,6 +13,7 @@ import {
   boardsForCamera,
   commandsForBoard,
   defaultBoardId,
+  endpointsForCamera,
   listBarrierDevices,
   saveBarrierDevice,
   setBarrierLinkStatus,
@@ -25,6 +26,7 @@ import {
   type BarrierLinkStatus,
   type BarrierScreenLines,
   type BarrierScreenType,
+  type CameraEndpoint,
 } from '@/hardware/barrierDevices'
 
 interface DebugLog {
@@ -61,6 +63,15 @@ const selectedBoardHint = computed(() => {
   const board = availableBoards.value.find((item) => item.id === formBoardId.value)
   return board ? t(board.hintKey) : ''
 })
+const serverOrigin = computed(() => window.location.origin)
+const formEndpoints = computed<CameraEndpoint[]>(() =>
+  endpointsForCamera(formCameraType.value, formCode.value),
+)
+const debugEndpoints = computed<CameraEndpoint[]>(() =>
+  debugDevice.value
+    ? endpointsForCamera(debugDevice.value.cameraType, debugDevice.value.code)
+    : [],
+)
 const debugCommands = computed(() =>
   debugDevice.value ? commandsForBoard(debugDevice.value.boardId) : [],
 )
@@ -382,6 +393,17 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
             </option>
           </select>
         </label>
+        <div v-if="formEndpoints.length > 0" class="endpoint-guide">
+          <p class="endpoint-title">{{ t('barriers.endpoints.title') }}</p>
+          <p class="endpoint-server">{{ serverOrigin }}</p>
+          <div v-for="(ep, index) in formEndpoints" :key="index" class="endpoint-row">
+            <div>
+              <strong>{{ t(ep.labelKey) }}</strong>
+              <code>{{ ep.method }} {{ ep.path }}</code>
+              <span class="field-hint">{{ t(ep.descKey) }}</span>
+            </div>
+          </div>
+        </div>
         <label>
           <span>{{ t('barriers.boardType') }}</span>
           <select v-model="formBoardId">
@@ -445,6 +467,17 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
           {{ debugDevice.host }}:{{ debugDevice.port }}
         </p>
         <p class="field-hint">{{ debugBoardHint }}</p>
+        <div v-if="debugEndpoints.length > 0" class="endpoint-guide">
+          <p class="endpoint-title">{{ t('barriers.endpoints.title') }}</p>
+          <p class="endpoint-server">{{ serverOrigin }}</p>
+          <div v-for="(ep, index) in debugEndpoints" :key="index" class="endpoint-row">
+            <div>
+              <strong>{{ t(ep.labelKey) }}</strong>
+              <code>{{ ep.method }} {{ ep.path }}</code>
+              <span class="field-hint">{{ t(ep.descKey) }}</span>
+            </div>
+          </div>
+        </div>
         <p>
           <span class="pill" :class="statusClass(debugDevice.linkStatus)">
             {{ statusLabel(debugDevice.linkStatus) }}
@@ -714,6 +747,42 @@ input {
 .command-list {
   display: grid;
   gap: 0.5rem;
+}
+
+.endpoint-guide {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f7faf8;
+}
+
+.endpoint-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.endpoint-server {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.endpoint-row {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.endpoint-row code {
+  font-size: 0.78rem;
+  color: var(--text);
+  word-break: break-all;
 }
 
 .command-title {

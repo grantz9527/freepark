@@ -100,6 +100,37 @@ export const BARRIER_BOARDS: BarrierBoardProfile[] = [
   },
 ]
 
+export interface CameraEndpoint {
+  method: 'GET' | 'POST'
+  path: string
+  labelKey: string
+  descKey: string
+}
+
+/** 各品牌相机的服务器对接端点路径（设备需在自身后台配置这些地址）。 */
+export function endpointsForCamera(cameraType: BarrierCameraType, code: string): CameraEndpoint[] {
+  const safeCode = code?.trim() || '{code}'
+  switch (cameraType) {
+    case 'ZHENSHI':
+      return [
+        {
+          method: 'POST',
+          path: `/api/v1/device-gateway/zhenshi/plate`,
+          labelKey: 'barriers.endpoints.push',
+          descKey: 'barriers.endpoints.pushDesc',
+        },
+        {
+          method: 'GET',
+          path: `/api/v1/device-gateway/${safeCode}/poll`,
+          labelKey: 'barriers.endpoints.poll',
+          descKey: 'barriers.endpoints.pollDesc',
+        },
+      ]
+    default:
+      return []
+  }
+}
+
 export function boardsForCamera(cameraType: BarrierCameraType): BarrierBoardProfile[] {
   return BARRIER_BOARDS.filter((board) => board.cameraType === cameraType)
 }

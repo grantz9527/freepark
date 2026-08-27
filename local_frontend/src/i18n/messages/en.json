@@ -868,7 +868,14 @@
     "bindDirectionEntrance": "Entrance",
     "bindDirectionExit": "Exit",
     "bindDirectionAuto": "This lane is {type}. The ANPR all-in-one will be bound as {type}.",
-    "bindDirectionUnknown": "Not set"
+    "bindDirectionUnknown": "Not set",
+    "endpoints": {
+      "title": "Server Endpoint Configuration",
+      "push": "HTTP Push (Zhenshi 500 and newer)",
+      "pushDesc": "Configure this address in the camera admin under Advanced Network → HTTP Push. The camera pushes recognition results automatically.",
+      "poll": "HTTP Polling (older Zhenshi all-in-one)",
+      "pollDesc": "Configure this address in the camera admin. The device periodically polls for open/close gate commands."
+    }
   },
   "iot": {
     "planningHint": "Frontend draft: register a DTU or serial server by IoT device model, then test the connection. The device sends open/close commands over RS485. A lane can bind only an online device. Connection tests are simulated; backend comes later.",

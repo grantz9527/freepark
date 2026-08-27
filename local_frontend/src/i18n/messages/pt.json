@@ -603,7 +603,14 @@
     "searchPlaceholder": "Pesquisar por nome ou código",
     "searchNoResults": "Nenhuma cancela correspondente",
     "panelTitle": "Cancelas da via",
-    "panelHint": "As cancelas são configuradas numa via. Uma via pode ligar um ou dois parques."
+    "panelHint": "As cancelas são configuradas numa via. Uma via pode ligar um ou dois parques.",
+    "endpoints": {
+      "title": "Configuração de endpoints do servidor",
+      "push": "HTTP Push (Zhenshi 500 e superiores)",
+      "pushDesc": "Configure este endereço na administração da câmara em Rede avançada → HTTP Push. A câmara envia os resultados de reconhecimento automaticamente.",
+      "poll": "HTTP Polling (all-in-one Zhenshi antigos)",
+      "pollDesc": "Configure este endereço na administração da câmara. O dispositivo consulta periodicamente os comandos de abrir/fechar cancela."
+    }
   },
   "patternAllowlist": {
     "create": "Add pattern rule",

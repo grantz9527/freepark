@@ -603,7 +603,14 @@
     "searchPlaceholder": "Nach Name oder Code suchen",
     "searchNoResults": "Keine passenden Schranken",
     "panelTitle": "Spurschranken",
-    "panelHint": "Schranken werden an einer Spur konfiguriert. Eine Spur kann ein oder zwei Parkplätze verbinden."
+    "panelHint": "Schranken werden an einer Spur konfiguriert. Eine Spur kann ein oder zwei Parkplätze verbinden.",
+    "endpoints": {
+      "title": "Server-Endpunktkonfiguration",
+      "push": "HTTP-Push (Zhenshi 500 und neuer)",
+      "pushDesc": "Konfigurieren Sie diese Adresse in der Kameraverwaltung unter Erweitertes Netzwerk → HTTP-Push. Die Kamera überträgt Erkennungsergebnisse automatisch.",
+      "poll": "HTTP-Polling (ältere Zhenshi-All-in-one-Geräte)",
+      "pollDesc": "Konfigurieren Sie diese Adresse in der Kameraverwaltung. Das Gerät fragt regelmäßig Befehle zum Öffnen/Schließen des Tores ab."
+    }
   },
   "patternAllowlist": {
     "create": "Add pattern rule",

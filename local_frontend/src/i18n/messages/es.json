@@ -603,7 +603,14 @@
     "searchPlaceholder": "Buscar por nombre o código",
     "searchNoResults": "No hay barreras coincidentes",
     "panelTitle": "Barreras del carril",
-    "panelHint": "Las barreras se configuran en un carril. Un carril puede conectar uno o dos aparcamientos."
+    "panelHint": "Las barreras se configuran en un carril. Un carril puede conectar uno o dos aparcamientos.",
+    "endpoints": {
+      "title": "Configuración de puntos de conexión del servidor",
+      "push": "HTTP Push (Zhenshi 500 y posteriores)",
+      "pushDesc": "Configure esta dirección en la administración de la cámara en Red avanzada → HTTP Push. La cámara envía los resultados de reconocimiento automáticamente.",
+      "poll": "HTTP Polling (todo-en-uno Zhenshi anterior)",
+      "pollDesc": "Configure esta dirección en la administración de la cámara. El dispositivo consulta periódicamente los comandos de abrir/cerrar barrera."
+    }
   },
   "patternAllowlist": {
     "create": "Add pattern rule",
