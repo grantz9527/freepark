@@ -182,6 +182,10 @@ function openLaneConfig(lot: LotView): void {
   void router.push({ name: 'lanes', query: { lotId: lot.id } })
 }
 
+function openMap(lot: LotView): void {
+  void router.push({ name: 'lotMap', params: { lotId: lot.id } })
+}
+
 function lotTypeLabel(type: LotType): string {
   const key = `lotTypes.${type}`
   const label = t(key)
@@ -238,6 +242,9 @@ onMounted(loadLots)
               <div class="action-group">
                 <button type="button" class="link-btn" @click="openEditForm(item)">
                   {{ t('lots.edit') }}
+                </button>
+                <button type="button" class="link-btn" @click="openMap(item)">
+                  {{ t('lots.map') }}
                 </button>
                 <button type="button" class="link-btn" @click="openInterceptConfig(item)">
                   {{ t('lots.interceptConfig') }}
@@ -387,7 +394,7 @@ th {
 }
 
 .col-actions {
-  width: 17rem;
+  width: 22rem;
   text-align: end;
 }
 

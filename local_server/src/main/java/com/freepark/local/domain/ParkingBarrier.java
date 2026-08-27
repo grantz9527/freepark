@@ -1,5 +1,7 @@
 package com.freepark.local.domain;
 
+import java.time.Instant;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -27,6 +29,14 @@ public class ParkingBarrier extends BaseEntity {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    /** 设备品牌/协议标识，如 ZHENSHI，用于网关按协议适配上报与指令。 */
+    @Column(length = 64)
+    private String brand;
+
+    /** 最近一次轮询时间戳，用于推导设备在线状态。 */
+    @Column
+    private Instant lastPollAt;
+
     protected ParkingBarrier() {
     }
 
@@ -51,6 +61,22 @@ public class ParkingBarrier extends BaseEntity {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public String getBrand() {
+        return brand;
+    }
+
+    public void setBrand(String brand) {
+        this.brand = brand;
+    }
+
+    public Instant getLastPollAt() {
+        return lastPollAt;
+    }
+
+    public void markPolled(Instant at) {
+        this.lastPollAt = at;
     }
 
     public void updateDetails(String name, boolean enabled) {

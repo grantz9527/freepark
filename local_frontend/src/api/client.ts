@@ -151,6 +151,7 @@ export interface LotView {
   address: string | null
   totalSpaces: number
   enabled: boolean
+  mapData: string | null
   createdAt: string
   updatedAt: string
 }
@@ -312,6 +313,7 @@ export function updateLot(
     address?: string
     totalSpaces?: number
     enabled?: boolean
+    mapData?: string
   },
   locale: string,
 ): Promise<ApiResponse<LotView>> {

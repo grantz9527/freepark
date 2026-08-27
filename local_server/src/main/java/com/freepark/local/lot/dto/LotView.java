@@ -1,0 +1,33 @@
+package com.freepark.local.lot.dto;
+
+import java.time.Instant;
+import java.util.UUID;
+
+import com.freepark.local.domain.ParkingLot;
+
+public record LotView(
+        UUID id,
+        String name,
+        String code,
+        String lotType,
+        String address,
+        int totalSpaces,
+        boolean enabled,
+        String mapData,
+        Instant createdAt,
+        Instant updatedAt) {
+
+    public static LotView from(ParkingLot lot) {
+        return new LotView(
+                lot.getId(),
+                lot.getName(),
+                lot.getCode(),
+                lot.getLotType().name(),
+                lot.getAddress(),
+                lot.getTotalSpaces(),
+                lot.isEnabled(),
+                lot.getMapData(),
+                lot.getCreatedAt(),
+                lot.getUpdatedAt());
+    }
+}

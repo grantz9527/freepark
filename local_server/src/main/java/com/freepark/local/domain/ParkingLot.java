@@ -56,6 +56,9 @@ public class ParkingLot extends BaseEntity {
     @Column(name = "rule_type", nullable = false, length = 32)
     private List<AccessJudgmentRuleType> accessJudgmentOrder = new ArrayList<>(AccessJudgmentRuleType.defaultOrder());
 
+    @Column(name = "map_data", columnDefinition = "TEXT")
+    private String mapData;
+
     protected ParkingLot() {
     }
 
@@ -147,6 +150,14 @@ public class ParkingLot extends BaseEntity {
         this.address = address;
         this.totalSpaces = totalSpaces;
         this.enabled = enabled;
+    }
+
+    public String getMapData() {
+        return mapData;
+    }
+
+    public void updateMapData(String mapData) {
+        this.mapData = mapData;
     }
 
     public void updateInterceptRules(java.util.List<InterceptRuleType> entryRules, java.util.List<InterceptRuleType> exitRules) {

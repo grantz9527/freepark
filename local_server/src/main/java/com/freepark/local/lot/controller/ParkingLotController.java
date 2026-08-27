@@ -1,0 +1,105 @@
+package com.freepark.local.lot.controller;
+
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.freepark.local.accessdecision.dto.AccessDecisionRequest;
+import com.freepark.local.accessdecision.service.AccessDecisionService;
+import com.freepark.local.accessdecision.dto.AccessDecisionView;
+import com.freepark.local.common.api.ApiResponse;
+import com.freepark.local.common.i18n.MessageService;
+import com.freepark.local.lot.dto.AccessJudgmentView;
+import com.freepark.local.lot.dto.CreateLotRequest;
+import com.freepark.local.lot.dto.LotInterceptView;
+import com.freepark.local.lot.dto.LotView;
+import com.freepark.local.lot.service.ParkingLotService;
+import com.freepark.local.lot.dto.UpdateAccessJudgmentRequest;
+import com.freepark.local.lot.dto.UpdateLotInterceptRequest;
+import com.freepark.local.lot.dto.UpdateLotRequest;
+
+import jakarta.validation.Valid;
+
+@RestController
+@RequestMapping("/api/v1/lots")
+public class ParkingLotController {
+
+    private final ParkingLotService parkingLotService;
+    private final AccessDecisionService accessDecisionService;
+    private final MessageService messages;
+
+    public ParkingLotController(
+            ParkingLotService parkingLotService,
+            AccessDecisionService accessDecisionService,
+            MessageService messages) {
+        this.parkingLotService = parkingLotService;
+        this.accessDecisionService = accessDecisionService;
+        this.messages = messages;
+    }
+
+    @GetMapping
+    public ApiResponse<List<LotView>> list() {
+        return ApiResponse.ok(messages, parkingLotService.listLots());
+    }
+
+    @PostMapping
+    public ApiResponse<LotView> create(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody CreateLotRequest request) {
+        return ApiResponse.ok(messages, parkingLotService.createLot(UUID.fromString(jwt.getSubject()), request));
+    }
+
+    @PutMapping("/{lotId}")
+    public ApiResponse<LotView> update(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID lotId,
+            @Valid @RequestBody UpdateLotRequest request) {
+        return ApiResponse.ok(messages, parkingLotService.updateLot(UUID.fromString(jwt.getSubject()), lotId, request));
+    }
+
+    @GetMapping("/{lotId}/intercept")
+    public ApiResponse<LotInterceptView> getIntercept(@PathVariable UUID lotId) {
+        return ApiResponse.ok(messages, parkingLotService.getLotIntercept(lotId));
+    }
+
+    @PutMapping("/{lotId}/intercept")
+    public ApiResponse<LotInterceptView> updateIntercept(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID lotId,
+            @Valid @RequestBody UpdateLotInterceptRequest request) {
+        return ApiResponse.ok(
+                messages,
+                parkingLotService.updateLotIntercept(UUID.fromString(jwt.getSubject()), lotId, request));
+    }
+
+    @GetMapping("/{lotId}/access-judgment")
+    public ApiResponse<AccessJudgmentView> getAccessJudgment(@PathVariable UUID lotId) {
+        return ApiResponse.ok(messages, parkingLotService.getAccessJudgment(lotId));
+    }
+
+    @PutMapping("/{lotId}/access-judgment")
+    public ApiResponse<AccessJudgmentView> updateAccessJudgment(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID lotId,
+            @Valid @RequestBody UpdateAccessJudgmentRequest request) {
+        return ApiResponse.ok(
+                messages,
+                parkingLotService.updateAccessJudgment(UUID.fromString(jwt.getSubject()), lotId, request));
+    }
+
+    @PostMapping("/{lotId}/access-decision")
+    public ApiResponse<AccessDecisionView> accessDecision(
+            @PathVariable UUID lotId,
+            @Valid @RequestBody AccessDecisionRequest request) {
+        return ApiResponse.ok(messages, accessDecisionService.decide(lotId, request));
+    }
+}

@@ -12,6 +12,7 @@ import PatternAllowlistView from '@/views/PatternAllowlistView.vue'
 import AccessJudgmentConfigView from '@/views/AccessJudgmentConfigView.vue'
 import LotsView from '@/views/LotsView.vue'
 import LotInterceptConfigView from '@/views/LotInterceptConfigView.vue'
+import LotMapView from '@/views/LotMapView.vue'
 import LoginView from '@/views/LoginView.vue'
 import OperatorsView from '@/views/OperatorsView.vue'
 import RecognitionRecordsView from '@/views/RecognitionRecordsView.vue'
@@ -50,6 +51,27 @@ const router = createRouter({
             titleKey: 'lots.interceptConfig',
             requiresAdmin: true,
             breadcrumbKeys: ['nav.sectionOps', 'nav.lots', 'lots.interceptConfig'],
+            parentNav: { groupId: 'ops', childName: 'lots' },
+          },
+        },
+        {
+          path: 'lots/:lotId/map',
+          name: 'lotMap',
+          component: LotMapView,
+          meta: {
+            titleKey: 'lots.map',
+            breadcrumbKeys: ['nav.sectionOps', 'nav.lots', 'lots.map'],
+            parentNav: { groupId: 'ops', childName: 'lots' },
+          },
+        },
+        {
+          path: 'lots/:lotId/map/edit',
+          name: 'lotMapEdit',
+          component: LotMapView,
+          meta: {
+            titleKey: 'lots.mapEdit',
+            requiresAdmin: true,
+            breadcrumbKeys: ['nav.sectionOps', 'nav.lots', 'lots.mapEdit'],
             parentNav: { groupId: 'ops', childName: 'lots' },
           },
         },
