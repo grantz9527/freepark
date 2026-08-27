@@ -1268,3 +1268,158 @@ export function updateNodeSettings(
     locale,
   )
 }
+
+export type FrigateLinkStatus = 'DISCONNECTED' | 'CONNECTED' | 'FAILED'
+export type FrigateBindDirection = 'ENTRANCE' | 'EXIT'
+
+export interface FrigateSettingsView {
+  apiHost: string
+  apiPort: number
+  mqttHost: string
+  mqttPort: number
+  topicPrefix: string
+  mqttUsername: string
+  mqttPasswordSet: boolean
+  enabled: boolean
+  linkStatus: FrigateLinkStatus
+  lastTestAt: string | null
+  updatedAt: string
+}
+
+export interface FrigateCameraView {
+  id: string
+  name: string
+  cameraName: string
+  enabled: boolean
+  linkStatus: FrigateLinkStatus
+  lastTestAt: string | null
+  laneId: string | null
+  bindDirection: FrigateBindDirection | null
+  linkageEnabled: boolean
+  lastPlate: string | null
+  lastEventAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export function getFrigateSettings(locale: string): Promise<ApiResponse<FrigateSettingsView>> {
+  return apiCall('/api/v1/frigate/settings', { method: 'GET' }, locale)
+}
+
+export function updateFrigateSettings(
+  payload: {
+    apiHost: string
+    apiPort: number
+    mqttHost: string
+    mqttPort: number
+    topicPrefix: string
+    mqttUsername: string
+    mqttPassword: string
+    enabled: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<FrigateSettingsView>> {
+  return apiCall(
+    '/api/v1/frigate/settings',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function testFrigateSettings(locale: string): Promise<ApiResponse<FrigateSettingsView>> {
+  return apiCall('/api/v1/frigate/settings/test', { method: 'POST' }, locale)
+}
+
+export function listFrigateCamerasApi(locale: string): Promise<ApiResponse<FrigateCameraView[]>> {
+  return apiCall('/api/v1/frigate/cameras', { method: 'GET' }, locale)
+}
+
+export function createFrigateCameraApi(
+  payload: { name: string; cameraName: string; enabled: boolean },
+  locale: string,
+): Promise<ApiResponse<FrigateCameraView>> {
+  return apiCall(
+    '/api/v1/frigate/cameras',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function updateFrigateCameraApi(
+  cameraId: string,
+  payload: { name: string; cameraName: string; enabled: boolean },
+  locale: string,
+): Promise<ApiResponse<FrigateCameraView>> {
+  return apiCall(
+    `/api/v1/frigate/cameras/${cameraId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function testFrigateCameraApi(
+  cameraId: string,
+  locale: string,
+): Promise<ApiResponse<FrigateCameraView>> {
+  return apiCall(`/api/v1/frigate/cameras/${cameraId}/test`, { method: 'POST' }, locale)
+}
+
+export function bindFrigateCameraApi(
+  cameraId: string,
+  payload: {
+    laneId: string
+    bindDirection: FrigateBindDirection | null
+    linkageEnabled: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<FrigateCameraView>> {
+  return apiCall(
+    `/api/v1/frigate/cameras/${cameraId}/bind`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function unbindFrigateCameraApi(
+  cameraId: string,
+  locale: string,
+): Promise<ApiResponse<FrigateCameraView>> {
+  return apiCall(`/api/v1/frigate/cameras/${cameraId}/bind`, { method: 'DELETE' }, locale)
+}
+
+export function simulateFrigateEventApi(
+  cameraId: string,
+  payload: { plate: string },
+  locale: string,
+): Promise<ApiResponse<FrigateCameraView>> {
+  return apiCall(
+    `/api/v1/frigate/cameras/${cameraId}/simulate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function frigateEventTopic(cameraName: string, topicPrefix: string): string {
+  const prefix = topicPrefix.replace(/\/+$/, '')
+  return `${prefix}/${cameraName}`
+}

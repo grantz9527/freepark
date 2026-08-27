@@ -2,25 +2,33 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { listLanes, type LaneView } from '@/api/client'
+import {
+  ApiError,
+  createFrigateCameraApi,
+  frigateEventTopic,
+  getFrigateSettings,
+  listFrigateCamerasApi,
+  listLanes,
+  simulateFrigateEventApi,
+  testFrigateCameraApi,
+  testFrigateSettings,
+  updateFrigateCameraApi,
+  updateFrigateSettings,
+  type FrigateBindDirection,
+  type FrigateCameraView,
+  type FrigateLinkStatus,
+  type FrigateSettingsView,
+  type LaneView,
+} from '@/api/client'
 import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
 import { listBarrierDevices, type BarrierDevice } from '@/hardware/barrierDevices'
 import {
-  eventTopicOf,
-  listFrigateCameras,
-  loadFrigateServer,
-  recordFrigateRecognition,
-  saveFrigateCamera,
-  saveFrigateServer,
-  setFrigateCameraLinkStatus,
-  setFrigateServerLinkStatus,
-  wait,
-  type FrigateBindDirection,
-  type FrigateCamera,
-  type FrigateLinkStatus,
-  type FrigateServer,
-} from '@/hardware/frigateCameras'
+  buildSimEventImage,
+  createRecognitionRecord,
+  type RecognitionDirection,
+} from '@/hardware/recognitionRecords'
+import { siteDefaultPlateColor } from '@/composables/usePlateColorLabel'
 
 interface EventLog {
   at: string
@@ -31,8 +39,11 @@ const { t, locale } = useI18n()
 const { formatTime } = useSiteTime()
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
-const server = ref<FrigateServer>(loadFrigateServer())
-const cameras = ref<FrigateCamera[]>([])
+const loading = ref(true)
+const server = ref<FrigateSettingsView | null>(null)
+const mqttPassword = ref('')
+const mqttPasswordSet = ref(false)
+const cameras = ref<FrigateCameraView[]>([])
 const barriers = ref<BarrierDevice[]>([])
 const lanes = ref<LaneView[]>([])
 const searchQuery = ref('')
@@ -42,40 +53,75 @@ const formName = ref('')
 const formCameraName = ref('')
 const formEnabled = ref(true)
 const formError = ref('')
+const formBusy = ref(false)
 const serverError = ref('')
 const serverBusy = ref(false)
-const debugCamera = ref<FrigateCamera | null>(null)
+const debugCamera = ref<FrigateCameraView | null>(null)
 const debugBusy = ref(false)
 const debugLogs = ref<EventLog[]>([])
 const simulatePlate = ref('沪A12345')
 
 const isEditing = computed(() => editingId.value !== null)
+const passwordPlaceholder = computed(() =>
+  mqttPasswordSet.value
+    ? t('frigate.mqttPasswordKeepPlaceholder')
+    : t('frigate.mqttPasswordEmptyPlaceholder'),
+)
 const filteredCameras = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   if (!query) {
     return cameras.value
   }
+  const prefix = server.value?.topicPrefix ?? 'frigate'
   return cameras.value.filter((item) => {
     const lane = laneName(item).toLowerCase()
     return (
       item.name.toLowerCase().includes(query) ||
       item.cameraName.toLowerCase().includes(query) ||
-      eventTopicOf(item.cameraName, server.value).toLowerCase().includes(query) ||
+      frigateEventTopic(item.cameraName, prefix).toLowerCase().includes(query) ||
       lane.includes(query)
     )
   })
 })
 
 onMounted(async () => {
-  cameras.value = listFrigateCameras()
   barriers.value = listBarrierDevices()
+  await Promise.all([loadSettings(), loadCameras(), loadLanes()])
+  loading.value = false
+})
+
+async function loadSettings(): Promise<void> {
+  try {
+    const result = await getFrigateSettings(locale.value)
+    applySettings(result.data)
+  } catch (error) {
+    serverError.value = error instanceof ApiError ? error.message : t('frigate.loadFailed')
+  }
+}
+
+async function loadCameras(): Promise<void> {
+  try {
+    const result = await listFrigateCamerasApi(locale.value)
+    cameras.value = result.data
+  } catch (error) {
+    serverError.value = error instanceof ApiError ? error.message : t('frigate.loadFailed')
+  }
+}
+
+async function loadLanes(): Promise<void> {
   try {
     const result = await listLanes(locale.value)
     lanes.value = result.data
   } catch {
     lanes.value = []
   }
-})
+}
+
+function applySettings(data: FrigateSettingsView): void {
+  server.value = data
+  mqttPasswordSet.value = data.mqttPasswordSet
+  mqttPassword.value = ''
+}
 
 function laneName(camera: {
   laneId: string | null
@@ -120,7 +166,7 @@ function statusClass(status: FrigateLinkStatus): string {
   return ''
 }
 
-function lastEventText(camera: FrigateCamera): string {
+function lastEventText(camera: FrigateCameraView): string {
   if (!camera.lastPlate || !camera.lastEventAt) {
     return t('frigate.noEvent')
   }
@@ -140,7 +186,7 @@ function openCreate(): void {
   showForm.value = true
 }
 
-function openEdit(camera: FrigateCamera): void {
+function openEdit(camera: FrigateCameraView): void {
   editingId.value = camera.id
   formName.value = camera.name
   formCameraName.value = camera.cameraName
@@ -154,7 +200,10 @@ function closeForm(): void {
   resetForm()
 }
 
-function onSaveServer(): void {
+async function onSaveServer(): Promise<void> {
+  if (!server.value) {
+    return
+  }
   serverError.value = ''
   const apiHost = server.value.apiHost.trim()
   const mqttHost = server.value.mqttHost.trim()
@@ -163,35 +212,56 @@ function onSaveServer(): void {
     serverError.value = t('frigate.serverRequired')
     return
   }
-  if (server.value.apiPort < 1 || server.value.apiPort > 65535 || server.value.mqttPort < 1 || server.value.mqttPort > 65535) {
+  if (
+    server.value.apiPort < 1 ||
+    server.value.apiPort > 65535 ||
+    server.value.mqttPort < 1 ||
+    server.value.mqttPort > 65535
+  ) {
     serverError.value = t('frigate.portInvalid')
     return
   }
-  server.value = saveFrigateServer({
-    apiHost,
-    apiPort: server.value.apiPort,
-    mqttHost,
-    mqttPort: server.value.mqttPort,
-    topicPrefix,
-    mqttUsername: server.value.mqttUsername.trim(),
-    enabled: server.value.enabled,
-    linkStatus: server.value.linkStatus,
-    lastTestAt: server.value.lastTestAt,
-  })
+  serverBusy.value = true
+  try {
+    const result = await updateFrigateSettings(
+      {
+        apiHost,
+        apiPort: server.value.apiPort,
+        mqttHost,
+        mqttPort: server.value.mqttPort,
+        topicPrefix,
+        mqttUsername: server.value.mqttUsername.trim(),
+        mqttPassword: mqttPassword.value,
+        enabled: server.value.enabled,
+      },
+      locale.value,
+    )
+    applySettings(result.data)
+  } catch (error) {
+    serverError.value = error instanceof ApiError ? error.message : t('frigate.saveFailed')
+  } finally {
+    serverBusy.value = false
+  }
 }
 
 async function testServer(): Promise<void> {
-  onSaveServer()
+  await onSaveServer()
   if (serverError.value) {
     return
   }
   serverBusy.value = true
-  await wait(700)
-  server.value = setFrigateServerLinkStatus('CONNECTED', server.value)
-  serverBusy.value = false
+  try {
+    const result = await testFrigateSettings(locale.value)
+    applySettings(result.data)
+  } catch (error) {
+    serverError.value = error instanceof ApiError ? error.message : t('frigate.testFailed')
+    await loadSettings()
+  } finally {
+    serverBusy.value = false
+  }
 }
 
-function onSubmit(): void {
+async function onSubmit(): Promise<void> {
   formError.value = ''
   const name = formName.value.trim()
   const cameraName = formCameraName.value.trim()
@@ -199,26 +269,30 @@ function onSubmit(): void {
     formError.value = t('frigate.formRequired')
     return
   }
-  const duplicated = cameras.value.some(
-    (item) => item.cameraName.toLowerCase() === cameraName.toLowerCase() && item.id !== editingId.value,
-  )
-  if (duplicated) {
-    formError.value = t('frigate.cameraNameExists')
-    return
+  formBusy.value = true
+  try {
+    if (editingId.value) {
+      await updateFrigateCameraApi(
+        editingId.value,
+        { name, cameraName, enabled: formEnabled.value },
+        locale.value,
+      )
+    } else {
+      await createFrigateCameraApi(
+        { name, cameraName, enabled: formEnabled.value },
+        locale.value,
+      )
+    }
+    await loadCameras()
+    closeForm()
+  } catch (error) {
+    formError.value = error instanceof ApiError ? error.message : t('frigate.saveFailed')
+  } finally {
+    formBusy.value = false
   }
-  cameras.value = saveFrigateCamera(
-    {
-      id: editingId.value ?? undefined,
-      name,
-      cameraName,
-      enabled: formEnabled.value,
-    },
-    cameras.value,
-  )
-  closeForm()
 }
 
-function openDebug(camera: FrigateCamera): void {
+function openDebug(camera: FrigateCameraView): void {
   debugCamera.value = camera
   debugLogs.value = []
   simulatePlate.value = camera.lastPlate || '沪A12345'
@@ -234,8 +308,19 @@ function pushLog(message: string): void {
   debugLogs.value = [{ at: new Date().toISOString(), message }, ...debugLogs.value].slice(0, 20)
 }
 
+function upsertCamera(camera: FrigateCameraView): void {
+  const index = cameras.value.findIndex((item) => item.id === camera.id)
+  if (index < 0) {
+    cameras.value = [camera, ...cameras.value]
+    return
+  }
+  const next = [...cameras.value]
+  next[index] = camera
+  cameras.value = next
+}
+
 async function testCamera(): Promise<void> {
-  if (!debugCamera.value) {
+  if (!debugCamera.value || !server.value) {
     return
   }
   if (server.value.linkStatus !== 'CONNECTED') {
@@ -246,19 +331,24 @@ async function testCamera(): Promise<void> {
   pushLog(
     t('frigate.logTesting', {
       camera: debugCamera.value.cameraName,
-      topic: eventTopicOf(debugCamera.value.cameraName, server.value),
+      topic: frigateEventTopic(debugCamera.value.cameraName, server.value.topicPrefix),
       host: server.value.mqttHost,
       port: server.value.mqttPort,
     }),
   )
-  await wait(700)
-  cameras.value = setFrigateCameraLinkStatus(debugCamera.value.id, 'CONNECTED', cameras.value)
-  debugCamera.value = cameras.value.find((item) => item.id === debugCamera.value?.id) ?? null
-  pushLog(t('frigate.logConnected'))
-  debugBusy.value = false
+  try {
+    const result = await testFrigateCameraApi(debugCamera.value.id, locale.value)
+    upsertCamera(result.data)
+    debugCamera.value = result.data
+    pushLog(t('frigate.logConnected'))
+  } catch (error) {
+    pushLog(error instanceof ApiError ? error.message : t('frigate.testFailed'))
+  } finally {
+    debugBusy.value = false
+  }
 }
 
-function linkedBarriers(camera: FrigateCamera): BarrierDevice[] {
+function linkedBarriers(camera: FrigateCameraView): BarrierDevice[] {
   if (!camera.laneId || !camera.linkageEnabled) {
     return []
   }
@@ -274,7 +364,7 @@ function linkedBarriers(camera: FrigateCamera): BarrierDevice[] {
 }
 
 async function simulateRecognition(): Promise<void> {
-  if (!debugCamera.value) {
+  if (!debugCamera.value || !server.value) {
     return
   }
   if (debugCamera.value.linkStatus !== 'CONNECTED') {
@@ -292,39 +382,42 @@ async function simulateRecognition(): Promise<void> {
     t('frigate.logEvent', {
       camera: debugCamera.value.cameraName,
       plate,
-      topic: eventTopicOf(debugCamera.value.cameraName, server.value),
+      topic: frigateEventTopic(debugCamera.value.cameraName, server.value.topicPrefix),
     }),
   )
-  await wait(400)
-  cameras.value = recordFrigateRecognition(debugCamera.value.id, plate, cameras.value)
-  debugCamera.value = cameras.value.find((item) => item.id === debugCamera.value?.id) ?? null
-  if (!debugCamera.value?.laneId) {
-    pushLog(t('frigate.logUnbound'))
+  try {
+    const result = await simulateFrigateEventApi(debugCamera.value.id, { plate }, locale.value)
+    upsertCamera(result.data)
+    debugCamera.value = result.data
+    if (!debugCamera.value.laneId) {
+      pushLog(t('frigate.logUnbound'))
+      return
+    }
+    if (!debugCamera.value.linkageEnabled) {
+      pushLog(t('frigate.logNotifyOnly', { plate }))
+      return
+    }
+    const devices = linkedBarriers(debugCamera.value)
+    if (devices.length === 0) {
+      pushLog(t('frigate.logNoBarrier'))
+      return
+    }
+    const names = devices.map((item) => item.name).join(' · ')
+    pushLog(t('frigate.logLinkage', { plate, devices: names }))
+  } catch (error) {
+    pushLog(error instanceof ApiError ? error.message : t('frigate.saveFailed'))
+  } finally {
     debugBusy.value = false
-    return
   }
-  if (!debugCamera.value.linkageEnabled) {
-    pushLog(t('frigate.logNotifyOnly', { plate }))
-    debugBusy.value = false
-    return
-  }
-  const devices = linkedBarriers(debugCamera.value)
-  if (devices.length === 0) {
-    pushLog(t('frigate.logNoBarrier'))
-    debugBusy.value = false
-    return
-  }
-  const names = devices.map((item) => item.name).join(' · ')
-  pushLog(t('frigate.logLinkage', { plate, devices: names }))
-  debugBusy.value = false
 }
 </script>
 
 <template>
   <section class="page">
-    <p class="banner planning">{{ t('frigate.planningHint') }}</p>
+    <p class="banner ok-hint">{{ t('frigate.planningHint') }}</p>
+    <p v-if="loading" class="hint">{{ t('page.loading') }}</p>
 
-    <div class="card">
+    <div v-if="server" class="card">
       <h3>{{ t('frigate.serverTitle') }}</h3>
       <p class="hint">{{ t('frigate.serverHint') }}</p>
       <div class="grid two">
@@ -351,6 +444,16 @@ async function simulateRecognition(): Promise<void> {
         <label>
           <span>{{ t('frigate.mqttUsername') }}</span>
           <input v-model="server.mqttUsername" type="text" autocomplete="off" :disabled="!isAdmin" />
+        </label>
+        <label>
+          <span>{{ t('frigate.mqttPassword') }}</span>
+          <input
+            v-model="mqttPassword"
+            type="password"
+            autocomplete="new-password"
+            :placeholder="passwordPlaceholder"
+            :disabled="!isAdmin"
+          />
         </label>
       </div>
       <label class="checkbox">
@@ -398,7 +501,7 @@ async function simulateRecognition(): Promise<void> {
           <tr v-for="item in filteredCameras" :key="item.id">
             <td>{{ item.name }}</td>
             <td>{{ item.cameraName }}</td>
-            <td>{{ eventTopicOf(item.cameraName, server) }}</td>
+            <td>{{ frigateEventTopic(item.cameraName, server?.topicPrefix ?? 'frigate') }}</td>
             <td>
               <span class="pill" :class="statusClass(item.linkStatus)">{{ statusLabel(item.linkStatus) }}</span>
             </td>
@@ -442,18 +545,23 @@ async function simulateRecognition(): Promise<void> {
         </label>
         <p v-if="formError" class="form-error">{{ formError }}</p>
         <div class="actions">
-          <button type="button" class="ghost" @click="closeForm">{{ t('frigate.cancel') }}</button>
-          <button type="submit">{{ isEditing ? t('frigate.save') : t('frigate.create') }}</button>
+          <button type="button" class="ghost" :disabled="formBusy" @click="closeForm">
+            {{ t('frigate.cancel') }}
+          </button>
+          <button type="submit" :disabled="formBusy">
+            {{ isEditing ? t('frigate.save') : t('frigate.create') }}
+          </button>
         </div>
       </form>
     </div>
 
-    <div v-if="debugCamera" class="modal-backdrop">
+    <div v-if="debugCamera && server" class="modal-backdrop">
       <div class="modal wide">
         <h3>{{ t('frigate.debugTitle') }} · {{ debugCamera.name }}</h3>
         <p class="hint">{{ t('frigate.debugHint') }}</p>
         <p class="field-hint">
-          {{ debugCamera.cameraName }} · {{ eventTopicOf(debugCamera.cameraName, server) }}
+          {{ debugCamera.cameraName }} ·
+          {{ frigateEventTopic(debugCamera.cameraName, server.topicPrefix) }}
         </p>
         <p>
           <span class="pill" :class="statusClass(debugCamera.linkStatus)">
@@ -496,15 +604,14 @@ async function simulateRecognition(): Promise<void> {
   gap: 0.9rem;
 }
 
-.banner.planning {
+.banner.ok-hint {
   margin: 0;
   padding: 0.65rem 0.9rem;
   border-radius: 8px;
-  color: #6b5a12;
-  background: #fff6d8;
+  color: #0f5132;
+  background: #d1e7dd;
 }
 
-.card,
 .card,
 .table-card {
   background: var(--surface);
@@ -513,181 +620,41 @@ async function simulateRecognition(): Promise<void> {
   box-shadow: var(--shadow);
 }
 
-.card,
 .card {
   display: grid;
   gap: 0.75rem;
-  padding: 1.1rem 1.2rem;
+  padding: 1rem 1.1rem;
 }
 
 .card h3 {
   margin: 0;
 }
 
-.grid.two {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: 0.75rem;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.search {
-  flex: 1;
-  max-width: 18rem;
-}
-
-.search input,
-.toolbar button,
-.debug-actions button {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  min-height: 2.25rem;
-  padding: 0 0.8rem;
-}
-
-.search input {
-  width: 100%;
-  background: var(--surface);
-  color: var(--text);
-}
-
-.toolbar button,
-.debug-actions button:not(.ghost) {
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-  border-color: transparent;
-}
-
-.table-card {
-  overflow: hidden;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  text-align: start;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border);
-}
-
-th {
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  background: #f7faf8;
-}
-
-.col-actions {
-  width: 10rem;
-  text-align: end;
-}
-
-.action-group {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-}
-
-tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.link-btn {
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font-weight: 600;
-  padding: 0;
-  cursor: pointer;
-}
-
-.pill {
-  border-radius: 999px;
-  padding: 0.15rem 0.6rem;
-  font-size: 0.78rem;
-  background: #f2f4f3;
-}
-
-.pill.ok {
-  color: var(--ok);
-  background: #e8f5ef;
-}
-
-.pill.fail {
-  color: var(--danger);
-  background: #fdecec;
-}
-
-.empty {
-  padding: 3rem 1.5rem;
-  text-align: center;
-}
-
-.empty strong {
-  display: block;
-  margin-bottom: 0.35rem;
-}
-
-.empty p,
-.hint,
-.field-hint {
+.hint {
   margin: 0;
   color: var(--muted);
-}
-
-.hint {
   font-size: 0.9rem;
 }
 
-.field-hint {
-  font-size: 0.82rem;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 20, 0.45);
+.grid.two {
   display: grid;
-  place-items: center;
-  padding: 1rem;
-  z-index: 20;
-}
-
-.modal {
-  width: min(480px, 100%);
-  max-height: calc(100vh - 2rem);
-  overflow: auto;
-  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1.25rem;
-  box-shadow: var(--shadow);
-}
-
-.modal.wide {
-  width: min(720px, 100%);
-}
-
-.modal h3 {
-  margin: 0;
 }
 
 label {
   display: grid;
   gap: 0.35rem;
+}
+
+input[type='text'],
+input[type='password'],
+input[type='number'],
+input[type='search'] {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  background: #fff;
 }
 
 .checkbox {
@@ -700,12 +667,10 @@ label {
   width: auto;
 }
 
-input {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
-  background: #fff;
-  color: var(--text);
+.field-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .form-error {
@@ -723,23 +688,120 @@ input {
   justify-content: flex-start;
 }
 
-.actions button,
-.debug-actions button {
-  border: 0;
-  border-radius: 8px;
-  padding: 0.55rem 0.85rem;
+.toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.search {
+  flex: 1;
+}
+
+.table-card {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 0.92rem;
+}
+
+th {
+  color: var(--muted);
   font-weight: 600;
 }
 
-.actions button:not(.ghost) {
-  color: #fff;
-  background: var(--accent);
+.col-actions {
+  white-space: nowrap;
 }
 
-.ghost {
+.action-group {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.link-btn {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #eef1f0;
+  color: var(--muted);
+}
+
+.pill.ok {
+  background: #e8f5ef;
+  color: var(--ok);
+}
+
+.pill.fail {
+  background: #fdecec;
+  color: var(--danger);
+}
+
+.empty {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+}
+
+.empty strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.empty p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 20, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 20;
+}
+
+.modal {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 0.75rem;
+  background: var(--surface);
   border: 1px solid var(--border);
-  background: #fff;
-  color: var(--text);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.modal.wide {
+  width: min(560px, 100%);
+}
+
+.modal h3 {
+  margin: 0;
 }
 
 .debug-actions {
@@ -748,22 +810,64 @@ input {
 }
 
 .log {
-  display: grid;
-  gap: 0.35rem;
   max-height: 12rem;
   overflow: auto;
-  padding: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #f7faf8;
+  padding: 0.65rem 0.75rem;
+  background: #f8faf9;
+}
+
+.log p {
+  margin: 0 0 0.35rem;
   font-size: 0.85rem;
+}
+
+.ghost {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-weight: 600;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+button:disabled,
+.ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
+  padding: 0;
+  margin: -1px;
   overflow: hidden;
-  clip: rect(0 0 0 0);
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+@media (max-width: 760px) {
+  .grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

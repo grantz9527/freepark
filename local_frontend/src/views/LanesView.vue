@@ -5,11 +5,16 @@ import { useI18n } from 'vue-i18n'
 
 import {
   ApiError,
+  bindFrigateCameraApi,
   createLane,
+  listFrigateCamerasApi,
   listLanes,
   listLots,
   postAccessDecision,
+  unbindFrigateCameraApi,
   updateLane,
+  type FrigateBindDirection,
+  type FrigateCameraView,
   type LaneType,
   type LaneView,
   type LotView,
@@ -25,13 +30,6 @@ import {
   type BarrierBindDirection,
   type BarrierDevice,
 } from '@/hardware/barrierDevices'
-import {
-  bindFrigateCameraToLane,
-  listFrigateCameras,
-  unbindFrigateCamera,
-  type FrigateBindDirection,
-  type FrigateCamera,
-} from '@/hardware/frigateCameras'
 import {
   bindIotDeviceToLane,
   listIotDevices,
@@ -92,11 +90,12 @@ const bindDirection = ref<BarrierBindDirection | ''>('')
 const bindError = ref('')
 
 const frigateLane = ref<LaneView | null>(null)
-const frigateCameras = ref<FrigateCamera[]>([])
+const frigateCameras = ref<FrigateCameraView[]>([])
 const bindCameraId = ref('')
 const bindFrigateDirection = ref<FrigateBindDirection | ''>('')
 const bindLinkageEnabled = ref(true)
 const bindFrigateError = ref('')
+const bindFrigateBusy = ref(false)
 
 const iotLane = ref<LaneView | null>(null)
 const iotDevices = ref<IotDevice[]>([])
@@ -184,7 +183,7 @@ async function reload(): Promise<void> {
     await loadLanes()
     refreshBarrierDevices()
     refreshIotDevices()
-    refreshFrigateCameras()
+    await refreshFrigateCameras()
     refreshPlateIntercept()
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : t('lanes.loadFailed')
@@ -548,11 +547,20 @@ function onUnbindIot(deviceId: string): void {
   iotDevices.value = unbindIotDevice(deviceId, iotDevices.value)
 }
 
-function refreshFrigateCameras(): void {
-  frigateCameras.value = listFrigateCameras()
+async function refreshFrigateCameras(): Promise<void> {
+  try {
+    const result = await listFrigateCamerasApi(locale.value)
+    frigateCameras.value = result.data
+  } catch (error) {
+    frigateCameras.value = []
+    if (frigateLane.value) {
+      bindFrigateError.value =
+        error instanceof ApiError ? error.message : t('frigate.loadFailed')
+    }
+  }
 }
 
-function boundFrigateCameras(laneId: string): FrigateCamera[] {
+function boundFrigateCameras(laneId: string): FrigateCameraView[] {
   return frigateCameras.value.filter((item) => item.laneId === laneId)
 }
 
@@ -568,14 +576,14 @@ function boundFrigateNames(laneId: string): string {
   return names.length > 0 ? names.join(' · ') : t('lanes.noFrigate')
 }
 
-function availableFrigateCameras(): FrigateCamera[] {
+function availableFrigateCameras(): FrigateCameraView[] {
   return frigateCameras.value.filter(
     (item) => item.enabled && item.linkStatus === 'CONNECTED' && !item.laneId,
   )
 }
 
 function frigateDirectionOf(
-  camera: FrigateCamera,
+  camera: FrigateCameraView,
   lane: LaneView | undefined,
 ): FrigateBindDirection | null {
   if (lane && lane.laneType !== 'BIDIRECTIONAL') {
@@ -584,12 +592,12 @@ function frigateDirectionOf(
   return camera.bindDirection
 }
 
-function frigateDirectionText(camera: FrigateCamera, lane: LaneView | undefined): string {
+function frigateDirectionText(camera: FrigateCameraView, lane: LaneView | undefined): string {
   const direction = frigateDirectionOf(camera, lane)
   return direction ? bindDirectionLabel(direction) : t('frigate.bindDirectionUnknown')
 }
 
-function lastFrigateEventText(camera: FrigateCamera): string {
+function lastFrigateEventText(camera: FrigateCameraView): string {
   if (!camera.lastPlate || !camera.lastEventAt) {
     return t('frigate.noEvent')
   }
@@ -602,7 +610,7 @@ function openFrigatePanel(lane: LaneView): void {
   bindFrigateDirection.value = ''
   bindLinkageEnabled.value = true
   bindFrigateError.value = ''
-  refreshFrigateCameras()
+  void refreshFrigateCameras()
 }
 
 function closeFrigatePanel(): void {
@@ -610,9 +618,10 @@ function closeFrigatePanel(): void {
   bindCameraId.value = ''
   bindFrigateDirection.value = ''
   bindFrigateError.value = ''
+  bindFrigateBusy.value = false
 }
 
-function onBindFrigate(): void {
+async function onBindFrigate(): Promise<void> {
   bindFrigateError.value = ''
   if (!frigateLane.value || !bindCameraId.value) {
     bindFrigateError.value = t('frigate.bindRequired')
@@ -633,20 +642,39 @@ function onBindFrigate(): void {
   } else {
     direction = frigateLane.value.laneType === 'EXIT' ? 'EXIT' : 'ENTRANCE'
   }
-  frigateCameras.value = bindFrigateCameraToLane(
-    camera.id,
-    frigateLane.value.id,
-    direction,
-    bindLinkageEnabled.value,
-    frigateCameras.value,
-  )
-  bindCameraId.value = ''
-  bindFrigateDirection.value = ''
-  bindLinkageEnabled.value = true
+  bindFrigateBusy.value = true
+  try {
+    await bindFrigateCameraApi(
+      camera.id,
+      {
+        laneId: frigateLane.value.id,
+        bindDirection: direction,
+        linkageEnabled: bindLinkageEnabled.value,
+      },
+      locale.value,
+    )
+    await refreshFrigateCameras()
+    bindCameraId.value = ''
+    bindFrigateDirection.value = ''
+    bindLinkageEnabled.value = true
+  } catch (error) {
+    bindFrigateError.value = error instanceof ApiError ? error.message : t('frigate.bindFailed')
+  } finally {
+    bindFrigateBusy.value = false
+  }
 }
 
-function onUnbindFrigate(cameraId: string): void {
-  frigateCameras.value = unbindFrigateCamera(cameraId, frigateCameras.value)
+async function onUnbindFrigate(cameraId: string): Promise<void> {
+  bindFrigateError.value = ''
+  bindFrigateBusy.value = true
+  try {
+    await unbindFrigateCameraApi(cameraId, locale.value)
+    await refreshFrigateCameras()
+  } catch (error) {
+    bindFrigateError.value = error instanceof ApiError ? error.message : t('frigate.bindFailed')
+  } finally {
+    bindFrigateBusy.value = false
+  }
 }
 
 function refreshSimEvents(): void {
@@ -1282,6 +1310,7 @@ onMounted(reload)
           <button
             v-if="isAdmin && availableFrigateCameras().length > 0"
             type="button"
+            :disabled="bindFrigateBusy"
             @click="onBindFrigate"
           >
             {{ t('frigate.bind') }}

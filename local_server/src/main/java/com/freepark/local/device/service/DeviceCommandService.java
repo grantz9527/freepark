@@ -42,6 +42,12 @@ public class DeviceCommandService {
     @Transactional
     public DeviceCommandView enqueue(UUID requesterId, UUID deviceId, DeviceCommand.Action action, String source) {
         requireAdmin(requesterId);
+        return enqueueSystem(deviceId, action, source);
+    }
+
+    /** 系统内部入队（Frigate 联动等），不校验管理员。 */
+    @Transactional
+    public DeviceCommandView enqueueSystem(UUID deviceId, DeviceCommand.Action action, String source) {
         ParkingBarrier device = barriers.findById(deviceId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (!device.isEnabled()) {
