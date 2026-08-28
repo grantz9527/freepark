@@ -45,6 +45,10 @@ public class FrigateCamera extends BaseEntity {
     @Column(name = "last_plate", length = 32)
     private String lastPlate;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_plate_color", length = 32)
+    private PlateColor lastPlateColor;
+
     @Column(name = "last_event_at")
     private Instant lastEventAt;
 
@@ -127,6 +131,14 @@ public class FrigateCamera extends BaseEntity {
 
     public void setLastPlate(String lastPlate) {
         this.lastPlate = lastPlate;
+    }
+
+    public PlateColor getLastPlateColor() {
+        return lastPlateColor;
+    }
+
+    public void setLastPlateColor(PlateColor lastPlateColor) {
+        this.lastPlateColor = lastPlateColor;
     }
 
     public Instant getLastEventAt() {

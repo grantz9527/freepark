@@ -188,7 +188,7 @@ public class FrigateService {
             throw new BusinessException(ErrorCode.INVALID_FRIGATE_CONFIG);
         }
         String plate = trimRequired(request.plate()).toUpperCase();
-        eventHandler.onPlateRecognized(camera.getCameraName(), plate);
+        eventHandler.onPlateRecognized(camera.getCameraName(), plate, request.plateColor());
         return toCameraView(requireCamera(cameraId));
     }
 
@@ -230,6 +230,7 @@ public class FrigateService {
                 camera.getBindDirection(),
                 camera.isLinkageEnabled(),
                 camera.getLastPlate(),
+                camera.getLastPlateColor(),
                 camera.getLastEventAt(),
                 camera.getCreatedAt(),
                 camera.getUpdatedAt());

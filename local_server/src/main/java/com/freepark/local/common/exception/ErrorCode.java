@@ -42,6 +42,13 @@ public enum ErrorCode {
     INVALID_FRIGATE_CONFIG("error.frigate.invalid-config", HttpStatus.BAD_REQUEST),
     FRIGATE_CAMERA_EXISTS("error.frigate.camera-exists", HttpStatus.BAD_REQUEST),
     FRIGATE_MQTT_CONNECT_FAILED("error.frigate.mqtt-connect-failed", HttpStatus.BAD_REQUEST),
+    INVALID_YOLO26_PLATE_CONFIG("error.yolo26.invalid-config", HttpStatus.BAD_REQUEST),
+    YOLO26_PLATE_DISABLED("error.yolo26.disabled", HttpStatus.BAD_REQUEST),
+    YOLO26_PLATE_UPSTREAM_FAILED("error.yolo26.upstream-failed", HttpStatus.BAD_GATEWAY),
+    YOLO26_PLATE_EMPTY_IMAGE("error.yolo26.empty-image", HttpStatus.BAD_REQUEST),
+    INVALID_HYPER_LPR3_CONFIG("error.hyperlpr3.invalid-config", HttpStatus.BAD_REQUEST),
+    SOFTWARE_PLATE_DISABLED("error.software-plate.disabled", HttpStatus.BAD_REQUEST),
+    SOFTWARE_PLATE_EMPTY_IMAGE("error.software-plate.empty-image", HttpStatus.BAD_REQUEST),
     NOT_FOUND("error.not-found", HttpStatus.NOT_FOUND),
     INTERNAL_ERROR("error.internal", HttpStatus.INTERNAL_SERVER_ERROR);
 

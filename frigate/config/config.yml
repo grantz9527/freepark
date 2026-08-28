@@ -1,0 +1,19 @@
+# Frigate 最小配置 + 本地 MQTT
+mqtt:
+  enabled: true
+  host: 127.0.0.1
+  port: 1883
+  user: freepark
+  password: freepark
+  topic_prefix: frigate
+  client_id: freepark-frigate
+
+# 相机配置示例（确认容器正常后再取消注释并填入真实 RTSP 地址）：
+# cameras:
+#   front_door:
+#     ffmpeg:
+#       inputs:
+#         - path: rtsp://用户名:密码@摄像头IP:554/stream
+#           input_args: preset-rtsp-restream
+cameras: {}
+version: 0.17-0

@@ -21,6 +21,7 @@ import tools.jackson.databind.json.JsonMapper;
 import com.freepark.local.domain.FrigateLinkStatus;
 import com.freepark.local.domain.FrigateSettings;
 import com.freepark.local.domain.FrigateSettingsRepository;
+import com.freepark.local.domain.PlateColor;
 
 import jakarta.annotation.PreDestroy;
 
@@ -160,6 +161,7 @@ public class FrigateMqttSubscriber {
             String prefix = stripTrailingSlash(topicPrefix);
             String cameraName = null;
             String plate = null;
+            PlateColor plateColor = null;
 
             if (topic.equals(prefix + "/events") || topic.endsWith("/events")) {
                 JsonNode root = jsonMapper.readTree(payload);
@@ -172,22 +174,101 @@ public class FrigateMqttSubscriber {
                     cameraName = cameraFromTopic(topic, prefix);
                 }
                 plate = extractPlate(after);
+                plateColor = extractColor(after);
                 if (plate == null) {
                     plate = extractPlate(root);
+                }
+                if (plateColor == null) {
+                    plateColor = extractColor(root);
                 }
             } else if (topic.startsWith(prefix + "/")) {
                 cameraName = cameraFromTopic(topic, prefix);
                 JsonNode root = jsonMapper.readTree(payload);
                 plate = extractPlate(root);
+                plateColor = extractColor(root);
             }
 
             if (cameraName == null || plate == null || plate.isBlank()) {
                 return;
             }
-            eventHandler.onPlateRecognized(cameraName, plate.trim().toUpperCase());
+            eventHandler.onPlateRecognized(cameraName, plate.trim().toUpperCase(), plateColor);
         } catch (Exception ex) {
             log.debug("Ignore Frigate MQTT payload on {}: {}", topic, ex.getMessage());
         }
+    }
+
+    private PlateColor extractColor(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        String direct = firstNonBlank(
+                textOrNull(node.path("plateColor")),
+                textOrNull(node.path("plate_color")),
+                textOrNull(node.path("colorName")),
+                textOrNull(node.path("color")),
+                textOrNull(node.path("plate_color_name")),
+                textOrNull(node.path("license_plate_color")));
+        if (direct != null) {
+            PlateColor color = tryColor(direct);
+            if (color != null) {
+                return color;
+            }
+        }
+        JsonNode attrs = node.path("current_attributes");
+        if (attrs.isObject()) {
+            String fromAttrs = firstNonBlank(
+                    textOrNull(attrs.path("plateColor")),
+                    textOrNull(attrs.path("plate_color")),
+                    textOrNull(attrs.path("license_plate_color")),
+                    textOrNull(attrs.path("color")));
+            if (fromAttrs != null) {
+                PlateColor color = tryColor(fromAttrs);
+                if (color != null) {
+                    return color;
+                }
+            }
+        }
+        // 兜底：数字颜色索引（常见于 LPR 设备透传）
+        JsonNode colorIndex = node.path("colorIndex");
+        if (!colorIndex.isMissingNode() && colorIndex.canConvertToInt()) {
+            return mapColorIndex(colorIndex.asInt(-1));
+        }
+        return null;
+    }
+
+    private PlateColor tryColor(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return PlateColor.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            return mapColorAlias(raw.trim());
+        }
+    }
+
+    private PlateColor mapColorIndex(int idx) {
+        return switch (idx) {
+            case 0 -> PlateColor.BLUE;
+            case 1 -> PlateColor.YELLOW;
+            case 2 -> PlateColor.WHITE;
+            case 3 -> PlateColor.BLACK;
+            case 4, 5 -> PlateColor.GREEN;
+            case 6 -> PlateColor.YELLOW_GREEN;
+            default -> null;
+        };
+    }
+
+    private PlateColor mapColorAlias(String name) {
+        return switch (name) {
+            case "蓝", "蓝色", "蓝底", "BLUE", "blue" -> PlateColor.BLUE;
+            case "黄", "黄色", "黄底", "YELLOW", "yellow" -> PlateColor.YELLOW;
+            case "白", "白色", "白底", "WHITE", "white" -> PlateColor.WHITE;
+            case "黑", "黑色", "黑底", "BLACK", "black" -> PlateColor.BLACK;
+            case "绿", "绿色", "绿底", "渐变绿", "GREEN", "green" -> PlateColor.GREEN;
+            case "黄绿", "黄底黑字", "YELLOW_GREEN", "yellow_green" -> PlateColor.YELLOW_GREEN;
+            default -> null;
+        };
     }
 
     private String cameraFromTopic(String topic, String prefix) {

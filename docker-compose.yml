@@ -1,0 +1,129 @@
+name: freepark
+
+# Freepark 核心服务编排
+# 提供：
+#   - frigate-mosquitto: MQTT 代理（账号 freepark / freepark）
+#   - yolo26-plate-api: 车牌检测 + 识别 HTTP 服务（CPU）
+#   - yolo26-plate-api-gpu: 同上（CUDA 版，默认不启动；需要 NVIDIA runtime）
+#   - local-mysql: 业务数据库（MySQL 8.4）
+
+services:
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: freepark-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    environment:
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$SYS/broker/version' -C 1 -W 2 -u freepark -P freepark -h 127.0.0.1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  yolo26-plate-api:
+    build:
+      context: ./yolo26-plate
+      dockerfile: Dockerfile.api-cpu
+    image: freepark/yolo26-plate-api:cpu
+    container_name: freepark-yolo26-plate-api
+    restart: unless-stopped
+    ports:
+      - "8780:8780"
+    environment:
+      - TZ=Asia/Shanghai
+      - YOLO26_DEVICE=cpu
+      - YOLO26_MIN_CONF=0.25
+      - YOLO26_MIN_KPT_CONF=0.3
+    volumes:
+      - ./yolo26-plate/weights:/app/weights:ro
+      # 可选：把识别结果落盘目录挂载出来，方便人工复查
+      - ./yolo26-plate/runs:/app/runs
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+    memswap_limit: 8G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8780/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      default:
+        aliases:
+          - yolo26-plate
+          - yolo26-plate-api
+
+  yolo26-plate-api-gpu:
+    profiles: ["gpu"]
+    build:
+      context: ./yolo26-plate
+      dockerfile: Dockerfile.api-cuda
+    image: freepark/yolo26-plate-api:cuda
+    container_name: freepark-yolo26-plate-api-gpu
+    restart: unless-stopped
+    ports:
+      - "8781:8780"
+    environment:
+      - TZ=Asia/Shanghai
+      - YOLO26_DEVICE=cuda:0
+      - YOLO26_MIN_CONF=0.25
+      - YOLO26_MIN_KPT_CONF=0.3
+    volumes:
+      - ./yolo26-plate/weights:/app/weights:ro
+      - ./yolo26-plate/runs:/app/runs
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              count: all
+    ipc: host
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8780/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    networks:
+      default:
+        aliases:
+          - yolo26-plate-gpu
+          - yolo26-plate-api-gpu
+
+  mysql:
+    image: mysql:8.4
+    container_name: freepark-local-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: freepark_local
+      MYSQL_USER: freepark_local
+      MYSQL_PASSWORD: freepark_local
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+00:00
+    volumes:
+      - freepark-local-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  freepark-local-mysql:

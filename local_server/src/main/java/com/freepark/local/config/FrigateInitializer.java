@@ -28,12 +28,15 @@ public class FrigateInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         if (!settingsRepository.existsById(FrigateSettings.SINGLETON_ID)) {
-            settingsRepository.save(new FrigateSettings(
+            FrigateSettings settings = new FrigateSettings(
                     FrigateSettings.DEFAULT_API_HOST,
                     FrigateSettings.DEFAULT_API_PORT,
                     FrigateSettings.DEFAULT_MQTT_HOST,
                     FrigateSettings.DEFAULT_MQTT_PORT,
-                    FrigateSettings.DEFAULT_TOPIC_PREFIX));
+                    FrigateSettings.DEFAULT_TOPIC_PREFIX);
+            settings.setMqttUsername("freepark");
+            settings.setMqttPassword("freepark");
+            settingsRepository.save(settings);
             log.info("Initialized default Frigate settings");
         }
         mqttSubscriber.reconnect();

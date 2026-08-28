@@ -1192,12 +1192,67 @@ export function changePassword(
   )
 }
 
+export interface Yolo26PlateSettingsView {
+  enabled: boolean
+  baseUrl: string
+  minConfidence: number
+  connectTimeoutMs: number
+  readTimeoutMs: number
+}
+
+export interface HyperLpr3SettingsView {
+  enabled: boolean
+  baseUrl: string
+  minConfidence: number
+  connectTimeoutMs: number
+  readTimeoutMs: number
+}
+
+export type SoftwarePlateProvider = 'YOLO26_PLATE' | 'HYPER_LPR3'
+
+export interface Yolo26BBox {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+export interface Yolo26DetectedPlate {
+  bbox: Yolo26BBox
+  detectConfidence: number
+  cls: number
+  keypoints: number[][]
+  plate: string
+  plateConfidence: number
+  plateColorZh: string
+  plateColor: PlateColor | null
+  plateColorConfidence: number
+  error?: string | null
+  score?: number | null
+  plateValid?: boolean | null
+  suppressed?: boolean | null
+}
+
+export type SoftwarePlateRecognitionResult = {
+  imageId: string
+  elapsedMs: number
+  count: number
+  plates: Yolo26DetectedPlate[]
+  best?: Yolo26DetectedPlate | null
+  device: string
+  upstreamBaseUrl: string
+  provider?: SoftwarePlateProvider | null
+}
+
 export interface SystemSettingsView {
   defaultLocale: string
   timezone: string
   defaultPlateColor: PlateColor
   allowedPlateColors: PlateColor[]
   imageStoragePath: string
+  softwarePlateProvider: SoftwarePlateProvider
+  yolo26Plate: Yolo26PlateSettingsView
+  hyperLpr3: HyperLpr3SettingsView
   supportedLocales: string[]
   supportedTimezones: string[]
   supportedPlateColors: PlateColor[]
@@ -1215,6 +1270,21 @@ export function updateSystemSettings(
     defaultPlateColor: PlateColor
     allowedPlateColors: PlateColor[]
     imageStoragePath: string
+    softwarePlateProvider: SoftwarePlateProvider
+    yolo26Plate: {
+      enabled: boolean
+      baseUrl?: string | null
+      minConfidence?: number | null
+      connectTimeoutMs?: number | null
+      readTimeoutMs?: number | null
+    }
+    hyperLpr3: {
+      enabled: boolean
+      baseUrl?: string | null
+      minConfidence?: number | null
+      connectTimeoutMs?: number | null
+      readTimeoutMs?: number | null
+    }
   },
   locale: string,
 ): Promise<ApiResponse<SystemSettingsView>> {
@@ -1227,6 +1297,39 @@ export function updateSystemSettings(
     },
     locale,
   )
+}
+
+export function testSoftwarePlateRecognize(
+  image: File | Blob,
+  filename: string,
+  locale: string,
+  opts?: {
+    minConfidence?: number | null
+    imageId?: string | null
+    provider?: SoftwarePlateProvider | null
+  },
+): Promise<ApiResponse<SoftwarePlateRecognitionResult>> {
+  const fd = new FormData()
+  fd.append('image', image, filename)
+  if (opts?.minConfidence != null) fd.append('minConfidence', String(opts.minConfidence))
+  if (opts?.imageId) fd.append('imageId', opts.imageId)
+  if (opts?.provider) fd.append('provider', opts.provider)
+  return apiCall(
+    '/api/v1/system-settings/software-plate/recognize',
+    {
+      method: 'POST',
+      body: fd,
+    },
+    locale,
+  )
+}
+
+export function testYolo26Recognize(
+  image: File | Blob,
+  filename: string,
+  locale: string,
+): Promise<ApiResponse<SoftwarePlateRecognitionResult>> {
+  return testSoftwarePlateRecognize(image, filename, locale, { provider: 'YOLO26_PLATE' })
 }
 
 export type NodeMode = 'OFFLINE' | 'EDGE'
@@ -1297,6 +1400,7 @@ export interface FrigateCameraView {
   bindDirection: FrigateBindDirection | null
   linkageEnabled: boolean
   lastPlate: string | null
+  lastPlateColor: PlateColor | null
   lastEventAt: string | null
   createdAt: string
   updatedAt: string
@@ -1405,7 +1509,7 @@ export function unbindFrigateCameraApi(
 
 export function simulateFrigateEventApi(
   cameraId: string,
-  payload: { plate: string },
+  payload: { plate: string; plateColor?: PlateColor | null },
   locale: string,
 ): Promise<ApiResponse<FrigateCameraView>> {
   return apiCall(

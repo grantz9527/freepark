@@ -10,6 +10,7 @@ import tools.jackson.databind.node.ObjectNode;
 import com.freepark.local.device.dto.DevicePollResponse;
 import com.freepark.local.domain.DeviceCommand;
 import com.freepark.local.domain.ParkingBarrier;
+import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.RecognitionRecord;
 
 /**
@@ -52,11 +53,12 @@ public class ZhenshiProtocol implements CameraProtocol {
         JsonNode plateResult = pushData.path("AlarmInfoPlate").path("result").path("PlateResult");
         String license = plateResult.path("license").asText("").trim();
         String direction = String.valueOf(plateResult.path("direction").asInt(0));
+        PlateColor color = parseColor(plateResult);
 
         String imageRef = extractImage(plateResult);
         Instant capturedAt = extractTimestamp(plateResult);
 
-        return new RecognitionRecord(device, license, imageRef, direction, capturedAt);
+        return new RecognitionRecord(device, license, color, imageRef, direction, capturedAt);
     }
 
     /**
@@ -104,5 +106,59 @@ public class ZhenshiProtocol implements CameraProtocol {
             return Instant.ofEpochSecond(sec, usec * 1_000);
         }
         return Instant.now();
+    }
+
+    /**
+     * 解析臻识 PlateResult 中的车牌颜色字段。
+     * 常见字段：color（数字，0=蓝 1=黄 2=白 3=黑 4=绿 ...）、或 colorName / plateColor（字符串）。
+     */
+    private PlateColor parseColor(JsonNode plateResult) {
+        JsonNode colorName = plateResult.path("colorName");
+        if (!colorName.isMissingNode() && !colorName.asText("").isBlank()) {
+            return tryColor(colorName.asText(""));
+        }
+        JsonNode plateColor = plateResult.path("plateColor");
+        if (!plateColor.isMissingNode() && !plateColor.asText("").isBlank()) {
+            return tryColor(plateColor.asText(""));
+        }
+        JsonNode colorNum = plateResult.path("color");
+        if (!colorNum.isMissingNode() && !colorNum.asText("").isEmpty()) {
+            return mapZhenshiColorIndex(colorNum.asInt(-1));
+        }
+        return null;
+    }
+
+    private PlateColor tryColor(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            return PlateColor.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            // 中文/别名映射
+            return mapColorAlias(raw.trim());
+        }
+    }
+
+    private PlateColor mapZhenshiColorIndex(int idx) {
+        return switch (idx) {
+            case 0 -> PlateColor.BLUE;
+            case 1 -> PlateColor.YELLOW;
+            case 2 -> PlateColor.WHITE;
+            case 3 -> PlateColor.BLACK;
+            case 4, 5 -> PlateColor.GREEN;
+            case 6 -> PlateColor.YELLOW_GREEN;
+            default -> null;
+        };
+    }
+
+    private PlateColor mapColorAlias(String name) {
+        return switch (name) {
+            case "蓝", "蓝色", "蓝底" -> PlateColor.BLUE;
+            case "黄", "黄色", "黄底" -> PlateColor.YELLOW;
+            case "白", "白色", "白底" -> PlateColor.WHITE;
+            case "黑", "黑色", "黑底" -> PlateColor.BLACK;
+            case "绿", "绿色", "绿底", "渐变绿" -> PlateColor.GREEN;
+            case "黄绿", "黄底黑字" -> PlateColor.YELLOW_GREEN;
+            default -> null;
+        };
     }
 }

@@ -2,6 +2,8 @@ package com.freepark.local.common.exception;
 
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -17,6 +19,8 @@ import jakarta.validation.ConstraintViolationException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     private final MessageService messages;
 
     public GlobalExceptionHandler(MessageService messages) {
@@ -26,6 +30,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException ex) {
         ErrorCode errorCode = ex.errorCode();
+        if (errorCode.status().is5xxServerError()) {
+            log.warn("Business exception {}: {}", errorCode.code(), ex.getMessage(), ex);
+        } else if (log.isDebugEnabled()) {
+            log.debug("Business exception {}: {}", errorCode.code(), ex.getMessage());
+        }
         return ResponseEntity.status(errorCode.status())
                 .body(ApiResponse.fail(errorCode.code(), messages.get(errorCode.messageKey(), ex.args())));
     }
@@ -52,6 +61,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnknown(Exception ex) {
+        log.error("Unhandled exception: {}", ex.getMessage(), ex);
         return ResponseEntity.internalServerError()
                 .body(ApiResponse.fail(ErrorCode.INTERNAL_ERROR.code(),
                         messages.get(ErrorCode.INTERNAL_ERROR.messageKey())));

@@ -22,13 +22,16 @@ import {
 } from '@/api/client'
 import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
+import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { listBarrierDevices, type BarrierDevice } from '@/hardware/barrierDevices'
 import {
   buildSimEventImage,
   createRecognitionRecord,
+  markRecognitionAbnormal,
   type RecognitionDirection,
 } from '@/hardware/recognitionRecords'
-import { siteDefaultPlateColor } from '@/composables/usePlateColorLabel'
+import { applyRecognitionToParkingSession } from '@/hardware/parkingSessions'
+import type { PlateColor } from '@/api/client'
 
 interface EventLog {
   at: string
@@ -37,6 +40,17 @@ interface EventLog {
 
 const { t, locale } = useI18n()
 const { formatTime } = useSiteTime()
+const { plateColorLabel } = usePlateColorLabel()
+
+const commonPlateColors: PlateColor[] = [
+  'BLUE',
+  'YELLOW',
+  'GREEN',
+  'YELLOW_GREEN',
+  'BLACK',
+  'WHITE',
+  'OTHER',
+]
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
 const loading = ref(true)
@@ -60,6 +74,16 @@ const debugCamera = ref<FrigateCameraView | null>(null)
 const debugBusy = ref(false)
 const debugLogs = ref<EventLog[]>([])
 const simulatePlate = ref('沪A12345')
+const simulatePlateColor = ref<PlateColor | ''>('BLUE')
+const simulateDirection = ref<RecognitionDirection>('ENTRANCE')
+
+const debugCameraLane = computed<LaneView | null>(() => {
+  if (!debugCamera.value?.laneId) return null
+  return lanes.value.find((l) => l.id === debugCamera.value!.laneId) ?? null
+})
+const needDirectionSelect = computed(
+  () => !debugCameraLane.value || debugCameraLane.value.laneType === 'BIDIRECTIONAL',
+)
 
 const isEditing = computed(() => editingId.value !== null)
 const passwordPlaceholder = computed(() =>
@@ -296,6 +320,7 @@ function openDebug(camera: FrigateCameraView): void {
   debugCamera.value = camera
   debugLogs.value = []
   simulatePlate.value = camera.lastPlate || '沪A12345'
+  simulatePlateColor.value = (camera.lastPlateColor as PlateColor) || 'BLUE'
 }
 
 function closeDebug(): void {
@@ -363,6 +388,19 @@ function linkedBarriers(camera: FrigateCameraView): BarrierDevice[] {
   })
 }
 
+function effectiveSimDirection(): RecognitionDirection {
+  const lane = debugCameraLane.value
+  const camera = debugCamera.value
+  if (!lane) {
+    return simulateDirection.value
+  }
+  if (lane.laneType === 'BIDIRECTIONAL') {
+    if (camera?.bindDirection) return camera.bindDirection as RecognitionDirection
+    return simulateDirection.value
+  }
+  return lane.laneType === 'EXIT' ? 'EXIT' : 'ENTRANCE'
+}
+
 async function simulateRecognition(): Promise<void> {
   if (!debugCamera.value || !server.value) {
     return
@@ -376,6 +414,18 @@ async function simulateRecognition(): Promise<void> {
     pushLog(t('frigate.plateRequired'))
     return
   }
+  const plateColor = simulatePlateColor.value ? (simulatePlateColor.value as PlateColor) : null
+  if (!plateColor) {
+    pushLog(t('systemSettings.plateColors') + ' -')
+    return
+  }
+  const direction = effectiveSimDirection()
+  const lane = debugCameraLane.value
+  const lotId = lane?.lotId ?? ''
+  const lotName = lane?.lotName ?? t('frigate.unbound')
+  const laneId = lane?.id ?? null
+  const laneName = lane?.name ?? (debugCamera.value.laneId ? t('frigate.unbound') : null)
+
   debugBusy.value = true
   barriers.value = listBarrierDevices()
   pushLog(
@@ -386,9 +436,38 @@ async function simulateRecognition(): Promise<void> {
     }),
   )
   try {
-    const result = await simulateFrigateEventApi(debugCamera.value.id, { plate }, locale.value)
+    const result = await simulateFrigateEventApi(
+      debugCamera.value.id,
+      { plate, plateColor },
+      locale.value,
+    )
     upsertCamera(result.data)
     debugCamera.value = result.data
+
+    // 写入本地「识别记录」与「停车会话（流水）」，确保管理页面可以看到模拟事件的链路。
+    const record = createRecognitionRecord({
+      lotId,
+      lotName,
+      laneId,
+      laneName,
+      plateNumber: plate,
+      plateColor,
+      eventImage: buildSimEventImage(plate, plateColor),
+      eventType: 'DEVICE',
+      direction,
+    })
+    pushLog(t('frigate.logRecognition', { plate }))
+
+    const flow = applyRecognitionToParkingSession(record)
+    if (flow.kind === 'entry') {
+      pushLog(t('frigate.logSessionOpened', { plate }))
+    } else if (flow.kind === 'exit_matched') {
+      pushLog(t('frigate.logSessionClosed', { plate }))
+    } else if (flow.kind === 'exit_unmatched') {
+      markRecognitionAbnormal(record.id, 'exit_unmatched')
+      pushLog(t('frigate.logSessionUnmatched', { plate }))
+    }
+
     if (!debugCamera.value.laneId) {
       pushLog(t('frigate.logUnbound'))
       return
@@ -578,6 +657,22 @@ async function simulateRecognition(): Promise<void> {
           <span>{{ t('frigate.simulatePlate') }}</span>
           <input v-model="simulatePlate" type="text" autocomplete="off" />
         </label>
+        <label v-if="needDirectionSelect">
+          <span>{{ t('frigate.simulateDirection') }}</span>
+          <select v-model="simulateDirection">
+            <option value="ENTRANCE">{{ t('recognitionRecords.directionEntrance') }}</option>
+            <option value="EXIT">{{ t('recognitionRecords.directionExit') }}</option>
+          </select>
+        </label>
+        <label>
+          <span>{{ t('systemSettings.plateColors') }}</span>
+          <select v-model="simulatePlateColor">
+            <option value="">-</option>
+            <option v-for="color in commonPlateColors" :key="color" :value="color">
+              {{ plateColorLabel(color) }}
+            </option>
+          </select>
+        </label>
         <div class="debug-actions">
           <button type="button" :disabled="debugBusy" @click="simulateRecognition">
             {{ t('frigate.simulateEvent') }}
@@ -650,11 +745,25 @@ label {
 input[type='text'],
 input[type='password'],
 input[type='number'],
-input[type='search'] {
+input[type='search'],
+select {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
   background: #fff;
+}
+
+select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 32px;
 }
 
 .checkbox {

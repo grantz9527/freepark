@@ -33,6 +33,10 @@ spring:
         jdbc:
           time_zone: UTC
     show-sql: false
+  servlet:
+    multipart:
+      max-file-size: ${MULTIPART_MAX_FILE_SIZE:20MB}
+      max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:20MB}
 
 management:
   endpoints:
