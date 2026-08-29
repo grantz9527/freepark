@@ -63,6 +63,8 @@ async function load(): Promise<void> {
     booth.value = await fetchBooth()
     if (!booth.value) {
       errorMessage.value = t('booths.viewNotFound')
+    } else {
+      await loadLatestRecognitions()
     }
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : t('booths.loadFailed')
@@ -71,20 +73,29 @@ async function load(): Promise<void> {
   }
 }
 
-function latestRecognition(laneId: string): RecognitionRecord | null {
-  const records = listRecognitionRecords()
-    .filter((record) => record.laneId === laneId && !record.voided)
-    .sort((a, b) => b.eventTime.localeCompare(a.eventTime))
-  return records[0] ?? null
-}
+const laneRecognitions = ref<Record<string, RecognitionRecord | null>>({})
 
-const laneRecognitions = computed(() => {
+async function loadLatestRecognitions(): Promise<void> {
+  const lanes = booth.value?.lanes ?? []
   const map: Record<string, RecognitionRecord | null> = {}
-  for (const lane of booth.value?.lanes ?? []) {
-    map[lane.id] = latestRecognition(lane.id)
+  if (lanes.length === 0) {
+    laneRecognitions.value = map
+    return
   }
-  return map
-})
+  try {
+    const records = await listRecognitionRecords(locale.value, { lotId: lotId.value })
+    for (const lane of lanes) {
+      const latest =
+        records
+          .filter((record) => record.laneId === lane.id && !record.voided)
+          .sort((a, b) => b.eventTime.localeCompare(a.eventTime))[0] ?? null
+      map[lane.id] = latest
+    }
+  } catch {
+    // 识别记录加载失败不影响岗亭主界面展示
+  }
+  laneRecognitions.value = map
+}
 
 function laneTypeLabel(laneType: string): string {
   if (laneType === 'ENTRANCE') {

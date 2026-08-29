@@ -92,12 +92,49 @@ public class Yolo26PlateClient implements SoftwarePlateClient {
 
     private final ObjectMapper objectMapper;
     private final HttpClient baseClient;
+    private final SystemSettingsService systemSettingsService;
 
-    public Yolo26PlateClient() {
+    public Yolo26PlateClient(SystemSettingsService systemSettingsService) {
         this.objectMapper = new ObjectMapper();
         this.baseClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
+        this.systemSettingsService = systemSettingsService;
+    }
+
+    /**
+     * 供 Frigate 事件补全等内部链路使用：不受「软件车牌识别」enabled 开关限制，
+     * 优先复用站点设置中的 yolo26 地址，未配置时回退默认本机 8780。
+     */
+    public DetectedPlate recognizeBestEffort(byte[] imageBytes, String imageId) {
+        if (imageBytes == null || imageBytes.length == 0) {
+            log.warn("yolo26-plate recognizeBestEffort skipped: empty image");
+            return null;
+        }
+        Yolo26PlateSettings s = systemSettingsService.getYolo26PlateSettings();
+        String baseUrl = (s.baseUrl() == null || s.baseUrl().isBlank())
+                ? SystemSettingsService.DEFAULT_YOLO26_BASE_URL
+                : s.baseUrl();
+        Double minConf = s.minConfidence() == null
+                ? SystemSettingsService.DEFAULT_YOLO26_MIN_CONF
+                : s.minConfidence();
+        Integer connectMs = s.connectTimeoutMs() == null
+                ? SystemSettingsService.DEFAULT_YOLO26_CONNECT_TIMEOUT_MS
+                : s.connectTimeoutMs();
+        Integer readMs = s.readTimeoutMs() == null
+                ? SystemSettingsService.DEFAULT_YOLO26_READ_TIMEOUT_MS
+                : s.readTimeoutMs();
+        try {
+            RecognitionResult result = recognize(
+                    new Yolo26PlateSettings(true, baseUrl, minConf, connectMs, readMs),
+                    imageBytes,
+                    imageId == null || imageId.isBlank() ? "frigate-lpr" : imageId,
+                    null);
+            return result.best();
+        } catch (Exception ex) {
+            log.warn("yolo26-plate recognizeBestEffort failed: {}", ex.getMessage());
+            return null;
+        }
     }
 
     @Override

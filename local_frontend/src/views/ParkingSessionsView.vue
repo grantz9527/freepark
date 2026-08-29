@@ -11,7 +11,6 @@ import {
   type ParkingSession,
   type ParkingSessionStatus,
 } from '@/hardware/parkingSessions'
-import { markRecognitionVoided } from '@/hardware/recognitionRecords'
 
 const LOT_STORAGE_KEY = 'freepark.parkingSessions.lotId'
 
@@ -42,12 +41,18 @@ async function loadLots(): Promise<void> {
   selectedLotId.value = match?.id ?? lots.value[0]?.id ?? ''
 }
 
-function refreshSessions(): void {
-  sessions.value = listParkingSessions({
-    lotId: selectedLotId.value || undefined,
-    keyword: appliedKeyword.value || undefined,
-    status: statusFilter.value || undefined,
-  })
+async function refreshSessions(): Promise<void> {
+  errorMessage.value = ''
+  try {
+    sessions.value = await listParkingSessions(locale.value, {
+      lotId: selectedLotId.value || undefined,
+      keyword: appliedKeyword.value || undefined,
+      status: statusFilter.value || undefined,
+    })
+  } catch (error) {
+    errorMessage.value =
+      error instanceof ApiError ? error.message : t('parkingSessions.loadFailed')
+  }
 }
 
 async function reload(): Promise<void> {
@@ -55,7 +60,7 @@ async function reload(): Promise<void> {
   errorMessage.value = ''
   try {
     await loadLots()
-    refreshSessions()
+    await refreshSessions()
   } catch (error) {
     errorMessage.value =
       error instanceof ApiError ? error.message : t('parkingSessions.loadFailed')
@@ -64,24 +69,24 @@ async function reload(): Promise<void> {
   }
 }
 
-function onLotChange(): void {
+async function onLotChange(): Promise<void> {
   sessionStorage.setItem(LOT_STORAGE_KEY, selectedLotId.value)
   appliedKeyword.value = ''
   searchInput.value = ''
   statusFilter.value = ''
-  refreshSessions()
+  await refreshSessions()
 }
 
-function onSearch(): void {
+async function onSearch(): Promise<void> {
   appliedKeyword.value = searchInput.value.trim()
-  refreshSessions()
+  await refreshSessions()
 }
 
-function onResetSearch(): void {
+async function onResetSearch(): Promise<void> {
   searchInput.value = ''
   appliedKeyword.value = ''
   statusFilter.value = ''
-  refreshSessions()
+  await refreshSessions()
 }
 
 function statusLabel(status: ParkingSessionStatus): string {
@@ -105,25 +110,21 @@ function closeVoidModal(): void {
   voidTarget.value = null
 }
 
-function confirmVoid(): void {
+async function confirmVoid(): Promise<void> {
   const session = voidTarget.value
   if (!session || voidSubmitting.value) {
     return
   }
   voidSubmitting.value = true
+  errorMessage.value = ''
   try {
-    const updated = voidParkingSession(session.id)
-    if (!updated) {
-      return
-    }
-    if (session.entryRecognitionId) {
-      markRecognitionVoided(session.entryRecognitionId)
-    }
-    if (session.exitRecognitionId) {
-      markRecognitionVoided(session.exitRecognitionId)
-    }
-    refreshSessions()
+    // 后端作废流水并联动标记关联识别记录为作废
+    await voidParkingSession(session.id, locale.value)
+    await refreshSessions()
     voidTarget.value = null
+  } catch (error) {
+    errorMessage.value =
+      error instanceof ApiError ? error.message : t('parkingSessions.loadFailed')
   } finally {
     voidSubmitting.value = false
   }
@@ -183,8 +184,6 @@ onUnmounted(() => {
 
 <template>
   <section class="page">
-    <p class="banner planning">{{ t('parkingSessions.planningHint') }}</p>
-
     <div class="lot-bar">
       <label class="lot-select">
         <span>{{ t('spaces.lotLabel') }}</span>

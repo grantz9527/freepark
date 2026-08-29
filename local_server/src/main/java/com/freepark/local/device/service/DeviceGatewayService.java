@@ -20,7 +20,7 @@ import com.freepark.local.domain.DeviceCommand;
 import com.freepark.local.domain.ParkingBarrier;
 import com.freepark.local.domain.ParkingBarrierRepository;
 import com.freepark.local.domain.RecognitionRecord;
-import com.freepark.local.domain.RecognitionRecordRepository;
+import com.freepark.local.recognition.service.RecognitionRecordService;
 
 /**
  * 识别设备接入网关核心编排：
@@ -32,20 +32,23 @@ import com.freepark.local.domain.RecognitionRecordRepository;
 public class DeviceGatewayService {
 
     private final ParkingBarrierRepository barriers;
-    private final RecognitionRecordRepository records;
+    private final RecognitionRecordService recognitionRecordService;
     private final DeviceCommandService commandService;
+    private final AutoRegisteredDeviceService autoDeviceService;
     private final ZhenshiProtocol defaultProtocol;
     private final Map<String, CameraProtocol> protocolsByBrand;
 
     public DeviceGatewayService(
             ParkingBarrierRepository barriers,
-            RecognitionRecordRepository records,
+            RecognitionRecordService recognitionRecordService,
             DeviceCommandService commandService,
+            AutoRegisteredDeviceService autoDeviceService,
             ZhenshiProtocol defaultProtocol,
             List<CameraProtocol> protocols) {
         this.barriers = barriers;
-        this.records = records;
+        this.recognitionRecordService = recognitionRecordService;
         this.commandService = commandService;
+        this.autoDeviceService = autoDeviceService;
         this.defaultProtocol = defaultProtocol;
         this.protocolsByBrand = protocols.stream()
                 .collect(Collectors.toMap(CameraProtocol::brand, Function.identity(), (a, b) -> a));
@@ -53,7 +56,15 @@ public class DeviceGatewayService {
 
     @Transactional
     public DevicePollResponse handlePoll(String code) {
-        ParkingBarrier device = requireDevice(code);
+        ParkingBarrier device = barriers.findByCodeIgnoreCase(code).orElse(null);
+        if (device == null) {
+            // 未登记的设备：自动注册到「识别一体机对接」，并返回空轮询响应
+            autoDeviceService.upsertOnPoll(code);
+            return DevicePollResponse.empty();
+        }
+        if (!device.isEnabled()) {
+            throw new BusinessException(ErrorCode.DEVICE_DISABLED);
+        }
         device.markPolled(Instant.now());
         DeviceCommand cmd = commandService.dequeueForDevice(device.getId()).orElse(null);
         return resolveProtocol(device).buildPollResponse(cmd);
@@ -71,11 +82,19 @@ public class DeviceGatewayService {
     public JsonNode handlePush(String brand, JsonNode pushData) {
         CameraProtocol protocol = resolveProtocolByBrand(brand);
         String deviceCode = protocol.extractDeviceId(pushData);
-        ParkingBarrier device = requireDevice(deviceCode);
+        ParkingBarrier device = barriers.findByCodeIgnoreCase(deviceCode).orElse(null);
+        if (device == null) {
+            // 未登记的设备：自动注册到「识别一体机对接」，返回不开闸，等待管理员收录并绑定车道
+            autoDeviceService.upsertOnPoll(deviceCode);
+            return protocol.buildPushResponse(false);
+        }
+        if (!device.isEnabled()) {
+            throw new BusinessException(ErrorCode.DEVICE_DISABLED);
+        }
         device.markPolled(Instant.now());
 
         RecognitionRecord record = protocol.parsePush(device, pushData);
-        records.save(record);
+        recognitionRecordService.saveDeviceRecord(record);
 
         Optional<DeviceCommand> pending = commandService.dequeueForDevice(device.getId());
         boolean openGate = pending.map(cmd -> cmd.getAction() == DeviceCommand.Action.OPEN).orElse(false);

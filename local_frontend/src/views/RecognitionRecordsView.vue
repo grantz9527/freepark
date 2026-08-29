@@ -6,11 +6,9 @@ import { ApiError, listLanes, listLots, type LaneView, type LotView, type PlateC
 import PlateBadge from '@/components/PlateBadge.vue'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { useSiteTime } from '@/composables/useSiteTime'
-import { applyRecognitionToParkingSession } from '@/hardware/parkingSessions'
 import {
   createRecognitionRecord,
   listRecognitionRecords,
-  markRecognitionAbnormal,
   type RecognitionDirection,
   type RecognitionEventType,
   type RecognitionRecord,
@@ -46,14 +44,19 @@ const formLaneId = ref('')
 const formEventTime = ref('')
 const formError = ref('')
 
-function refreshRecords(): void {
-  // localStorage 非响应式，需每次直接读取，避免 computed 缓存导致新增记录不刷新
-  records.value = listRecognitionRecords({
-    lotId: selectedLotId.value || undefined,
-    keyword: appliedKeyword.value || undefined,
-    eventType: eventTypeFilter.value || undefined,
-    abnormalOnly: abnormalOnly.value || undefined,
-  })
+async function refreshRecords(): Promise<void> {
+  errorMessage.value = ''
+  try {
+    records.value = await listRecognitionRecords(locale.value, {
+      lotId: selectedLotId.value || undefined,
+      keyword: appliedKeyword.value || undefined,
+      eventType: eventTypeFilter.value || undefined,
+      abnormalOnly: abnormalOnly.value || undefined,
+    })
+  } catch (error) {
+    errorMessage.value =
+      error instanceof ApiError ? error.message : t('recognitionRecords.loadFailed')
+  }
 }
 
 async function loadLots(): Promise<void> {
@@ -88,7 +91,7 @@ async function reload(): Promise<void> {
   try {
     await loadLots()
     await loadLanes()
-    refreshRecords()
+    await refreshRecords()
   } catch (error) {
     errorMessage.value =
       error instanceof ApiError ? error.message : t('recognitionRecords.loadFailed')
@@ -104,20 +107,20 @@ async function onLotChange(): Promise<void> {
   eventTypeFilter.value = ''
   abnormalOnly.value = false
   await loadLanes()
-  refreshRecords()
+  await refreshRecords()
 }
 
-function onSearch(): void {
+async function onSearch(): Promise<void> {
   appliedKeyword.value = searchInput.value.trim()
-  refreshRecords()
+  await refreshRecords()
 }
 
-function onResetSearch(): void {
+async function onResetSearch(): Promise<void> {
   searchInput.value = ''
   appliedKeyword.value = ''
   eventTypeFilter.value = ''
   abnormalOnly.value = false
-  refreshRecords()
+  await refreshRecords()
 }
 
 function eventTypeLabel(type: RecognitionEventType): string {
@@ -191,28 +194,30 @@ async function onSubmit(): Promise<void> {
   try {
     const lot = lots.value.find((item) => item.id === selectedLotId.value)
     const lane = lanes.value.find((item) => item.id === formLaneId.value) ?? null
-    const recognition = createRecognitionRecord({
-      lotId: selectedLotId.value,
-      lotName: lot?.name ?? '',
-      laneId: lane?.id ?? null,
-      laneName: lane?.name ?? null,
-      plateNumber: plate,
-      plateColor: formPlateColor.value,
-      eventTime,
-      eventType: 'MANUAL',
-      direction: formDirection.value,
-    })
-    // 与停车流水联动：入场生成在场流水，出场匹配并关闭流水，未匹配标记异常
-    const flow = applyRecognitionToParkingSession(recognition)
-    if (flow.kind === 'exit_unmatched') {
-      markRecognitionAbnormal(recognition.id, 'exit_unmatched')
-    }
+    // 后端保存识别记录并联动停车流水（入场开流水、出场匹配关闭、未匹配标记异常）
+    await createRecognitionRecord(
+      {
+        lotId: selectedLotId.value,
+        lotName: lot?.name ?? '',
+        laneId: lane?.id ?? null,
+        laneName: lane?.name ?? null,
+        plateNumber: plate,
+        plateColor: formPlateColor.value,
+        eventTime,
+        eventType: 'MANUAL',
+        direction: formDirection.value,
+      },
+      locale.value,
+    )
     showForm.value = false
-    refreshRecords()
+    await refreshRecords()
     successMessage.value = t('recognitionRecords.saveSuccess')
     window.setTimeout(() => {
       successMessage.value = ''
     }, 3000)
+  } catch (error) {
+    formError.value =
+      error instanceof ApiError ? error.message : t('recognitionRecords.saveFailed')
   } finally {
     submitting.value = false
   }
@@ -223,8 +228,6 @@ onMounted(reload)
 
 <template>
   <section class="page">
-    <p class="banner planning">{{ t('recognitionRecords.planningHint') }}</p>
-
     <div class="lot-bar">
       <label class="lot-select">
         <span>{{ t('spaces.lotLabel') }}</span>

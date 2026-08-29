@@ -18,7 +18,7 @@ import com.freepark.local.domain.ParkingBarrier;
 import com.freepark.local.domain.ParkingBarrierRepository;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.RecognitionRecord;
-import com.freepark.local.domain.RecognitionRecordRepository;
+import com.freepark.local.recognition.service.RecognitionRecordService;
 
 @Service
 public class FrigateEventHandler {
@@ -27,17 +27,17 @@ public class FrigateEventHandler {
 
     private final FrigateCameraRepository cameras;
     private final ParkingBarrierRepository barriers;
-    private final RecognitionRecordRepository recognitionRecords;
+    private final RecognitionRecordService recognitionRecordService;
     private final DeviceCommandService deviceCommands;
 
     public FrigateEventHandler(
             FrigateCameraRepository cameras,
             ParkingBarrierRepository barriers,
-            RecognitionRecordRepository recognitionRecords,
+            RecognitionRecordService recognitionRecordService,
             DeviceCommandService deviceCommands) {
         this.cameras = cameras;
         this.barriers = barriers;
-        this.recognitionRecords = recognitionRecords;
+        this.recognitionRecordService = recognitionRecordService;
         this.deviceCommands = deviceCommands;
     }
 
@@ -55,9 +55,15 @@ public class FrigateEventHandler {
         camera.setLinkStatus(FrigateLinkStatus.CONNECTED);
         cameras.save(camera);
 
-        // 1) 无论是否绑定通道/开启联动/有无道闸，必须写一条识别记录（关联 Frigate 相机）。
+        // 1) 无论是否绑定通道/开启联动/有无道闸，必须写一条识别记录（关联 Frigate 相机），并联动停车流水。
         String direction = toDirection(camera.getBindDirection());
-        recognitionRecords.save(new RecognitionRecord(camera, plate, plateColor, null, direction, now));
+        RecognitionRecord record = recognitionRecordService.saveCameraRecord(camera, plate, plateColor, direction, now);
+        log.info(
+                "Frigate event camera={} plate={} color={} recognition record saved id={}",
+                camera.getCameraName(),
+                plate,
+                plateColor == null ? "unknown" : plateColor.name(),
+                record.getId());
 
         // 2) 仅当绑定通道 + 开启联动时，才尝试联动道闸。
         if (camera.getLaneId() == null || !camera.isLinkageEnabled()) {
@@ -85,9 +91,19 @@ public class FrigateEventHandler {
         }
 
         for (ParkingBarrier barrier : laneBarriers) {
-            // 对于联动道闸，额外以「道闸来源」视角再写一条，保持设备侧查询可见。
-            recognitionRecords.save(new RecognitionRecord(barrier, plate, plateColor, null, direction, now));
-            deviceCommands.enqueueSystem(barrier.getId(), DeviceCommand.Action.OPEN, "frigate:" + camera.getCameraName());
+            // 只下发开闸指令，不再额外写「道闸来源」识别记录，避免一次事件产生两条重复记录。
+            // 开闸入队与识别记录解耦：独立事务执行，入队失败仅告警，不影响已写入的识别记录。
+            try {
+                deviceCommands.enqueueSystemDetached(
+                        barrier.getId(), DeviceCommand.Action.OPEN, "frigate:" + camera.getCameraName());
+            } catch (Exception ex) {
+                log.warn(
+                        "Frigate event camera={} plate={} open enqueue failed for barrier={}: {}",
+                        camera.getCameraName(),
+                        plate,
+                        barrier.getId(),
+                        ex.getMessage());
+            }
         }
         log.info(
                 "Frigate event camera={} plate={} color={} lane={} opened {} barrier(s)",

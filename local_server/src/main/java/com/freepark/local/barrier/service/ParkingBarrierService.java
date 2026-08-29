@@ -42,6 +42,74 @@ public class ParkingBarrierService {
                 .toList();
     }
 
+    /** 全局设备列表（识别一体机对接页使用），含未绑定车道的设备。 */
+    @Transactional(readOnly = true)
+    public List<BarrierView> listAll() {
+        return barriers.findAll().stream()
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .map(BarrierView::from)
+                .toList();
+    }
+
+    /** 全局创建设备（可暂不绑定车道，之后通过 bindToLane 绑定）。 */
+    @Transactional
+    public BarrierView createBarrier(UUID requesterId, CreateBarrierRequest request) {
+        requireAdmin(requesterId);
+        String code = request.code().trim();
+        if (barriers.findByCodeIgnoreCase(code).isPresent()) {
+            throw new BusinessException(ErrorCode.BARRIER_CODE_EXISTS);
+        }
+        boolean enabled = request.enabled() == null || request.enabled();
+        ParkingBarrier barrier = new ParkingBarrier(null, request.name(), code, enabled);
+        return BarrierView.from(barriers.save(barrier));
+    }
+
+    /** 全局更新设备信息（名称/启用状态）。 */
+    @Transactional
+    public BarrierView updateBarrier(UUID requesterId, UUID barrierId, UpdateBarrierRequest request) {
+        requireAdmin(requesterId);
+        ParkingBarrier barrier = requireBarrier(barrierId);
+        boolean enabled = request.enabled() == null ? barrier.isEnabled() : request.enabled();
+        barrier.updateDetails(request.name(), enabled);
+        return BarrierView.from(barriers.save(barrier));
+    }
+
+    /** 全局删除设备。 */
+    @Transactional
+    public void deleteBarrier(UUID requesterId, UUID barrierId) {
+        requireAdmin(requesterId);
+        ParkingBarrier barrier = requireBarrier(barrierId);
+        barriers.delete(barrier);
+    }
+
+    /** 将设备绑定到车道；设备与车道必须已存在，且目标车道内 code 不重复。 */
+    @Transactional
+    public BarrierView bindToLane(UUID requesterId, UUID barrierId, UUID laneId) {
+        requireAdmin(requesterId);
+        ParkingBarrier barrier = requireBarrier(barrierId);
+        ParkingLane lane = requireLane(laneId);
+        if (barrier.getLane() != null && barrier.getLane().getId().equals(laneId)) {
+            return BarrierView.from(barrier);
+        }
+        if (barriers.existsByLaneIdAndCodeIgnoreCase(laneId, barrier.getCode())) {
+            throw new BusinessException(ErrorCode.BARRIER_CODE_EXISTS);
+        }
+        barrier.setLane(lane);
+        return BarrierView.from(barriers.save(barrier));
+    }
+
+    /** 解绑设备与车道的绑定。 */
+    @Transactional
+    public BarrierView unbind(UUID requesterId, UUID barrierId) {
+        requireAdmin(requesterId);
+        ParkingBarrier barrier = requireBarrier(barrierId);
+        if (barrier.getLane() != null) {
+            barrier.setLane(null);
+            barriers.save(barrier);
+        }
+        return BarrierView.from(barrier);
+    }
+
     @Transactional
     public BarrierView createBarrier(UUID requesterId, UUID laneId, CreateBarrierRequest request) {
         requireAdmin(requesterId);
@@ -66,13 +134,25 @@ public class ParkingBarrierService {
         return BarrierView.from(barriers.save(barrier));
     }
 
+    @Transactional
+    public void deleteBarrier(UUID requesterId, UUID laneId, UUID barrierId) {
+        requireAdmin(requesterId);
+        requireLane(laneId);
+        ParkingBarrier barrier = requireBarrier(laneId, barrierId);
+        barriers.delete(barrier);
+    }
+
     private ParkingBarrier requireBarrier(UUID laneId, UUID barrierId) {
-        ParkingBarrier barrier = barriers.findById(barrierId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-        if (!barrier.getLane().getId().equals(laneId)) {
+        ParkingBarrier barrier = requireBarrier(barrierId);
+        if (barrier.getLane() == null || !barrier.getLane().getId().equals(laneId)) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         return barrier;
+    }
+
+    private ParkingBarrier requireBarrier(UUID barrierId) {
+        return barriers.findById(barrierId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     }
 
     private ParkingLane requireLane(UUID laneId) {

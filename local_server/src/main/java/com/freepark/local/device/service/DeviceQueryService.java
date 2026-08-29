@@ -60,7 +60,7 @@ public class DeviceQueryService {
 
     @Transactional(readOnly = true)
     public List<RecognitionRecord> listRecords(UUID deviceId, int limit) {
-        return records.findByDeviceIdOrderByCapturedAtDesc(
+        return records.findByDevice_IdOrderByCapturedAtDesc(
                 deviceId, PageRequest.of(0, Math.max(1, limit), Sort.by(Sort.Direction.DESC, "capturedAt")));
     }
 

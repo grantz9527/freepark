@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.freepark.local.domain.ParkingBarrier;
+import com.freepark.local.domain.ParkingLane;
 
 /**
  * 设备状态视图：包含由 lastPollAt 推导出的 online 在线标志。
@@ -24,6 +25,7 @@ public record DeviceStatusView(
         Instant updatedAt) {
 
     public static DeviceStatusView from(ParkingBarrier barrier, boolean online, long pendingCommands) {
+        ParkingLane lane = barrier.getLane();
         return new DeviceStatusView(
                 barrier.getId(),
                 barrier.getCode(),
@@ -33,9 +35,9 @@ public record DeviceStatusView(
                 online,
                 barrier.getLastPollAt(),
                 pendingCommands,
-                barrier.getLane().getId(),
-                barrier.getLane().getName(),
-                barrier.getLane().getCode(),
+                lane == null ? null : lane.getId(),
+                lane == null ? null : lane.getName(),
+                lane == null ? null : lane.getCode(),
                 barrier.getCreatedAt(),
                 barrier.getUpdatedAt());
     }

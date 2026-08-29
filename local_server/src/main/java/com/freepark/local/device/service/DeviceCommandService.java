@@ -9,6 +9,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.freepark.local.common.exception.BusinessException;
@@ -57,6 +58,15 @@ public class DeviceCommandService {
         return DeviceCommandView.from(cmd);
     }
 
+    /**
+     * Frigate 联动开闸入队：独立事务执行，与识别记录主流程解耦。
+     * 入队失败只回滚自身事务，不会污染调用方（识别记录）事务。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public DeviceCommandView enqueueSystemDetached(UUID deviceId, DeviceCommand.Action action, String source) {
+        return enqueueSystem(deviceId, action, source);
+    }
+
     private void requireAdmin(UUID userId) {
         LocalUser user = users.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
@@ -68,7 +78,7 @@ public class DeviceCommandService {
     /** 轮询出队：取最早一条 PENDING，标记 DELIVERED 后返回。无则返回 empty。 */
     @Transactional
     public Optional<DeviceCommand> dequeueForDevice(UUID deviceId) {
-        Optional<DeviceCommand> pending = commands.findFirstByDeviceIdAndStatusOrderByCreatedAtAsc(
+        Optional<DeviceCommand> pending = commands.findFirstByDevice_IdAndStatusOrderByCreatedAtAsc(
                 deviceId, DeviceCommand.Status.PENDING);
         pending.ifPresent(cmd -> cmd.markDelivered(Instant.now()));
         return pending;
@@ -76,12 +86,12 @@ public class DeviceCommandService {
 
     @Transactional(readOnly = true)
     public long countPending(UUID deviceId) {
-        return commands.countByDeviceIdAndStatus(deviceId, DeviceCommand.Status.PENDING);
+        return commands.countByDevice_IdAndStatus(deviceId, DeviceCommand.Status.PENDING);
     }
 
     @Transactional(readOnly = true)
     public List<DeviceCommandView> listPending(UUID deviceId) {
-        return commands.findByDeviceIdAndStatusOrderByCreatedAtDesc(deviceId, DeviceCommand.Status.PENDING)
+        return commands.findByDevice_IdAndStatusOrderByCreatedAtDesc(deviceId, DeviceCommand.Status.PENDING)
                 .stream()
                 .map(DeviceCommandView::from)
                 .toList();
@@ -90,7 +100,7 @@ public class DeviceCommandService {
     @Transactional(readOnly = true)
     public List<DeviceCommandView> listRecent(UUID deviceId, int limit) {
         Pageable pageable = PageRequest.of(0, Math.max(1, limit), Sort.by(Sort.Direction.DESC, "createdAt"));
-        return commands.findByDeviceIdOrderByCreatedAtDesc(deviceId, pageable)
+        return commands.findByDevice_IdOrderByCreatedAtDesc(deviceId, pageable)
                 .stream()
                 .map(DeviceCommandView::from)
                 .toList();

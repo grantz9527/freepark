@@ -52,6 +52,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/i18n").permitAll()
                         .requestMatchers("/api/v1/device-gateway/**").permitAll()
+                        .requestMatchers("/api/v1/images/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))

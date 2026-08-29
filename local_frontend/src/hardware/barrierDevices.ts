@@ -272,6 +272,16 @@ export function saveBarrierDevice(
   return next
 }
 
+/**
+ * 从本地规划存储中移除指定识别一体机（按 deviceId），返回更新后的设备列表。
+ */
+export function removeBarrierDevice(deviceId: string, existing: BarrierDevice[]): BarrierDevice[] {
+  if (!deviceId) return existing
+  const next = existing.filter((item) => item.id !== deviceId)
+  persist(next)
+  return next
+}
+
 export function setBarrierLinkStatus(
   deviceId: string,
   linkStatus: BarrierLinkStatus,

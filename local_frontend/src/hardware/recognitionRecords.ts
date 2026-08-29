@@ -1,89 +1,22 @@
-import type { PlateColor } from '@/api/client'
+import {
+  createRecognitionRecordApi,
+  listRecognitionRecordsApi,
+  markRecognitionAbnormalApi,
+  markRecognitionVoidedApi,
+  type CreateRecognitionRecordInput,
+  type ParkingFlowResult,
+  type PlateColor,
+  type RecognitionDirection,
+  type RecognitionEventType,
+  type RecognitionRecord,
+} from '@/api/client'
 
-const STORAGE_KEY = 'freepark.planning.recognitionRecords'
-const MAX_RECORDS = 500
-
-export type RecognitionEventType = 'MANUAL' | 'DEVICE'
-export type RecognitionDirection = 'ENTRANCE' | 'EXIT'
-
-export interface RecognitionRecord {
-  id: string
-  lotId: string
-  lotName: string
-  laneId: string | null
-  laneName: string | null
-  plateNumber: string
-  plateColor: PlateColor
-  /** ISO timestamp */
-  eventTime: string
-  /** Image URL or data URL; null when unavailable */
-  eventImage: string | null
-  eventType: RecognitionEventType
-  direction: RecognitionDirection | null
-  /** True when exit could not match an open entry session, etc. */
-  abnormal: boolean
-  abnormalReason: string | null
-  /** True when the linked parking session was voided. */
-  voided: boolean
-  sourceSimEventId?: string
-  createdAt: string
-}
-
-export interface CreateRecognitionRecordInput {
-  lotId: string
-  lotName: string
-  laneId?: string | null
-  laneName?: string | null
-  plateNumber: string
-  plateColor: PlateColor
-  eventTime?: string
-  eventImage?: string | null
-  eventType: RecognitionEventType
-  direction?: RecognitionDirection | null
-  abnormal?: boolean
-  abnormalReason?: string | null
-  sourceSimEventId?: string
-}
-
-function nowIso(): string {
-  return new Date().toISOString()
-}
-
-function newId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `rec-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
-
-function loadRecords(): RecognitionRecord[] {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) {
-    return []
-  }
-  try {
-    const parsed = JSON.parse(raw) as RecognitionRecord[]
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-    return parsed.map(normalizeRecord)
-  } catch {
-    return []
-  }
-}
-
-function normalizeRecord(item: RecognitionRecord): RecognitionRecord {
-  return {
-    ...item,
-    abnormal: Boolean(item.abnormal),
-    abnormalReason: item.abnormalReason ?? null,
-    voided: Boolean(item.voided),
-  }
-}
-
-function persist(records: RecognitionRecord[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records.slice(0, MAX_RECORDS)))
-}
+export type {
+  CreateRecognitionRecordInput,
+  RecognitionDirection,
+  RecognitionEventType,
+  RecognitionRecord,
+} from '@/api/client'
 
 /** Placeholder capture image for simulated device events. */
 export function buildSimEventImage(plateNumber: string, plateColor: PlateColor): string {
@@ -112,107 +45,39 @@ function escapeXml(value: string): string {
     .replace(/"/g, '&quot;')
 }
 
-export function listRecognitionRecords(filters?: {
-  lotId?: string
-  laneId?: string
-  keyword?: string
-  eventType?: RecognitionEventType
-  abnormalOnly?: boolean
-}): RecognitionRecord[] {
-  let items = loadRecords()
-  if (filters?.lotId) {
-    items = items.filter((item) => item.lotId === filters.lotId)
-  }
-  if (filters?.laneId) {
-    items = items.filter((item) => item.laneId === filters.laneId)
-  }
-  if (filters?.eventType) {
-    items = items.filter((item) => item.eventType === filters.eventType)
-  }
-  if (filters?.abnormalOnly) {
-    items = items.filter((item) => item.abnormal)
-  }
-  const keyword = filters?.keyword?.trim().toLowerCase()
-  if (keyword) {
-    items = items.filter(
-      (item) =>
-        item.plateNumber.toLowerCase().includes(keyword) ||
-        (item.laneName ?? '').toLowerCase().includes(keyword) ||
-        (item.lotName ?? '').toLowerCase().includes(keyword),
-    )
-  }
-  return items
+export async function listRecognitionRecords(
+  locale: string,
+  filters?: {
+    lotId?: string
+    laneId?: string
+    keyword?: string
+    eventType?: RecognitionEventType
+    abnormalOnly?: boolean
+  },
+): Promise<RecognitionRecord[]> {
+  const result = await listRecognitionRecordsApi(locale, filters ?? {})
+  return result.data
 }
 
-export function createRecognitionRecord(input: CreateRecognitionRecordInput): RecognitionRecord {
-  const stamp = input.eventTime?.trim() || nowIso()
-  const record: RecognitionRecord = {
-    id: newId(),
-    lotId: input.lotId,
-    lotName: input.lotName.trim(),
-    laneId: input.laneId ?? null,
-    laneName: input.laneName?.trim() || null,
-    plateNumber: input.plateNumber.trim().toUpperCase(),
-    plateColor: input.plateColor,
-    eventTime: stamp,
-    eventImage: input.eventImage ?? null,
-    eventType: input.eventType,
-    direction: input.direction ?? null,
-    abnormal: Boolean(input.abnormal),
-    abnormalReason: input.abnormalReason ?? null,
-    voided: false,
-    sourceSimEventId: input.sourceSimEventId,
-    createdAt: nowIso(),
-  }
-  persist([record, ...loadRecords()].slice(0, MAX_RECORDS))
-  return record
+/** 创建识别记录，后端会联动停车流水并自动标记异常（exit_unmatched）。 */
+export function createRecognitionRecord(
+  input: CreateRecognitionRecordInput,
+  locale: string,
+): Promise<ParkingFlowResult> {
+  return createRecognitionRecordApi(input, locale).then((result) => result.data)
 }
 
-export function markRecognitionAbnormal(
+export async function markRecognitionAbnormal(
   recordId: string,
   reason: string,
-): RecognitionRecord | null {
-  let updated: RecognitionRecord | null = null
-  const next = loadRecords().map((item) => {
-    if (item.id !== recordId) {
-      return item
-    }
-    updated = {
-      ...item,
-      abnormal: true,
-      abnormalReason: reason,
-    }
-    return updated
-  })
-  if (updated) {
-    persist(next)
-  }
-  return updated
+  locale: string,
+): Promise<RecognitionRecord> {
+  const result = await markRecognitionAbnormalApi(recordId, reason, locale)
+  return result.data
 }
 
-/** Mark a recognition record as voided (e.g. its linked session was voided). */
-export function markRecognitionVoided(recordId: string): RecognitionRecord | null {
-  let updated: RecognitionRecord | null = null
-  const next = loadRecords().map((item) => {
-    if (item.id !== recordId) {
-      return item
-    }
-    updated = {
-      ...item,
-      voided: true,
-    }
-    return updated
-  })
-  if (updated) {
-    persist(next)
-  }
-  return updated
-}
-
-export function clearRecognitionRecords(lotId?: string): void {
-  if (!lotId) {
-    persist([])
-    return
-  }
-  persist(loadRecords().filter((item) => item.lotId !== lotId))
+/** 标记识别记录为作废（例如其关联停车流水被作废）。 */
+export async function markRecognitionVoided(recordId: string, locale: string): Promise<RecognitionRecord> {
+  const result = await markRecognitionVoidedApi(recordId, locale)
+  return result.data
 }

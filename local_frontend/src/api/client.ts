@@ -251,14 +251,42 @@ export function updateLane(
 
 export interface BarrierView {
   id: string
-  laneId: string
-  laneName: string
-  laneCode: string
+  laneId: string | null
+  laneName: string | null
+  laneCode: string | null
   name: string
   code: string
   enabled: boolean
   createdAt: string
   updatedAt: string
+}
+
+/** 设备轮询网关时自动发现并登记的识别设备。 */
+export interface AutoRegisteredDeviceView {
+  id: string
+  code: string
+  name: string
+  brand: string | null
+  lastPollAt: string | null
+  createdAt: string
+}
+
+export function listAutoRegisteredDevices(locale: string): Promise<ApiResponse<AutoRegisteredDeviceView[]>> {
+  return apiCall('/api/v1/auto-devices', { method: 'GET' }, locale)
+}
+
+export function deleteAutoRegisteredDevice(
+  deviceId: string,
+  locale: string,
+): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/auto-devices/${deviceId}`, { method: 'DELETE' }, locale)
+}
+
+export function adoptAutoRegisteredDevice(
+  deviceId: string,
+  locale: string,
+): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/auto-devices/${deviceId}/adopt`, { method: 'POST' }, locale)
 }
 
 export function listBarriers(laneId: string, locale: string): Promise<ApiResponse<BarrierView[]>> {
@@ -303,6 +331,78 @@ export function updateBarrier(
     },
     locale,
   )
+}
+
+/** 全局设备列表（识别一体机对接页），含未绑定车道的设备。 */
+export function listAllBarriers(locale: string): Promise<ApiResponse<BarrierView[]>> {
+  return apiCall('/api/v1/barriers', { method: 'GET' }, locale)
+}
+
+/** 全局创建设备（可暂不绑定车道）。 */
+export function createBarrierGlobal(
+  payload: {
+    name: string
+    code: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<BarrierView>> {
+  return apiCall(
+    '/api/v1/barriers',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+/** 全局更新设备信息。 */
+export function updateBarrierGlobal(
+  barrierId: string,
+  payload: {
+    name: string
+    enabled?: boolean
+  },
+  locale: string,
+): Promise<ApiResponse<BarrierView>> {
+  return apiCall(
+    `/api/v1/barriers/${barrierId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+/** 全局删除设备。 */
+export function deleteBarrierGlobal(barrierId: string, locale: string): Promise<ApiResponse<null>> {
+  return apiCall(`/api/v1/barriers/${barrierId}`, { method: 'DELETE' }, locale)
+}
+
+/** 绑定设备到车道。 */
+export function bindBarrier(
+  barrierId: string,
+  laneId: string,
+  locale: string,
+): Promise<ApiResponse<BarrierView>> {
+  return apiCall(
+    `/api/v1/barriers/${barrierId}/bind`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ laneId }),
+    },
+    locale,
+  )
+}
+
+/** 解绑设备与车道。 */
+export function unbindBarrier(barrierId: string, locale: string): Promise<ApiResponse<BarrierView>> {
+  return apiCall(`/api/v1/barriers/${barrierId}/bind`, { method: 'DELETE' }, locale)
 }
 
 export function updateLot(
@@ -1526,4 +1626,164 @@ export function simulateFrigateEventApi(
 export function frigateEventTopic(cameraName: string, topicPrefix: string): string {
   const prefix = topicPrefix.replace(/\/+$/, '')
   return `${prefix}/${cameraName}`
+}
+
+// ===== 识别记录 / 停车流水（数据库版） =====
+
+export type RecognitionEventType = 'MANUAL' | 'DEVICE'
+export type RecognitionDirection = 'ENTRANCE' | 'EXIT'
+
+export interface RecognitionRecord {
+  id: string
+  lotId: string | null
+  lotName: string | null
+  laneId: string | null
+  laneName: string | null
+  plateNumber: string
+  plateColor: PlateColor
+  /** ISO timestamp */
+  eventTime: string
+  /** Image URL or data URL; null when unavailable */
+  eventImage: string | null
+  eventType: RecognitionEventType
+  direction: RecognitionDirection | null
+  /** True when exit could not match an open entry session, etc. */
+  abnormal: boolean
+  abnormalReason: string | null
+  /** True when the linked parking session was voided. */
+  voided: boolean
+  sourceSimEventId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateRecognitionRecordInput {
+  lotId: string | null
+  lotName?: string | null
+  laneId?: string | null
+  laneName?: string | null
+  plateNumber: string
+  plateColor: PlateColor
+  eventTime?: string
+  eventImage?: string | null
+  eventType: RecognitionEventType
+  direction?: RecognitionDirection | null
+  abnormal?: boolean
+  abnormalReason?: string | null
+  sourceSimEventId?: string | null
+}
+
+export type ParkingSessionStatus = 'OPEN' | 'CLOSED' | 'VOIDED'
+
+export interface ParkingSession {
+  id: string
+  lotId: string | null
+  lotName: string | null
+  plateNumber: string
+  plateColor: PlateColor
+  status: ParkingSessionStatus
+  entryTime: string
+  entryLaneId: string | null
+  entryLaneName: string | null
+  entryRecognitionId: string | null
+  entryImage: string | null
+  exitTime: string | null
+  exitLaneId: string | null
+  exitLaneName: string | null
+  exitRecognitionId: string | null
+  exitImage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ParkingFlowResult =
+  | { kind: 'entry'; session: ParkingSession }
+  | { kind: 'exit_matched'; session: ParkingSession }
+  | { kind: 'exit_unmatched'; session: null }
+  | { kind: 'skipped'; session: null }
+
+export function listRecognitionRecordsApi(
+  locale: string,
+  params: {
+    lotId?: string
+    laneId?: string
+    keyword?: string
+    eventType?: RecognitionEventType
+    abnormalOnly?: boolean
+  } = {},
+): Promise<ApiResponse<RecognitionRecord[]>> {
+  const query = new URLSearchParams()
+  if (params.lotId) query.set('lotId', params.lotId)
+  if (params.laneId) query.set('laneId', params.laneId)
+  if (params.keyword) query.set('keyword', params.keyword)
+  if (params.eventType) query.set('eventType', params.eventType)
+  if (params.abnormalOnly) query.set('abnormalOnly', 'true')
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return apiCall(`/api/v1/recognition-records${suffix}`, { method: 'GET' }, locale)
+}
+
+export function createRecognitionRecordApi(
+  payload: CreateRecognitionRecordInput,
+  locale: string,
+): Promise<ApiResponse<ParkingFlowResult>> {
+  return apiCall(
+    '/api/v1/recognition-records',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function markRecognitionAbnormalApi(
+  recordId: string,
+  reason: string,
+  locale: string,
+): Promise<ApiResponse<RecognitionRecord>> {
+  return apiCall(
+    `/api/v1/recognition-records/${recordId}/abnormal`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    },
+    locale,
+  )
+}
+
+export function markRecognitionVoidedApi(
+  recordId: string,
+  locale: string,
+): Promise<ApiResponse<RecognitionRecord>> {
+  return apiCall(`/api/v1/recognition-records/${recordId}/voided`, { method: 'POST' }, locale)
+}
+
+export function listParkingSessionsApi(
+  locale: string,
+  params: { lotId?: string; keyword?: string; status?: ParkingSessionStatus } = {},
+): Promise<ApiResponse<ParkingSession[]>> {
+  const query = new URLSearchParams()
+  if (params.lotId) query.set('lotId', params.lotId)
+  if (params.keyword) query.set('keyword', params.keyword)
+  if (params.status) query.set('status', params.status)
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return apiCall(`/api/v1/parking-sessions${suffix}`, { method: 'GET' }, locale)
+}
+
+export function hasOpenParkingSessionApi(
+  lotId: string,
+  plateNumber: string,
+  locale: string,
+): Promise<ApiResponse<boolean>> {
+  const query = new URLSearchParams({ lotId, plateNumber })
+  return apiCall(`/api/v1/parking-sessions/has-open?${query.toString()}`, { method: 'GET' }, locale)
+}
+
+export function voidParkingSessionApi(
+  sessionId: string,
+  locale: string,
+): Promise<ApiResponse<ParkingSession>> {
+  return apiCall(`/api/v1/parking-sessions/${sessionId}/void`, { method: 'POST' }, locale)
 }

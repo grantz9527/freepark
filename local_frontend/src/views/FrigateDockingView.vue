@@ -24,13 +24,7 @@ import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { listBarrierDevices, type BarrierDevice } from '@/hardware/barrierDevices'
-import {
-  buildSimEventImage,
-  createRecognitionRecord,
-  markRecognitionAbnormal,
-  type RecognitionDirection,
-} from '@/hardware/recognitionRecords'
-import { applyRecognitionToParkingSession } from '@/hardware/parkingSessions'
+import type { RecognitionDirection } from '@/hardware/recognitionRecords'
 import type { PlateColor } from '@/api/client'
 
 interface EventLog {
@@ -388,19 +382,6 @@ function linkedBarriers(camera: FrigateCameraView): BarrierDevice[] {
   })
 }
 
-function effectiveSimDirection(): RecognitionDirection {
-  const lane = debugCameraLane.value
-  const camera = debugCamera.value
-  if (!lane) {
-    return simulateDirection.value
-  }
-  if (lane.laneType === 'BIDIRECTIONAL') {
-    if (camera?.bindDirection) return camera.bindDirection as RecognitionDirection
-    return simulateDirection.value
-  }
-  return lane.laneType === 'EXIT' ? 'EXIT' : 'ENTRANCE'
-}
-
 async function simulateRecognition(): Promise<void> {
   if (!debugCamera.value || !server.value) {
     return
@@ -419,12 +400,6 @@ async function simulateRecognition(): Promise<void> {
     pushLog(t('systemSettings.plateColors') + ' -')
     return
   }
-  const direction = effectiveSimDirection()
-  const lane = debugCameraLane.value
-  const lotId = lane?.lotId ?? ''
-  const lotName = lane?.lotName ?? t('frigate.unbound')
-  const laneId = lane?.id ?? null
-  const laneName = lane?.name ?? (debugCamera.value.laneId ? t('frigate.unbound') : null)
 
   debugBusy.value = true
   barriers.value = listBarrierDevices()
@@ -444,29 +419,8 @@ async function simulateRecognition(): Promise<void> {
     upsertCamera(result.data)
     debugCamera.value = result.data
 
-    // 写入本地「识别记录」与「停车会话（流水）」，确保管理页面可以看到模拟事件的链路。
-    const record = createRecognitionRecord({
-      lotId,
-      lotName,
-      laneId,
-      laneName,
-      plateNumber: plate,
-      plateColor,
-      eventImage: buildSimEventImage(plate, plateColor),
-      eventType: 'DEVICE',
-      direction,
-    })
+    // 识别记录与停车流水联动已由后端在事件链路中完成
     pushLog(t('frigate.logRecognition', { plate }))
-
-    const flow = applyRecognitionToParkingSession(record)
-    if (flow.kind === 'entry') {
-      pushLog(t('frigate.logSessionOpened', { plate }))
-    } else if (flow.kind === 'exit_matched') {
-      pushLog(t('frigate.logSessionClosed', { plate }))
-    } else if (flow.kind === 'exit_unmatched') {
-      markRecognitionAbnormal(record.id, 'exit_unmatched')
-      pushLog(t('frigate.logSessionUnmatched', { plate }))
-    }
 
     if (!debugCamera.value.laneId) {
       pushLog(t('frigate.logUnbound'))

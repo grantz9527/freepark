@@ -26,6 +26,7 @@ import com.freepark.local.domain.PlateColor;
 import com.freepark.local.softwareplate.SoftwarePlateClient;
 import com.freepark.local.softwareplate.SoftwarePlateProvider;
 import com.freepark.local.softwareplate.dto.HyperLpr3Settings;
+import com.freepark.local.sitesettings.service.SystemSettingsService;
 import com.freepark.local.yolo26plate.Yolo26PlateClient;
 
 @Service
@@ -37,12 +38,49 @@ public class HyperLpr3Client implements SoftwarePlateClient {
 
     private final ObjectMapper objectMapper;
     private final HttpClient baseClient;
+    private final SystemSettingsService systemSettingsService;
 
-    public HyperLpr3Client() {
+    public HyperLpr3Client(SystemSettingsService systemSettingsService) {
         this.objectMapper = new ObjectMapper();
         this.baseClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
+        this.systemSettingsService = systemSettingsService;
+    }
+
+    /**
+     * 供 Frigate 事件补全等内部链路使用：不受「软件车牌识别」enabled 开关限制，
+     * 优先复用站点设置中的 HyperLPR3 地址，未配置时回退默认本机 8715。
+     */
+    public Yolo26PlateClient.DetectedPlate recognizeBestEffort(byte[] imageBytes, String imageId) {
+        if (imageBytes == null || imageBytes.length == 0) {
+            log.warn("hyperlpr3 recognizeBestEffort skipped: empty image");
+            return null;
+        }
+        HyperLpr3Settings s = systemSettingsService.getHyperLpr3Settings();
+        String baseUrl = (s.baseUrl() == null || s.baseUrl().isBlank())
+                ? SystemSettingsService.DEFAULT_HYPER_LPR3_BASE_URL
+                : s.baseUrl();
+        Double minConf = s.minConfidence() == null
+                ? SystemSettingsService.DEFAULT_HYPER_LPR3_MIN_CONF
+                : s.minConfidence();
+        Integer connectMs = s.connectTimeoutMs() == null
+                ? SystemSettingsService.DEFAULT_HYPER_LPR3_CONNECT_TIMEOUT_MS
+                : s.connectTimeoutMs();
+        Integer readMs = s.readTimeoutMs() == null
+                ? SystemSettingsService.DEFAULT_HYPER_LPR3_READ_TIMEOUT_MS
+                : s.readTimeoutMs();
+        try {
+            Yolo26PlateClient.RecognitionResult result = recognize(
+                    new HyperLpr3Settings(true, baseUrl, minConf, connectMs, readMs),
+                    imageBytes,
+                    imageId == null || imageId.isBlank() ? "frigate-lpr" : imageId,
+                    null);
+            return result.best();
+        } catch (Exception ex) {
+            log.warn("hyperlpr3 recognizeBestEffort failed: {}", ex.getMessage());
+            return null;
+        }
     }
 
     @Override
@@ -228,9 +266,14 @@ public class HyperLpr3Client implements SoftwarePlateClient {
     }
 
     private static byte[] buildMultipartBody(String boundary, String imageId, String originalName, byte[] image) {
-        String filename = (originalName != null && !originalName.isBlank()) ? originalName
+        String raw = (originalName != null && !originalName.isBlank()) ? originalName
                 : (imageId != null && !imageId.isBlank()) ? imageId : "image.png";
-        String mime = filename.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+        String lower = raw.toLowerCase();
+        // HyperLPR3 强制校验文件名后缀（png/jpg/jpe），Frigate 事件ID 无后缀会被拒(5007)，这里兜底补 .jpg
+        String filename = (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpe"))
+                ? raw
+                : raw + ".jpg";
+        String mime = lower.endsWith(".png") ? "image/png" : "image/jpeg";
         String CRLF = "\r\n";
         StringBuilder sb = new StringBuilder();
         sb.append("--").append(boundary).append(CRLF);

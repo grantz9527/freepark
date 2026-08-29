@@ -1,10 +1,10 @@
 package com.freepark.local.device.controller;
 
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import tools.jackson.databind.JsonNode;
@@ -34,8 +34,10 @@ public class DeviceGatewayController {
     /**
      * 设备轮询：返回待执行指令；无指令时 action="none"。
      * 适用于轮询模型的设备（如臻识老款一体机）。
+     * 兼容不同设备的轮询习惯：部分老款一体机使用 POST 轮询（body 多为 multipart 或空），
+     * 轮询逻辑不读取请求体，故同时接受 GET 与 POST，POST 的 body 直接忽略。
      */
-    @GetMapping("/{code}/poll")
+    @RequestMapping(value = "/{code}/poll", method = {RequestMethod.GET, RequestMethod.POST})
     public DevicePollResponse poll(@PathVariable String code) {
         return gatewayService.handlePoll(code);
     }

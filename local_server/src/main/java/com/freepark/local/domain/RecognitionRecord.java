@@ -40,6 +40,22 @@ public class RecognitionRecord extends BaseEntity {
     @Column(name = "lane_id")
     private UUID laneId;
 
+    /** 通道名称快照。 */
+    @Column(name = "lane_name", length = 120)
+    private String laneName;
+
+    /** 所属车场（冗余快照，来源无关查询用）。 */
+    @Column(name = "lot_id")
+    private UUID lotId;
+
+    /** 车场名称快照。 */
+    @Column(name = "lot_name", length = 120)
+    private String lotName;
+
+    /** 模拟事件的来源标识（用于去重/追溯）。 */
+    @Column(name = "source_sim_event_id", length = 64)
+    private String sourceSimEventId;
+
     @Column(nullable = false, length = 32)
     private String plate;
 
@@ -52,9 +68,29 @@ public class RecognitionRecord extends BaseEntity {
     @Column(length = 512)
     private String imageRef;
 
+    /** 抓拍图像（模拟/手工录入时为 data URL，如 SVG 快照）。 */
+    @Column(columnDefinition = "TEXT")
+    private String eventImage;
+
     /** 方向：IN/OUT 等，由设备协议决定。 */
     @Column(length = 32)
     private String direction;
+
+    /** 来源类型：设备识别 / 手工录入。 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "event_type", length = 32)
+    private RecognitionEventType eventType = RecognitionEventType.DEVICE;
+
+    @Column(nullable = false)
+    private boolean abnormal = false;
+
+    /** 异常原因，如 exit_unmatched / not_internal_vehicle。 */
+    @Column(length = 64)
+    private String abnormalReason;
+
+    /** 关联停车流水作废时同步置位。 */
+    @Column(nullable = false)
+    private boolean voided = false;
 
     @Column(nullable = false)
     private Instant capturedAt;
@@ -96,6 +132,36 @@ public class RecognitionRecord extends BaseEntity {
         this.capturedAt = capturedAt;
     }
 
+    /** 手工录入（无设备/相机来源）的构造方法。 */
+    public RecognitionRecord(
+            String plate,
+            PlateColor plateColor,
+            String eventImage,
+            RecognitionEventType eventType,
+            String direction,
+            Instant capturedAt,
+            UUID lotId,
+            String lotName,
+            UUID laneId,
+            String laneName,
+            String sourceSimEventId,
+            boolean abnormal,
+            String abnormalReason) {
+        this.plate = plate == null ? "" : plate.trim();
+        this.plateColor = plateColor;
+        this.eventImage = eventImage;
+        this.eventType = eventType == null ? RecognitionEventType.DEVICE : eventType;
+        this.direction = direction;
+        this.capturedAt = capturedAt;
+        this.lotId = lotId;
+        this.lotName = lotName;
+        this.laneId = laneId;
+        this.laneName = laneName;
+        this.sourceSimEventId = sourceSimEventId;
+        this.abnormal = abnormal;
+        this.abnormalReason = abnormalReason;
+    }
+
     public ParkingBarrier getDevice() {
         return device;
     }
@@ -110,6 +176,38 @@ public class RecognitionRecord extends BaseEntity {
 
     public void setLaneId(UUID laneId) {
         this.laneId = laneId;
+    }
+
+    public String getLaneName() {
+        return laneName;
+    }
+
+    public void setLaneName(String laneName) {
+        this.laneName = laneName;
+    }
+
+    public UUID getLotId() {
+        return lotId;
+    }
+
+    public void setLotId(UUID lotId) {
+        this.lotId = lotId;
+    }
+
+    public String getLotName() {
+        return lotName;
+    }
+
+    public void setLotName(String lotName) {
+        this.lotName = lotName;
+    }
+
+    public String getSourceSimEventId() {
+        return sourceSimEventId;
+    }
+
+    public void setSourceSimEventId(String sourceSimEventId) {
+        this.sourceSimEventId = sourceSimEventId;
     }
 
     public String getPlate() {
@@ -130,6 +228,50 @@ public class RecognitionRecord extends BaseEntity {
 
     public String getDirection() {
         return direction;
+    }
+
+    public void setDirection(String direction) {
+        this.direction = direction;
+    }
+
+    public RecognitionEventType getEventType() {
+        return eventType;
+    }
+
+    public void setEventType(RecognitionEventType eventType) {
+        this.eventType = eventType == null ? RecognitionEventType.DEVICE : eventType;
+    }
+
+    public String getEventImage() {
+        return eventImage;
+    }
+
+    public void setEventImage(String eventImage) {
+        this.eventImage = eventImage;
+    }
+
+    public boolean isAbnormal() {
+        return abnormal;
+    }
+
+    public void setAbnormal(boolean abnormal) {
+        this.abnormal = abnormal;
+    }
+
+    public String getAbnormalReason() {
+        return abnormalReason;
+    }
+
+    public void setAbnormalReason(String abnormalReason) {
+        this.abnormalReason = abnormalReason;
+    }
+
+    public boolean isVoided() {
+        return voided;
+    }
+
+    public void setVoided(boolean voided) {
+        this.voided = voided;
     }
 
     public Instant getCapturedAt() {

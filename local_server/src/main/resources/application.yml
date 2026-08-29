@@ -49,6 +49,9 @@ management:
         enabled: true
 
 freepark:
+  frigate:
+    # 同一相机识别出同一合法车牌后的入库去重窗口（毫秒）
+    plate-dedup-window-ms: ${FRIGATE_PLATE_DEDUP_WINDOW_MS:30000}
   jwt:
     secret: ${JWT_SECRET:freepark-local-dev-secret-change-me-32}
     ttl: 12h

@@ -5,14 +5,18 @@ import { useI18n } from 'vue-i18n'
 
 import {
   ApiError,
+  bindBarrier,
   bindFrigateCameraApi,
   createLane,
+  listAllBarriers,
   listFrigateCamerasApi,
   listLanes,
   listLots,
   postAccessDecision,
+  unbindBarrier,
   unbindFrigateCameraApi,
   updateLane,
+  type BarrierView,
   type FrigateBindDirection,
   type FrigateCameraView,
   type LaneType,
@@ -23,13 +27,7 @@ import {
 import { getUser } from '@/auth/session'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { useSiteTime } from '@/composables/useSiteTime'
-import {
-  bindBarrierToLane,
-  listBarrierDevices,
-  unbindBarrier,
-  type BarrierBindDirection,
-  type BarrierDevice,
-} from '@/hardware/barrierDevices'
+import type { BarrierBindDirection } from '@/hardware/barrierDevices'
 import {
   bindIotDeviceToLane,
   listIotDevices,
@@ -52,9 +50,8 @@ import {
 import {
   buildSimEventImage,
   createRecognitionRecord,
-  markRecognitionAbnormal,
 } from '@/hardware/recognitionRecords'
-import { applyRecognitionToParkingSession, hasOpenParkingSession } from '@/hardware/parkingSessions'
+import { hasOpenParkingSession } from '@/hardware/parkingSessions'
 import { siteAllowedPlateColors, siteDefaultPlateColor } from '@/site/settings'
 
 const LOT_STORAGE_KEY = 'freepark.lanes.lotId'
@@ -84,10 +81,10 @@ const searchQuery = ref('')
 const interceptByLaneId = ref<Record<string, PlateColor[]>>({})
 
 const barrierLane = ref<LaneView | null>(null)
-const barrierDevices = ref<BarrierDevice[]>([])
+const barrierDevices = ref<BarrierView[]>([])
 const bindDeviceId = ref('')
-const bindDirection = ref<BarrierBindDirection | ''>('')
 const bindError = ref('')
+const bindBusy = ref(false)
 
 const frigateLane = ref<LaneView | null>(null)
 const frigateCameras = ref<FrigateCameraView[]>([])
@@ -141,7 +138,6 @@ const filteredLanes = computed(() => {
 })
 const isSearching = computed(() => searchQuery.value.trim().length > 0)
 const linkedLotOptions = computed(() => lots.value.filter((lot) => lot.id !== formLotId.value))
-const isBidirectionalLane = computed(() => barrierLane.value?.laneType === 'BIDIRECTIONAL')
 const isBidirectionalFrigateLane = computed(() => frigateLane.value?.laneType === 'BIDIRECTIONAL')
 const isBidirectionalIotLane = computed(() => iotLane.value?.laneType === 'BIDIRECTIONAL')
 
@@ -181,7 +177,7 @@ async function reload(): Promise<void> {
   try {
     await loadLots()
     await loadLanes()
-    refreshBarrierDevices()
+    await refreshBarrierDevices()
     refreshIotDevices()
     await refreshFrigateCameras()
     refreshPlateIntercept()
@@ -361,18 +357,23 @@ function toggleInterceptColor(color: PlateColor, checked: boolean): void {
   formInterceptColors.value = formInterceptColors.value.filter((item) => item !== color)
 }
 
-function refreshBarrierDevices(): void {
-  barrierDevices.value = listBarrierDevices()
+async function refreshBarrierDevices(): Promise<void> {
+  try {
+    const result = await listAllBarriers(locale.value)
+    barrierDevices.value = result.data
+  } catch {
+    barrierDevices.value = []
+  }
 }
 
-function boundDevices(laneId: string): BarrierDevice[] {
+function boundDevices(laneId: string): BarrierView[] {
   return barrierDevices.value.filter((item) => item.laneId === laneId)
 }
 
 function boundDeviceNames(laneId: string): string {
   const lane = lanes.value.find((item) => item.id === laneId)
   const names = boundDevices(laneId).map((item) => {
-    const direction = bindDirectionOf(item, lane)
+    const direction = bindDirectionOf(lane)
     if (!direction) {
       return item.name
     }
@@ -381,82 +382,75 @@ function boundDeviceNames(laneId: string): string {
   return names.length > 0 ? names.join(' · ') : t('lanes.noBarrier')
 }
 
-function availableDevices(): BarrierDevice[] {
-  return barrierDevices.value.filter(
-    (item) => item.enabled && item.linkStatus === 'CONNECTED' && !item.laneId,
-  )
+function availableDevices(): BarrierView[] {
+  return barrierDevices.value.filter((item) => item.enabled && !item.laneId)
 }
 
 function bindDirectionLabel(direction: BarrierBindDirection): string {
   return direction === 'EXIT' ? t('barriers.bindDirectionExit') : t('barriers.bindDirectionEntrance')
 }
 
-function bindDirectionOf(
-  device: BarrierDevice,
-  lane: LaneView | undefined,
-): BarrierBindDirection | null {
+function bindDirectionOf(lane: LaneView | undefined): BarrierBindDirection | null {
   if (lane && lane.laneType !== 'BIDIRECTIONAL') {
     return lane.laneType === 'EXIT' ? 'EXIT' : 'ENTRANCE'
   }
-  return device.bindDirection
+  return null
 }
 
-function bindDirectionText(
-  device: BarrierDevice,
-  lane: LaneView | undefined,
-): string {
-  const direction = bindDirectionOf(device, lane)
+function bindDirectionText(lane: LaneView | undefined): string {
+  const direction = bindDirectionOf(lane)
   return direction ? bindDirectionLabel(direction) : t('barriers.bindDirectionUnknown')
 }
 
 function openBarrierPanel(lane: LaneView): void {
   barrierLane.value = lane
   bindDeviceId.value = ''
-  bindDirection.value = ''
   bindError.value = ''
-  refreshBarrierDevices()
+  bindBusy.value = false
+  void refreshBarrierDevices()
 }
 
 function closeBarrierPanel(): void {
   barrierLane.value = null
   bindDeviceId.value = ''
-  bindDirection.value = ''
   bindError.value = ''
+  bindBusy.value = false
 }
 
-function onBindBarrier(): void {
+async function onBindBarrier(): Promise<void> {
   bindError.value = ''
   if (!barrierLane.value || !bindDeviceId.value) {
     bindError.value = t('barriers.bindRequired')
     return
   }
   const device = barrierDevices.value.find((item) => item.id === bindDeviceId.value)
-  if (!device || device.linkStatus !== 'CONNECTED') {
-    bindError.value = t('barriers.needConnected')
+  if (!device || device.laneId) {
+    bindError.value = t('barriers.bindRequired')
     return
   }
-  let direction: BarrierBindDirection
-  if (barrierLane.value.laneType === 'BIDIRECTIONAL') {
-    if (bindDirection.value !== 'ENTRANCE' && bindDirection.value !== 'EXIT') {
-      bindError.value = t('barriers.bindDirectionRequired')
-      return
-    }
-    direction = bindDirection.value
-  } else {
-    direction = barrierLane.value.laneType === 'EXIT' ? 'EXIT' : 'ENTRANCE'
+  bindBusy.value = true
+  try {
+    await bindBarrier(device.id, barrierLane.value.id, locale.value)
+    await refreshBarrierDevices()
+    bindDeviceId.value = ''
+  } catch (error) {
+    bindError.value = error instanceof ApiError ? error.message : t('barriers.bindFailed')
+  } finally {
+    bindBusy.value = false
   }
-  barrierDevices.value = bindBarrierToLane(
-    device.id,
-    barrierLane.value.id,
-    direction,
-    barrierDevices.value,
-  )
-  bindDeviceId.value = ''
-  bindDirection.value = ''
 }
 
-function onUnbindBarrier(deviceId: string): void {
-  barrierDevices.value = unbindBarrier(deviceId, barrierDevices.value)
+async function onUnbindBarrier(deviceId: string): Promise<void> {
+  bindError.value = ''
+  bindBusy.value = true
+  try {
+    await unbindBarrier(deviceId, locale.value)
+    await refreshBarrierDevices()
+  } catch (error) {
+    bindError.value = error instanceof ApiError ? error.message : t('barriers.bindFailed')
+  } finally {
+    bindBusy.value = false
+  }
 }
 
 function refreshIotDevices(): void {
@@ -727,16 +721,8 @@ function simResultLabel(result: LaneSimEvent['result']): string {
   return result === 'INTERCEPTED' ? t('lanes.simResultIntercepted') : t('lanes.simResultAllowed')
 }
 
-function linkedSimBarriers(lane: LaneView, direction: LaneSimDirection): BarrierDevice[] {
-  return listBarrierDevices().filter((item) => {
-    if (item.laneId !== lane.id || item.linkStatus !== 'CONNECTED') {
-      return false
-    }
-    if (!item.bindDirection) {
-      return true
-    }
-    return item.bindDirection === direction
-  })
+function linkedSimBarriers(lane: LaneView): BarrierView[] {
+  return barrierDevices.value.filter((item) => item.laneId === lane.id && item.enabled)
 }
 
 async function onSimulate(): Promise<void> {
@@ -753,7 +739,7 @@ async function onSimulate(): Promise<void> {
   simBusy.value = true
   try {
     const interceptColors = getLanePlateIntercept(simLane.value.id)
-    const openSession = hasOpenParkingSession(simLane.value.lotId, plate)
+    const openSession = await hasOpenParkingSession(simLane.value.lotId, plate, locale.value)
     const decision = await postAccessDecision(
       simLane.value.lotId,
       {
@@ -790,21 +776,24 @@ async function onSimulate(): Promise<void> {
       } else if (event.remark === 'not_internal_vehicle') {
         simError.value = t('lanes.simInternalRejected')
         pushSimLog(t('lanes.simLogInternalRejected', { plate: event.plateNumber }))
-        createRecognitionRecord({
-          lotId: simLane.value.lotId,
-          lotName: simLane.value.lotName,
-          laneId: simLane.value.id,
-          laneName: simLane.value.name,
-          plateNumber: event.plateNumber,
-          plateColor: event.plateColor,
-          eventTime: event.createdAt,
-          eventImage: buildSimEventImage(event.plateNumber, event.plateColor),
-          eventType: 'DEVICE',
-          direction: event.direction,
-          abnormal: true,
-          abnormalReason: 'not_internal_vehicle',
-          sourceSimEventId: event.id,
-        })
+        await createRecognitionRecord(
+          {
+            lotId: simLane.value.lotId,
+            lotName: simLane.value.lotName,
+            laneId: simLane.value.id,
+            laneName: simLane.value.name,
+            plateNumber: event.plateNumber,
+            plateColor: event.plateColor,
+            eventTime: event.createdAt,
+            eventImage: buildSimEventImage(event.plateNumber, event.plateColor),
+            eventType: 'DEVICE',
+            direction: event.direction,
+            abnormal: true,
+            abnormalReason: 'not_internal_vehicle',
+            sourceSimEventId: event.id,
+          },
+          locale.value,
+        )
         pushSimLog(t('lanes.simLogRecognitionNotInternal', { plate: event.plateNumber }))
       } else {
         pushSimLog(t('lanes.simLogIntercepted', { plate: event.plateNumber }))
@@ -816,30 +805,32 @@ async function onSimulate(): Promise<void> {
     } else {
       pushSimLog(t('lanes.simLogExit', { plate: event.plateNumber }))
     }
-    const recognition = createRecognitionRecord({
-      lotId: simLane.value.lotId,
-      lotName: simLane.value.lotName,
-      laneId: simLane.value.id,
-      laneName: simLane.value.name,
-      plateNumber: event.plateNumber,
-      plateColor: event.plateColor,
-      eventTime: event.createdAt,
-      eventImage: buildSimEventImage(event.plateNumber, event.plateColor),
-      eventType: 'DEVICE',
-      direction: event.direction,
-      sourceSimEventId: event.id,
-    })
+    const flow = await createRecognitionRecord(
+      {
+        lotId: simLane.value.lotId,
+        lotName: simLane.value.lotName,
+        laneId: simLane.value.id,
+        laneName: simLane.value.name,
+        plateNumber: event.plateNumber,
+        plateColor: event.plateColor,
+        eventTime: event.createdAt,
+        eventImage: buildSimEventImage(event.plateNumber, event.plateColor),
+        eventType: 'DEVICE',
+        direction: event.direction,
+        sourceSimEventId: event.id,
+      },
+      locale.value,
+    )
     pushSimLog(t('lanes.simLogRecognition', { plate: event.plateNumber }))
-    const flow = applyRecognitionToParkingSession(recognition)
+    // 停车流水联动已由后端完成：入场开流水、出场匹配关闭、未匹配标记异常
     if (flow.kind === 'entry') {
       pushSimLog(t('lanes.simLogSessionOpened', { plate: event.plateNumber }))
     } else if (flow.kind === 'exit_matched') {
       pushSimLog(t('lanes.simLogSessionClosed', { plate: event.plateNumber }))
     } else if (flow.kind === 'exit_unmatched') {
-      markRecognitionAbnormal(recognition.id, 'exit_unmatched')
       pushSimLog(t('lanes.simLogSessionUnmatched', { plate: event.plateNumber }))
     }
-    const barriers = linkedSimBarriers(simLane.value, event.direction)
+    const barriers = linkedSimBarriers(simLane.value)
     if (barriers.length > 0) {
       pushSimLog(
         t('lanes.simLogBarrier', {
@@ -1056,9 +1047,6 @@ onMounted(reload)
               <th>{{ t('barriers.colName') }}</th>
               <th>{{ t('barriers.colCode') }}</th>
               <th>{{ t('barriers.colBindDirection') }}</th>
-              <th>{{ t('barriers.colCamera') }}</th>
-              <th>{{ t('barriers.colBoard') }}</th>
-              <th>{{ t('barriers.colLink') }}</th>
               <th v-if="isAdmin" class="col-actions">{{ t('barriers.colActions') }}</th>
             </tr>
           </thead>
@@ -1066,20 +1054,14 @@ onMounted(reload)
             <tr v-for="item in boundDevices(barrierLane.id)" :key="item.id">
               <td>{{ item.name }}</td>
               <td>{{ item.code }}</td>
-              <td>{{ bindDirectionText(item, barrierLane) }}</td>
-              <td>{{ t(`barriers.cameras.${item.cameraType}`) }}</td>
-              <td>{{ t(`barriers.boards.${item.boardId}`) }}</td>
-              <td>
-                <span class="pill" :class="item.linkStatus === 'CONNECTED' ? 'ok' : 'fail'">
-                  {{
-                    item.linkStatus === 'CONNECTED'
-                      ? t('barriers.linkConnected')
-                      : t('barriers.linkDisconnected')
-                  }}
-                </span>
-              </td>
+              <td>{{ bindDirectionText(barrierLane) }}</td>
               <td v-if="isAdmin" class="col-actions">
-                <button type="button" class="link-btn" @click="onUnbindBarrier(item.id)">
+                <button
+                  type="button"
+                  class="link-btn"
+                  :disabled="bindBusy"
+                  @click="onUnbindBarrier(item.id)"
+                >
                   {{ t('barriers.unbind') }}
                 </button>
               </td>
@@ -1096,27 +1078,10 @@ onMounted(reload)
             <select v-model="bindDeviceId">
               <option value="">{{ t('barriers.bindPlaceholder') }}</option>
               <option v-for="item in availableDevices()" :key="item.id" :value="item.id">
-                {{ item.name }} ({{ item.code }}) ·
-                {{ t(`barriers.cameras.${item.cameraType}`) }} /
-                {{ t(`barriers.boards.${item.boardId}`) }}
+                {{ item.name }} ({{ item.code }})
               </option>
             </select>
           </label>
-          <label v-if="availableDevices().length > 0 && isBidirectionalLane">
-            <span>{{ t('barriers.bindDirection') }}</span>
-            <select v-model="bindDirection">
-              <option value="">{{ t('barriers.bindDirectionPlaceholder') }}</option>
-              <option value="ENTRANCE">{{ t('barriers.bindDirectionEntrance') }}</option>
-              <option value="EXIT">{{ t('barriers.bindDirectionExit') }}</option>
-            </select>
-            <span class="field-hint">{{ t('barriers.bindDirectionHint') }}</span>
-          </label>
-          <p
-            v-else-if="availableDevices().length > 0"
-            class="field-hint"
-          >
-            {{ t('barriers.bindDirectionAuto', { type: laneTypeLabel(barrierLane.laneType) }) }}
-          </p>
           <p v-if="availableDevices().length === 0" class="field-hint">
             {{ t('barriers.noConnectedDevice') }}
             <RouterLink to="/hardware/barriers">{{ t('barriers.goDocking') }}</RouterLink>
@@ -1128,6 +1093,7 @@ onMounted(reload)
           <button
             v-if="isAdmin && availableDevices().length > 0"
             type="button"
+            :disabled="bindBusy"
             @click="onBindBarrier"
           >
             {{ t('barriers.bind') }}

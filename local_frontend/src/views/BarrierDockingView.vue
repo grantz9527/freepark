@@ -2,126 +2,183 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { listLanes, type LaneView } from '@/api/client'
+import {
+  ApiError,
+  adoptAutoRegisteredDevice,
+  createBarrierGlobal,
+  deleteAutoRegisteredDevice,
+  deleteBarrierGlobal,
+  listAllBarriers,
+  listAutoRegisteredDevices,
+  listLanes,
+  updateBarrierGlobal,
+  type AutoRegisteredDeviceView,
+  type BarrierView,
+  type LaneView,
+} from '@/api/client'
 import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
-import {
-  BARRIER_CAMERA_TYPES,
-  BARRIER_SCREEN_LINES,
-  BARRIER_SCREEN_TYPES,
-  boardProfile,
-  boardsForCamera,
-  commandsForBoard,
-  defaultBoardId,
-  endpointsForCamera,
-  listBarrierDevices,
-  saveBarrierDevice,
-  setBarrierLinkStatus,
-  wait,
-  type BarrierBindDirection,
-  type BarrierBoardId,
-  type BarrierCameraType,
-  type BarrierCommand,
-  type BarrierDevice,
-  type BarrierLinkStatus,
-  type BarrierScreenLines,
-  type BarrierScreenType,
-  type CameraEndpoint,
-} from '@/hardware/barrierDevices'
-
-interface DebugLog {
-  at: string
-  message: string
-}
 
 const { t, locale } = useI18n()
 const { formatTime } = useSiteTime()
 
 const isAdmin = computed(() => getUser()?.role === 'ADMIN')
-const devices = ref<BarrierDevice[]>([])
+const loading = ref(false)
+const devices = ref<BarrierView[]>([])
+const autoDevices = ref<AutoRegisteredDeviceView[]>([])
+const autoBusyId = ref<string | null>(null)
 const lanes = ref<LaneView[]>([])
 const searchQuery = ref('')
+const errorMessage = ref('')
+
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formName = ref('')
 const formCode = ref('')
-const formCameraType = ref<BarrierCameraType>('ZHENSHI')
-const formBoardId = ref<BarrierBoardId>('ZS_IO')
-const formScreenType = ref<BarrierScreenType>('LED')
-const formScreenLines = ref<BarrierScreenLines>('L2')
-const formHost = ref('')
-const formPort = ref('80')
 const formEnabled = ref(true)
 const formError = ref('')
-const debugDevice = ref<BarrierDevice | null>(null)
-const debugBusy = ref(false)
-const debugLogs = ref<DebugLog[]>([])
+const saving = ref(false)
+
+// 删除识别一体机确认弹窗
+const deletingDevice = ref<BarrierView | null>(null)
+const deletingBusy = ref(false)
+const deleteError = ref('')
+
+function confirmDeleteDevice(device: BarrierView): void {
+  if (!isAdmin.value) return
+  deleteError.value = ''
+  deletingDevice.value = device
+}
+
+function cancelDelete(): void {
+  deletingDevice.value = null
+  deletingBusy.value = false
+  deleteError.value = ''
+}
+
+async function confirmSubmitDelete(): Promise<void> {
+  const target = deletingDevice.value
+  if (!target) return
+  deletingBusy.value = true
+  deleteError.value = ''
+  try {
+    await deleteBarrierGlobal(target.id, locale.value)
+    devices.value = devices.value.filter((item) => item.id !== target.id)
+    if (editingId.value === target.id) closeForm()
+    deletingDevice.value = null
+  } catch (error) {
+    deleteError.value = error instanceof ApiError ? error.message : t('barriers.saveFailed')
+  } finally {
+    deletingBusy.value = false
+  }
+}
 
 const isEditing = computed(() => editingId.value !== null)
-const availableBoards = computed(() => boardsForCamera(formCameraType.value))
-const selectedBoardHint = computed(() => {
-  const board = availableBoards.value.find((item) => item.id === formBoardId.value)
-  return board ? t(board.hintKey) : ''
-})
 const serverOrigin = computed(() => window.location.origin)
-const formEndpoints = computed<CameraEndpoint[]>(() =>
-  endpointsForCamera(formCameraType.value, formCode.value),
-)
-const debugEndpoints = computed<CameraEndpoint[]>(() =>
-  debugDevice.value
-    ? endpointsForCamera(debugDevice.value.cameraType, debugDevice.value.code)
-    : [],
-)
-const debugCommands = computed(() =>
-  debugDevice.value ? commandsForBoard(debugDevice.value.boardId) : [],
-)
-const debugBoardHint = computed(() => {
-  if (!debugDevice.value) {
-    return ''
+
+async function loadDevices(): Promise<void> {
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const result = await listAllBarriers(locale.value)
+    devices.value = result.data
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('barriers.loadFailed')
+  } finally {
+    loading.value = false
   }
-  const board = boardProfile(debugDevice.value.boardId)
-  return board ? t(board.hintKey) : ''
-})
+}
+
+// 自动发现的设备：收录（转正式对接列表）或移除
+async function loadAutoDevices(): Promise<void> {
+  try {
+    const result = await listAutoRegisteredDevices(locale.value)
+    autoDevices.value = result.data
+  } catch {
+    autoDevices.value = []
+  }
+}
+
+async function removeAutoDevice(device: AutoRegisteredDeviceView): Promise<void> {
+  autoBusyId.value = device.id
+  try {
+    await deleteAutoRegisteredDevice(device.id, locale.value)
+    autoDevices.value = autoDevices.value.filter((item) => item.id !== device.id)
+  } catch {
+    // 删除失败保持列表原样
+  } finally {
+    autoBusyId.value = null
+  }
+}
+
+async function adoptAutoDevice(device: AutoRegisteredDeviceView): Promise<void> {
+  // 后端已存在同 code 设备：只做收录标记，阻止重复发现
+  if (devices.value.some((item) => item.code.toLowerCase() === device.code.toLowerCase())) {
+    await markAdopted(device)
+    autoDevices.value = autoDevices.value.filter((item) => item.id !== device.id)
+    return
+  }
+  autoBusyId.value = device.id
+  try {
+    const result = await createBarrierGlobal(
+      {
+        name: device.name || device.code,
+        code: device.code,
+        enabled: true,
+      },
+      locale.value,
+    )
+    devices.value = [result.data, ...devices.value]
+    await markAdopted(device)
+    autoDevices.value = autoDevices.value.filter((item) => item.id !== device.id)
+  } catch {
+    autoDevices.value = autoDevices.value.filter((item) => item.id !== device.id)
+  } finally {
+    autoBusyId.value = null
+  }
+}
+
+async function markAdopted(device: AutoRegisteredDeviceView): Promise<void> {
+  await adoptAutoRegisteredDevice(device.id, locale.value)
+}
+
 const filteredDevices = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   if (!query) {
     return devices.value
   }
-  return devices.value.filter((item) => {
-    const camera = t(`barriers.cameras.${item.cameraType}`).toLowerCase()
-    const board = t(`barriers.boards.${item.boardId}`).toLowerCase()
-    return (
+  return devices.value.filter(
+    (item) =>
       item.name.toLowerCase().includes(query) ||
       item.code.toLowerCase().includes(query) ||
-      item.host.toLowerCase().includes(query) ||
-      camera.includes(query) ||
-      board.includes(query)
-    )
-  })
+      (item.laneName ?? '').toLowerCase().includes(query),
+  )
 })
 
-onMounted(async () => {
-  devices.value = listBarrierDevices()
-  try {
-    const result = await listLanes(locale.value)
-    lanes.value = result.data
-  } catch {
-    lanes.value = []
-  }
+onMounted(() => {
+  void loadDevices()
+  void loadAutoDevices()
+  void listLanes(locale.value)
+    .then((result) => {
+      lanes.value = result.data
+    })
+    .catch(() => {
+      lanes.value = []
+    })
 })
 
-function laneName(device: { laneId: string | null; bindDirection: BarrierBindDirection | null }): string {
+function laneName(device: BarrierView): string {
   if (!device.laneId) {
     return t('barriers.unbound')
   }
   const lane = lanes.value.find((item) => item.id === device.laneId)
-  const name = lane?.name ?? t('barriers.unbound')
+  const name = lane?.name ?? device.laneName ?? t('barriers.unbound')
   const direction =
     lane && lane.laneType !== 'BIDIRECTIONAL'
       ? lane.laneType === 'EXIT'
         ? 'EXIT'
         : 'ENTRANCE'
-      : device.bindDirection
+      : null
   if (!direction) {
     return name
   }
@@ -130,36 +187,10 @@ function laneName(device: { laneId: string | null; bindDirection: BarrierBindDir
   return `${name} · ${directionLabel}`
 }
 
-function statusLabel(status: BarrierLinkStatus): string {
-  if (status === 'CONNECTED') {
-    return t('barriers.linkConnected')
-  }
-  if (status === 'FAILED') {
-    return t('barriers.linkFailed')
-  }
-  return t('barriers.linkDisconnected')
-}
-
-function statusClass(status: BarrierLinkStatus): string {
-  if (status === 'CONNECTED') {
-    return 'ok'
-  }
-  if (status === 'FAILED') {
-    return 'fail'
-  }
-  return ''
-}
-
 function resetForm(): void {
   editingId.value = null
   formName.value = ''
   formCode.value = ''
-  formCameraType.value = 'ZHENSHI'
-  formBoardId.value = defaultBoardId('ZHENSHI')
-  formScreenType.value = 'LED'
-  formScreenLines.value = 'L2'
-  formHost.value = ''
-  formPort.value = '80'
   formEnabled.value = true
   formError.value = ''
 }
@@ -169,34 +200,13 @@ function openCreate(): void {
   showForm.value = true
 }
 
-function openEdit(device: BarrierDevice): void {
+function openEdit(device: BarrierView): void {
   editingId.value = device.id
   formName.value = device.name
   formCode.value = device.code
-  formCameraType.value = device.cameraType
-  formBoardId.value = device.boardId
-  formScreenType.value = device.screenType
-  formScreenLines.value = device.screenLines
-  formHost.value = device.host
-  formPort.value = String(device.port)
   formEnabled.value = device.enabled
   formError.value = ''
   showForm.value = true
-}
-
-function onCameraTypeChange(): void {
-  const boards = boardsForCamera(formCameraType.value)
-  if (!boards.some((board) => board.id === formBoardId.value)) {
-    formBoardId.value = defaultBoardId(formCameraType.value)
-  }
-}
-
-function onScreenTypeChange(): void {
-  if (formScreenType.value === 'NONE') {
-    formScreenLines.value = 'NONE'
-  } else if (formScreenLines.value === 'NONE') {
-    formScreenLines.value = 'L2'
-  }
 }
 
 function closeForm(): void {
@@ -204,22 +214,16 @@ function closeForm(): void {
   resetForm()
 }
 
-function onSubmit(): void {
+async function onSubmit(): Promise<void> {
   formError.value = ''
   const name = formName.value.trim()
   const code = formCode.value.trim()
-  const host = formHost.value.trim()
-  const port = Number(formPort.value)
-  if (!name || !host || (!isEditing.value && !code)) {
+  if (!name || (!isEditing.value && !code)) {
     formError.value = t('barriers.formRequired')
     return
   }
   if (!isEditing.value && code.length < 2) {
     formError.value = t('barriers.codeTooShort')
-    return
-  }
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    formError.value = t('barriers.portInvalid')
     return
   }
   if (
@@ -229,84 +233,35 @@ function onSubmit(): void {
     formError.value = t('barriers.codeExists')
     return
   }
-  devices.value = saveBarrierDevice(
-    {
-      id: editingId.value ?? undefined,
-      name,
-      code,
-      cameraType: formCameraType.value,
-      boardId: formBoardId.value,
-      screenType: formScreenType.value,
-      screenLines: formScreenLines.value,
-      host,
-      port,
-      enabled: formEnabled.value,
-    },
-    devices.value,
-  )
-  closeForm()
-}
-
-function openDebug(device: BarrierDevice): void {
-  debugDevice.value = device
-  debugLogs.value = []
-}
-
-function closeDebug(): void {
-  debugDevice.value = null
-  debugBusy.value = false
-  debugLogs.value = []
-}
-
-function pushLog(message: string): void {
-  debugLogs.value = [{ at: new Date().toISOString(), message }, ...debugLogs.value].slice(0, 20)
-}
-
-async function testConnection(): Promise<void> {
-  if (!debugDevice.value) {
-    return
+  saving.value = true
+  try {
+    if (isEditing.value && editingId.value) {
+      const result = await updateBarrierGlobal(
+        editingId.value,
+        { name, enabled: formEnabled.value },
+        locale.value,
+      )
+      devices.value = devices.value.map((item) => (item.id === result.data.id ? result.data : item))
+    } else {
+      const result = await createBarrierGlobal(
+        { name, code, enabled: formEnabled.value },
+        locale.value,
+      )
+      devices.value = [result.data, ...devices.value]
+    }
+    closeForm()
+  } catch (error) {
+    formError.value = error instanceof ApiError ? error.message : t('barriers.saveFailed')
+  } finally {
+    saving.value = false
   }
-  debugBusy.value = true
-  pushLog(
-    t('barriers.logTesting', {
-      camera: t(`barriers.cameras.${debugDevice.value.cameraType}`),
-      board: t(`barriers.boards.${debugDevice.value.boardId}`),
-      host: debugDevice.value.host,
-      port: debugDevice.value.port,
-    }),
-  )
-  await wait(700)
-  devices.value = setBarrierLinkStatus(debugDevice.value.id, 'CONNECTED', devices.value)
-  debugDevice.value = devices.value.find((item) => item.id === debugDevice.value?.id) ?? null
-  pushLog(t('barriers.logConnected'))
-  debugBusy.value = false
-}
-
-async function sendCommand(command: BarrierCommand): Promise<void> {
-  if (!debugDevice.value) {
-    return
-  }
-  if (debugDevice.value.linkStatus !== 'CONNECTED') {
-    pushLog(t('barriers.needConnected'))
-    return
-  }
-  debugBusy.value = true
-  pushLog(
-    t('barriers.logCommand', {
-      board: t(`barriers.boards.${debugDevice.value.boardId}`),
-      command: t(command.labelKey),
-      payload: command.payload,
-    }),
-  )
-  await wait(400)
-  pushLog(t('barriers.logCommandDone', { command: t(command.labelKey) }))
-  debugBusy.value = false
 }
 </script>
 
 <template>
   <section class="page">
     <p class="banner planning">{{ t('barriers.planningHint') }}</p>
+    <p v-if="errorMessage" class="banner error">{{ errorMessage }}</p>
 
     <div class="toolbar">
       <label class="search">
@@ -322,11 +277,7 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
           <tr>
             <th>{{ t('barriers.colName') }}</th>
             <th>{{ t('barriers.colCode') }}</th>
-            <th>{{ t('barriers.colCamera') }}</th>
-            <th>{{ t('barriers.colBoard') }}</th>
-            <th>{{ t('barriers.colScreen') }}</th>
-            <th>{{ t('barriers.colHost') }}</th>
-            <th>{{ t('barriers.colLink') }}</th>
+            <th>{{ t('page.colStatus') }}</th>
             <th>{{ t('barriers.colBoundLane') }}</th>
             <th>{{ t('page.colUpdated') }}</th>
             <th class="col-actions">{{ t('barriers.colActions') }}</th>
@@ -336,33 +287,117 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
           <tr v-for="item in filteredDevices" :key="item.id">
             <td>{{ item.name }}</td>
             <td>{{ item.code }}</td>
-            <td>{{ t(`barriers.cameras.${item.cameraType}`) }}</td>
-            <td>{{ t(`barriers.boards.${item.boardId}`) }}</td>
-            <td>{{ t(`barriers.screens.${item.screenType}`) }}</td>
-            <td>{{ item.host }}:{{ item.port }}</td>
             <td>
-              <span class="pill" :class="statusClass(item.linkStatus)">
-                {{ statusLabel(item.linkStatus) }}
+              <span class="pill" :class="item.enabled ? 'ok' : 'fail'">
+                {{ item.enabled ? t('lanes.statusActive') : t('lanes.statusDisabled') }}
               </span>
             </td>
             <td>{{ laneName(item) }}</td>
             <td>{{ formatTime(item.updatedAt) }}</td>
             <td class="col-actions">
               <div class="action-group">
-                <button type="button" class="link-btn" @click="openDebug(item)">
-                  {{ t('barriers.debug') }}
-                </button>
                 <button v-if="isAdmin" type="button" class="link-btn" @click="openEdit(item)">
                   {{ t('barriers.edit') }}
+                </button>
+                <button
+                  v-if="isAdmin"
+                  type="button"
+                  class="link-btn danger"
+                  @click="confirmDeleteDevice(item)"
+                >
+                  {{ t('barriers.remove') }}
                 </button>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
+      <div v-else-if="loading" class="empty">
+        <p>{{ t('lanes.loading') }}</p>
+      </div>
       <div v-else class="empty">
         <strong>{{ t('barriers.empty') }}</strong>
         <p>{{ isAdmin ? t('barriers.emptyHintAdmin') : t('barriers.emptyHint') }}</p>
+      </div>
+    </div>
+
+    <div v-if="autoDevices.length > 0" class="table-card auto-card">
+      <div class="auto-head">
+        <div>
+          <h4>{{ t('barriers.autoTitle', { count: autoDevices.length }) }}</h4>
+          <p class="field-hint">{{ t('barriers.autoHint') }}</p>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>{{ t('barriers.colCode') }}</th>
+            <th>{{ t('barriers.colBrand') }}</th>
+            <th>{{ t('barriers.colLastPoll') }}</th>
+            <th class="col-actions">{{ t('barriers.colActions') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in autoDevices" :key="item.id">
+            <td>
+              <strong>{{ item.code }}</strong>
+              <span class="field-hint"> · {{ item.name }}</span>
+            </td>
+            <td>{{ item.brand || t('barriers.unknownBrand') }}</td>
+            <td>{{ formatTime(item.lastPollAt) }}</td>
+            <td class="col-actions">
+              <div class="action-group">
+                <button
+                  v-if="isAdmin"
+                  type="button"
+                  class="link-btn"
+                  :disabled="autoBusyId !== null"
+                  @click="adoptAutoDevice(item)"
+                >
+                  {{ autoBusyId === item.id ? t('barriers.adopting') : t('barriers.adopt') }}
+                </button>
+                <button
+                  v-if="isAdmin"
+                  type="button"
+                  class="link-btn danger"
+                  :disabled="autoBusyId !== null"
+                  @click="removeAutoDevice(item)"
+                >
+                  {{ autoBusyId === item.id ? t('barriers.removing') : t('barriers.remove') }}
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div v-if="deletingDevice" class="modal-backdrop">
+      <div class="modal">
+        <h3>{{ t('barriers.removeTitle') }}</h3>
+        <p class="hint">
+          {{ t('barriers.removeHintName', { name: deletingDevice.name }) }}
+        </p>
+        <p class="remove-meta">
+          <span><b>{{ t('barriers.code') }}:</b> {{ deletingDevice.code }}</span>
+        </p>
+        <p v-if="deletingDevice.laneId" class="form-error">
+          {{ t('barriers.removeBoundHint') }}
+        </p>
+        <p v-if="deleteError" class="form-error">{{ deleteError }}</p>
+        <div class="actions">
+          <button type="button" class="ghost" :disabled="deletingBusy" @click="cancelDelete">
+            {{ t('barriers.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="danger"
+            :disabled="deletingBusy"
+            @click="void confirmSubmitDelete()"
+          >
+            {{ deletingBusy ? t('barriers.removing') : t('barriers.confirmRemove') }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -385,65 +420,23 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
           />
           <span v-if="isEditing" class="field-hint">{{ t('barriers.codeLocked') }}</span>
         </label>
-        <label>
-          <span>{{ t('barriers.cameraType') }}</span>
-          <select v-model="formCameraType" @change="onCameraTypeChange">
-            <option v-for="camera in BARRIER_CAMERA_TYPES" :key="camera" :value="camera">
-              {{ t(`barriers.cameras.${camera}`) }}
-            </option>
-          </select>
-        </label>
-        <div v-if="formEndpoints.length > 0" class="endpoint-guide">
+        <div class="endpoint-guide">
           <p class="endpoint-title">{{ t('barriers.endpoints.title') }}</p>
           <p class="endpoint-server">{{ serverOrigin }}</p>
-          <div v-for="(ep, index) in formEndpoints" :key="index" class="endpoint-row">
+          <div class="endpoint-row">
             <div>
-              <strong>{{ t(ep.labelKey) }}</strong>
-              <code>{{ ep.method }} {{ ep.path }}</code>
-              <span class="field-hint">{{ t(ep.descKey) }}</span>
+              <strong>{{ t('barriers.endpoints.push') }}</strong>
+              <code>POST /api/v1/device-gateway/zhenshi/plate</code>
+              <span class="field-hint">{{ t('barriers.endpoints.pushDesc') }}</span>
             </div>
           </div>
-        </div>
-        <label>
-          <span>{{ t('barriers.boardType') }}</span>
-          <select v-model="formBoardId">
-            <option v-for="board in availableBoards" :key="board.id" :value="board.id">
-              {{ t(`barriers.boards.${board.id}`) }}
-            </option>
-          </select>
-          <span class="field-hint">{{ selectedBoardHint }}</span>
-        </label>
-        <div class="form-row">
-          <label>
-            <span>{{ t('barriers.screenType') }}</span>
-            <select v-model="formScreenType" @change="onScreenTypeChange">
-              <option v-for="screen in BARRIER_SCREEN_TYPES" :key="screen" :value="screen">
-                {{ t(`barriers.screens.${screen}`) }}
-              </option>
-            </select>
-          </label>
-          <label v-if="formScreenType !== 'NONE'">
-            <span>{{ t('barriers.screenLines') }}</span>
-            <select v-model="formScreenLines">
-              <option
-                v-for="line in BARRIER_SCREEN_LINES.filter((item) => item !== 'NONE')"
-                :key="line"
-                :value="line"
-              >
-                {{ t(`barriers.lines.${line}`) }}
-              </option>
-            </select>
-          </label>
-        </div>
-        <div class="form-row">
-          <label>
-            <span>{{ t('barriers.host') }}</span>
-            <input v-model="formHost" type="text" autocomplete="off" placeholder="192.168.1.50" />
-          </label>
-          <label>
-            <span>{{ t('barriers.port') }}</span>
-            <input v-model="formPort" type="number" min="1" max="65535" />
-          </label>
+          <div class="endpoint-row">
+            <div>
+              <strong>{{ t('barriers.endpoints.poll') }}</strong>
+              <code>GET /api/v1/device-gateway/{{ formCode || '{code}' }}/poll</code>
+              <span class="field-hint">{{ t('barriers.endpoints.pollDesc') }}</span>
+            </div>
+          </div>
         </div>
         <label class="checkbox">
           <input v-model="formEnabled" type="checkbox" />
@@ -451,70 +444,14 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
         </label>
         <p v-if="formError" class="form-error">{{ formError }}</p>
         <div class="actions">
-          <button type="button" class="ghost" @click="closeForm">{{ t('barriers.cancel') }}</button>
-          <button type="submit">{{ isEditing ? t('barriers.save') : t('barriers.create') }}</button>
-        </div>
-      </form>
-    </div>
-
-    <div v-if="debugDevice" class="modal-backdrop">
-      <div class="modal wide">
-        <h3>{{ t('barriers.debugTitle') }} · {{ debugDevice.name }}</h3>
-        <p class="hint">{{ t('barriers.debugHint') }}</p>
-        <p class="field-hint">
-          {{ t(`barriers.cameras.${debugDevice.cameraType}`) }} ·
-          {{ t(`barriers.boards.${debugDevice.boardId}`) }} ·
-          {{ debugDevice.host }}:{{ debugDevice.port }}
-        </p>
-        <p class="field-hint">{{ debugBoardHint }}</p>
-        <div v-if="debugEndpoints.length > 0" class="endpoint-guide">
-          <p class="endpoint-title">{{ t('barriers.endpoints.title') }}</p>
-          <p class="endpoint-server">{{ serverOrigin }}</p>
-          <div v-for="(ep, index) in debugEndpoints" :key="index" class="endpoint-row">
-            <div>
-              <strong>{{ t(ep.labelKey) }}</strong>
-              <code>{{ ep.method }} {{ ep.path }}</code>
-              <span class="field-hint">{{ t(ep.descKey) }}</span>
-            </div>
-          </div>
-        </div>
-        <p>
-          <span class="pill" :class="statusClass(debugDevice.linkStatus)">
-            {{ statusLabel(debugDevice.linkStatus) }}
-          </span>
-        </p>
-        <div class="debug-actions">
-          <button type="button" :disabled="debugBusy" @click="testConnection">
-            {{ debugBusy ? t('barriers.testing') : t('barriers.testConnection') }}
+          <button type="button" class="ghost" :disabled="saving" @click="closeForm">
+            {{ t('barriers.cancel') }}
+          </button>
+          <button type="submit" :disabled="saving">
+            {{ saving ? t('lanes.saving') : isEditing ? t('barriers.save') : t('barriers.create') }}
           </button>
         </div>
-        <div class="command-list">
-          <p class="command-title">{{ t('barriers.commandSet') }}</p>
-          <div v-for="command in debugCommands" :key="command.id" class="command-row">
-            <div>
-              <strong>{{ t(command.labelKey) }}</strong>
-              <code>{{ command.payload }}</code>
-            </div>
-            <button
-              type="button"
-              class="ghost"
-              :disabled="debugBusy || debugDevice.linkStatus !== 'CONNECTED'"
-              @click="sendCommand(command)"
-            >
-              {{ t('barriers.sendCommand') }}
-            </button>
-          </div>
-        </div>
-        <div class="log">
-          <p v-if="debugLogs.length === 0" class="field-hint">{{ t('barriers.logEmpty') }}</p>
-          <p v-for="(item, index) in debugLogs" :key="index">
-            {{ formatTime(item.at) }} · {{ item.message }}
-          </p>
-        </div>
-        <div class="actions">
-          <button type="button" class="ghost" @click="closeDebug">{{ t('barriers.cancel') }}</button>
-        </div>
-      </div>
+      </form>
     </div>
   </section>
 </template>
@@ -533,6 +470,14 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
   background: #fff6d8;
 }
 
+.banner.error {
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: 8px;
+  color: var(--danger);
+  background: #fdecec;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -546,8 +491,7 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
 }
 
 .search input,
-.toolbar button,
-.debug-actions button {
+.toolbar button {
   border: 1px solid var(--border);
   border-radius: 8px;
   min-height: 2.25rem;
@@ -560,8 +504,7 @@ async function sendCommand(command: BarrierCommand): Promise<void> {
   color: var(--text);
 }
 
-.toolbar button,
-.debug-actions button:not(.ghost) {
+.toolbar button {
   background: var(--accent);
   color: #fff;
   font-weight: 600;
@@ -617,6 +560,10 @@ tbody tr:last-child td {
   font-weight: 600;
   padding: 0;
   cursor: pointer;
+}
+
+.link-btn.danger {
+  color: var(--danger);
 }
 
 .pill {
@@ -676,24 +623,6 @@ tbody tr:last-child td {
   overflow-y: auto;
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-
-.modal.wide {
-  width: min(720px, 100%);
-}
-
-.modal select {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
-  background: #fff;
-  color: var(--text);
-}
-
 .modal h3 {
   margin: 0;
 }
@@ -738,17 +667,6 @@ input {
   color: var(--text);
 }
 
-.debug-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.command-list {
-  display: grid;
-  gap: 0.5rem;
-}
-
 .endpoint-guide {
   display: grid;
   gap: 0.4rem;
@@ -785,61 +703,6 @@ input {
   word-break: break-all;
 }
 
-.command-title {
-  margin: 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.command-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.command-row div {
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
-.command-row code {
-  font-size: 0.78rem;
-  color: var(--muted);
-  word-break: break-all;
-}
-
-.command-row button {
-  flex-shrink: 0;
-}
-
-.debug-actions button.ghost,
-.ghost {
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--text);
-}
-
-.log {
-  max-height: 12rem;
-  overflow: auto;
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #f7faf8;
-  font-size: 0.85rem;
-}
-
-.log p {
-  margin: 0 0 0.35rem;
-}
-
 .form-error {
   margin: 0;
   color: var(--danger);
@@ -868,6 +731,51 @@ input {
 .actions button:not(.ghost) {
   color: #fff;
   background: var(--accent);
+}
+
+.actions button.danger {
+  color: #fff;
+  background: var(--danger);
+}
+
+.ghost {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+}
+
+.remove-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.4rem 0.9rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  background: #fafbfc;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.remove-meta b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.auto-card {
+  border-style: dashed;
+}
+
+.auto-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 0.25rem;
+}
+
+.auto-head h4 {
+  margin: 0 0 0.15rem;
 }
 
 .sr-only {

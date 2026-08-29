@@ -16,8 +16,8 @@ import jakarta.persistence.UniqueConstraint;
         uniqueConstraints = @UniqueConstraint(columnNames = {"lane_id", "code"}))
 public class ParkingBarrier extends BaseEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "lane_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "lane_id", nullable = true)
     private ParkingLane lane;
 
     @Column(nullable = false, length = 120)
@@ -49,6 +49,10 @@ public class ParkingBarrier extends BaseEntity {
 
     public ParkingLane getLane() {
         return lane;
+    }
+
+    public void setLane(ParkingLane lane) {
+        this.lane = lane;
     }
 
     public String getName() {

@@ -1,19 +1,50 @@
-# Frigate 最小配置 + 本地 MQTT
+# Frigate 本地配置 + 宿主机 MQTT
+# host.docker.internal: Docker Desktop 中容器访问宿主机的地址
 mqtt:
   enabled: true
-  host: 127.0.0.1
+  host: host.docker.internal
   port: 1883
   user: freepark
   password: freepark
   topic_prefix: frigate
   client_id: freepark-frigate
 
-# 相机配置示例（确认容器正常后再取消注释并填入真实 RTSP 地址）：
-# cameras:
-#   front_door:
-#     ffmpeg:
-#       inputs:
-#         - path: rtsp://用户名:密码@摄像头IP:554/stream
-#           input_args: preset-rtsp-restream
-cameras: {}
+cameras:
+  cam_a4f8c910:
+    enabled: true
+    type: "lpr"
+    friendly_name: 车牌识别
+    ffmpeg:
+      inputs:
+        - path: rtsp://192.168.0.100:8557/h264
+          roles:
+            - detect
+    detect:
+      enabled: true
+      width: 1280
+      height: 720
+    lpr:
+      enabled: true
+      enhancement: true
+    snapshots:
+      enabled: true
+      retain:
+        default: 30
+    live:
+      streams:
+        Stream 1: cam_a4f8c910
 version: 0.17-0
+# 原生 LPR：Frigate 内置 YOLOv9 车牌检测 + PaddleOCR，事件直接带 recognized_license_plate
+lpr:
+  enabled: true
+  detection_threshold: 0.5
+  recognition_threshold: 0.6
+  debug_save_plates: true
+logger:
+  default: info
+  logs:
+    frigate.data_processing.common.license_plate: debug
+go2rtc:
+  streams:
+    cam_a4f8c910:
+      - rtsp://192.168.0.100:8557/h264
