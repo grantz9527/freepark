@@ -1,4 +1,15 @@
 {
+  "form": {
+    "quickToday": "今日",
+    "quickMonth": "1か月",
+    "quick3m": "3か月",
+    "quick1y": "1年",
+    "quickLong": "長期",
+    "startPlaceholder": "開始日",
+    "endPlaceholder": "終了日",
+    "cancel": "キャンセル",
+    "confirm": "確定"
+  },
   "app": {
     "name": "FreePark ローカル",
     "tagline": "現地パーキングコンソール",
@@ -478,6 +489,7 @@
     "typeAPPOINTMENT": "Appointment",
     "typeVISITOR": "Visitor",
     "typeOTHER": "Other",
+    "colPeriod": "有効期限",
     "colStartTime": "開始時間",
     "colEndTime": "終了時間",
     "formTimeRequired": "開始時間と終了時間を入力してください",
@@ -494,6 +506,7 @@
     "colPhone": "Phone",
     "colDepartment": "Organization",
     "colRemark": "Remark",
+    "colPeriod": "有効期限",
     "colActions": "Actions",
     "statusActive": "Active",
     "statusDisabled": "Disabled",

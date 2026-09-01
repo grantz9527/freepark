@@ -15,7 +15,7 @@ import {
 const LOT_STORAGE_KEY = 'freepark.parkingSessions.lotId'
 
 const { t, locale } = useI18n()
-const { formatTime } = useSiteTime()
+const { formatTimeWithSeconds } = useSiteTime()
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -252,7 +252,7 @@ onUnmounted(() => {
               <td>
                 <PlateBadge :plate-number="item.plateNumber" :plate-color="item.plateColor" />
               </td>
-              <td>{{ formatTime(item.entryTime) }}</td>
+              <td>{{ formatTimeWithSeconds(item.entryTime) }}</td>
               <td>{{ item.entryLaneName || '—' }}</td>
               <td>
                 <button
@@ -265,7 +265,7 @@ onUnmounted(() => {
                 </button>
                 <span v-else class="muted">{{ t('parkingSessions.noImage') }}</span>
               </td>
-              <td>{{ item.exitTime ? formatTime(item.exitTime) : '—' }}</td>
+              <td>{{ item.exitTime ? formatTimeWithSeconds(item.exitTime) : '—' }}</td>
               <td>{{ item.exitLaneName || '—' }}</td>
               <td>
                 <button
@@ -362,7 +362,7 @@ onUnmounted(() => {
           <div class="void-timeline">
             <div class="void-leg entry">
               <span class="void-leg-tag">{{ t('parkingSessions.voidEntry') }}</span>
-              <strong>{{ formatTime(voidTarget.entryTime) }}</strong>
+              <strong>{{ formatTimeWithSeconds(voidTarget.entryTime) }}</strong>
               <span class="void-leg-lane">{{ voidTarget.entryLaneName || '—' }}</span>
               <button
                 v-if="voidTarget.entryImage"
@@ -391,7 +391,7 @@ onUnmounted(() => {
 
             <div class="void-leg exit" :class="{ pending: !voidTarget.exitTime }">
               <span class="void-leg-tag">{{ t('parkingSessions.voidExit') }}</span>
-              <strong>{{ voidTarget.exitTime ? formatTime(voidTarget.exitTime) : t('parkingSessions.voidNotExited') }}</strong>
+              <strong>{{ voidTarget.exitTime ? formatTimeWithSeconds(voidTarget.exitTime) : t('parkingSessions.voidNotExited') }}</strong>
               <span class="void-leg-lane">{{ voidTarget.exitLaneName || '—' }}</span>
               <button
                 v-if="voidTarget.exitImage"

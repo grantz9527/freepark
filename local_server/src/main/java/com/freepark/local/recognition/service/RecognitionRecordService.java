@@ -120,6 +120,7 @@ public class RecognitionRecordService {
 
     /**
      * Frigate 相机事件入库：填充车场/通道快照 + 联动流水（未绑定通道时不联动）。
+     * imageRef/eventImage：识别抓拍图（imageRef 为相对存储路径，eventImage 为可访问 URL，可为 null）。
      */
     @Transactional
     public RecognitionRecord saveCameraRecord(
@@ -127,8 +128,11 @@ public class RecognitionRecordService {
             String plate,
             PlateColor plateColor,
             String direction,
-            Instant capturedAt) {
-        RecognitionRecord record = new RecognitionRecord(camera, plate, plateColor, null, direction, capturedAt);
+            Instant capturedAt,
+            String imageRef,
+            String eventImage) {
+        RecognitionRecord record = new RecognitionRecord(camera, plate, plateColor, imageRef, direction, capturedAt);
+        record.setEventImage(eventImage);
         fillSnapshot(record);
         inferDirectionIfMissing(record);
         record = records.save(record);

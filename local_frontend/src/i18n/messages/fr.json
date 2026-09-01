@@ -1,4 +1,15 @@
 {
+  "form": {
+    "quickToday": "Aujourd’hui",
+    "quickMonth": "Dernier mois",
+    "quick3m": "3 derniers mois",
+    "quick1y": "Dernière année",
+    "quickLong": "Long terme",
+    "startPlaceholder": "Date de début",
+    "endPlaceholder": "Date de fin",
+    "cancel": "Annuler",
+    "confirm": "Confirmer"
+  },
   "app": {
     "name": "FreePark Local",
     "tagline": "Console de parking sur site",
@@ -478,6 +489,7 @@
     "typeAPPOINTMENT": "Appointment",
     "typeVISITOR": "Visitor",
     "typeOTHER": "Other",
+    "colPeriod": "Période de validité",
     "colStartTime": "Heure de début",
     "colEndTime": "Heure de fin",
     "formTimeRequired": "L'heure de début et l'heure de fin sont obligatoires",
@@ -494,6 +506,7 @@
     "colPhone": "Phone",
     "colDepartment": "Organization",
     "colRemark": "Remark",
+    "colPeriod": "Période de validité",
     "colActions": "Actions",
     "statusActive": "Active",
     "statusDisabled": "Disabled",

@@ -16,7 +16,7 @@ cameras:
     friendly_name: 车牌识别
     ffmpeg:
       inputs:
-        - path: rtsp://192.168.0.100:8557/h264
+        - path: rtsp://10.168.1.71:8557/h264
           roles:
             - detect
     detect:

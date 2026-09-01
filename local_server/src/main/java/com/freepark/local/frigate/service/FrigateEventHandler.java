@@ -43,6 +43,11 @@ public class FrigateEventHandler {
 
     @Transactional
     public void onPlateRecognized(String cameraName, String plate, PlateColor plateColor) {
+        onPlateRecognized(cameraName, plate, plateColor, null, null);
+    }
+
+    @Transactional
+    public void onPlateRecognized(String cameraName, String plate, PlateColor plateColor, String imageRef, String eventImage) {
         FrigateCamera camera = cameras.findByCameraNameIgnoreCase(cameraName).orElse(null);
         if (camera == null || !camera.isEnabled()) {
             log.debug("Ignore Frigate plate for unknown/disabled camera {}", cameraName);
@@ -57,7 +62,8 @@ public class FrigateEventHandler {
 
         // 1) 无论是否绑定通道/开启联动/有无道闸，必须写一条识别记录（关联 Frigate 相机），并联动停车流水。
         String direction = toDirection(camera.getBindDirection());
-        RecognitionRecord record = recognitionRecordService.saveCameraRecord(camera, plate, plateColor, direction, now);
+        RecognitionRecord record = recognitionRecordService.saveCameraRecord(
+                camera, plate, plateColor, direction, now, imageRef, eventImage);
         log.info(
                 "Frigate event camera={} plate={} color={} recognition record saved id={}",
                 camera.getCameraName(),

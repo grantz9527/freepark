@@ -1,4 +1,15 @@
 {
+  "form": {
+    "quickToday": "Hoy",
+    "quickMonth": "Último mes",
+    "quick3m": "Últimos 3 meses",
+    "quick1y": "Último año",
+    "quickLong": "Largo plazo",
+    "startPlaceholder": "Fecha de inicio",
+    "endPlaceholder": "Fecha de fin",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar"
+  },
   "app": {
     "name": "FreePark Local",
     "tagline": "Consola de aparcamiento in situ",
@@ -478,6 +489,7 @@
     "typeAPPOINTMENT": "Appointment",
     "typeVISITOR": "Visitor",
     "typeOTHER": "Other",
+    "colPeriod": "Período de validez",
     "colStartTime": "Hora de inicio",
     "colEndTime": "Hora de fin",
     "formTimeRequired": "La hora de inicio y de fin son obligatorias",
@@ -494,6 +506,7 @@
     "colPhone": "Phone",
     "colDepartment": "Organization",
     "colRemark": "Remark",
+    "colPeriod": "Período de validez",
     "colActions": "Actions",
     "statusActive": "Active",
     "statusDisabled": "Disabled",

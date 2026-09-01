@@ -35,6 +35,7 @@ import com.freepark.local.domain.FrigateSettings;
 import com.freepark.local.domain.FrigateSettingsRepository;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.hyperlpr3.HyperLpr3Client;
+import com.freepark.local.storage.ImageStorageService;
 import com.freepark.local.yolo26plate.Yolo26PlateClient;
 
 import jakarta.annotation.PreDestroy;
@@ -61,6 +62,7 @@ public class FrigateMqttSubscriber {
     private final FrigateSettingsRepository settingsRepository;
     private final FrigateEventHandler eventHandler;
     private final HyperLpr3Client hyperLpr3Client;
+    private final ImageStorageService imageStorage;
     private final JsonMapper jsonMapper;
     private final AtomicReference<MqttClient> clientRef = new AtomicReference<>();
     private final HttpClient snapshotClient = HttpClient.newBuilder()
@@ -81,10 +83,12 @@ public class FrigateMqttSubscriber {
             FrigateSettingsRepository settingsRepository,
             FrigateEventHandler eventHandler,
             HyperLpr3Client hyperLpr3Client,
+            ImageStorageService imageStorage,
             JsonMapper jsonMapper) {
         this.settingsRepository = settingsRepository;
         this.eventHandler = eventHandler;
         this.hyperLpr3Client = hyperLpr3Client;
+        this.imageStorage = imageStorage;
         this.jsonMapper = jsonMapper;
     }
 
@@ -211,6 +215,7 @@ public class FrigateMqttSubscriber {
             String plate = null;
             PlateColor plateColor = null;
             String trackId = null;
+            String snapshotPath = null;
             JsonNode after = null;
 
             if (topic.equals(prefix + "/events") || topic.endsWith("/events")) {
@@ -226,11 +231,15 @@ public class FrigateMqttSubscriber {
                 trackId = textOrNull(after.path("id"));
                 plate = extractPlate(after);
                 plateColor = extractColor(after);
+                snapshotPath = textOrNull(after.path("snapshot"));
                 if (plate == null) {
                     plate = extractPlate(root);
                 }
                 if (plateColor == null) {
                     plateColor = extractColor(root);
+                }
+                if (snapshotPath == null) {
+                    snapshotPath = textOrNull(root.path("snapshot"));
                 }
             } else if (topic.startsWith(prefix + "/")) {
                 // 非 events 主题：Dedicated LPR 的车牌结果通过 frigate/tracked_object_update 高频推送，
@@ -241,6 +250,7 @@ public class FrigateMqttSubscriber {
                 trackId = textOrNull(root.path("id"));
                 plate = extractPlate(root);
                 plateColor = extractColor(root);
+                snapshotPath = textOrNull(root.path("snapshot"));
             }
 
             // LPR 辅助：Frigate 原生 LPR 只出车牌不出颜色，且缺车牌文本时也需补全。
@@ -259,12 +269,13 @@ public class FrigateMqttSubscriber {
                         if (trackId != null && !trackId.isBlank()) {
                             String cam = cameraName;
                             PendingTrack pending = pendingTracks.computeIfAbsent(trackId, k -> new PendingTrack(cam));
-                            // 首帧结果计入聚簇，并排程再抽 2 帧（间隔 400ms），避免只依赖单张快照误识别。
+                            // 首帧结果计入聚簇，并排程再抽 2 帧（间隔 200/400ms），避免只依赖单张快照误识别。
+                            pending.setSnapshot(snapshotPath);
                             pending.recordHyperVote(lpr.plate(), lpr.plateColor(), lpr.confidence());
                             scheduleHyperLprFrames(pending, cam, settings);
                             // 立即排程投票：若 Frigate 后续文本全被过滤（无合法候选），
                             // 也能由 HyperLPR3 聚簇结果兜底提交，避免 pending 悬空。
-                            scheduleVote(trackId);
+                            scheduleVote(trackId, settings);
                         }
                         if (plate == null || plate.isBlank()) {
                             plate = lpr.plate();
@@ -315,19 +326,20 @@ public class FrigateMqttSubscriber {
             if (trackId != null && !trackId.isBlank()) {
                 String cam = cameraName;
                 PendingTrack pending = pendingTracks.computeIfAbsent(trackId, k -> new PendingTrack(cam));
+                pending.setSnapshot(snapshotPath);
                 pending.recordVote(normalized, plateColor);
-                scheduleVote(trackId);
+                scheduleVote(trackId, settings);
                 return;
             }
-            // 无 trackId（少见）：直接提交，仍受车牌级去重保护。
-            submitPlate(cameraName, normalized, plateColor);
+            // 无 trackId（少见）：直接提交，仍受车牌级去重保护（无快照则不带识别图片）。
+            submitPlate(cameraName, normalized, plateColor, null, null);
         } catch (Exception ex) {
             log.warn("Frigate MQTT payload rejected on {}: {}", topic, ex.getMessage());
         }
     }
 
     /** 调度 track 投票任务：同 track 只保留一个待执行任务，track 停止更新后提交投票结果。 */
-    private void scheduleVote(String trackId) {
+    private void scheduleVote(String trackId, FrigateSettings settings) {
         PendingTrack pending = pendingTracks.get(trackId);
         if (pending == null) {
             return;
@@ -342,12 +354,12 @@ public class FrigateMqttSubscriber {
                 return;
             }
             pending.future = voteScheduler.schedule(
-                    () -> decideAndSubmit(trackId), TRACK_VOTE_DELAY_MS, TimeUnit.MILLISECONDS);
+                    () -> decideAndSubmit(trackId, settings), TRACK_VOTE_DELAY_MS, TimeUnit.MILLISECONDS);
         }
     }
 
     /** track 停止更新后执行：从合法候选票中选出最高者提交，无合法候选则用 HyperLPR3 兜底。 */
-    private void decideAndSubmit(String trackId) {
+    private void decideAndSubmit(String trackId, FrigateSettings settings) {
         PendingTrack pending = pendingTracks.get(trackId);
         if (pending == null) {
             return;
@@ -365,7 +377,7 @@ public class FrigateMqttSubscriber {
             if (trackAlive && !ageExceeded) {
                 // track 仍在更新：延长投票窗口。
                 pending.future = voteScheduler.schedule(
-                        () -> decideAndSubmit(trackId), TRACK_VOTE_DELAY_MS, TimeUnit.MILLISECONDS);
+                        () -> decideAndSubmit(trackId, settings), TRACK_VOTE_DELAY_MS, TimeUnit.MILLISECONDS);
                 return;
             }
             String best = null;
@@ -411,12 +423,24 @@ public class FrigateMqttSubscriber {
                     "Frigate LPR submit track={} camera={} plate={} source={} hyper={} votes={}",
                     trackId, pending.camera, plate, source, pending.hyperVotes, pending.votes);
         }
-        submitPlate(pending.camera, plate, color);
+        // 保存识别快照：优先事件 snapshot，缺失时回退相机最新帧；失败不阻断入库（识别图片留空）。
+        String imageRef = null;
+        String eventImage = null;
+        byte[] snapshot = downloadSnapshot(
+                firstNonBlank(pending.snapshotPath, "/api/" + pending.camera + "/latest.jpg"), settings);
+        if (snapshot != null) {
+            imageRef = imageStorage.saveImage(snapshot, "image/jpeg", pending.camera);
+            eventImage = imageStorage.toPublicUrl(imageRef);
+        } else {
+            log.warn("Frigate LPR track={} camera={}: snapshot unavailable, record without image",
+                    trackId, pending.camera);
+        }
+        submitPlate(pending.camera, plate, color, imageRef, eventImage);
         pendingTracks.remove(trackId, pending);
     }
 
     /** 车牌级去重 + 提交识别结果：同一相机识别出同一合法车牌在窗口内只入一次库。 */
-    private void submitPlate(String cameraName, String plate, PlateColor color) {
+    private void submitPlate(String cameraName, String plate, PlateColor color, String imageRef, String eventImage) {
         if (!shouldSubmitPlate(cameraName, plate)) {
             log.info(
                     "Frigate LPR drop camera={} plate={}: duplicate within {}ms",
@@ -424,9 +448,9 @@ public class FrigateMqttSubscriber {
             return;
         }
         log.info(
-                "Frigate MQTT event camera={} plate={} color={}",
-                cameraName, plate, color == null ? "unknown" : color.name());
-        eventHandler.onPlateRecognized(cameraName, plate, color);
+                "Frigate MQTT event camera={} plate={} color={} image={}",
+                cameraName, plate, color == null ? "unknown" : color.name(), eventImage == null ? "none" : eventImage);
+        eventHandler.onPlateRecognized(cameraName, plate, color, imageRef, eventImage);
     }
 
     /** 同一 track 的多帧识别候选：Frigate 文本投票计数 + HyperLPR3 多帧置信度聚簇。 */
@@ -437,6 +461,8 @@ public class FrigateMqttSubscriber {
         final Map<String, Integer> votes = new ConcurrentHashMap<>();
         /** normalized 合法车牌 -> HyperLPR3 多帧聚簇（置信度和）。 */
         final Map<String, HyperVote> hyperVotes = new ConcurrentHashMap<>();
+        /** 事件快照路径（/api/events/{id}/snapshot.jpg 等），提交时用于保存识别图片。 */
+        volatile String snapshotPath;
         volatile PlateColor lastEventColor;
         volatile long lastUpdateAt = System.currentTimeMillis();
         volatile ScheduledFuture<?> future;
@@ -444,6 +470,13 @@ public class FrigateMqttSubscriber {
 
         PendingTrack(String camera) {
             this.camera = camera;
+        }
+
+        /** 记录事件快照路径（保留首个非空值；tracked_object_update 无快照时保持原值）。 */
+        void setSnapshot(String path) {
+            if (path != null && !path.isBlank() && snapshotPath == null) {
+                snapshotPath = path;
+            }
         }
 
         synchronized void recordVote(String normalized, PlateColor eventColor) {
@@ -519,11 +552,12 @@ public class FrigateMqttSubscriber {
     }
 
     /** HyperLPR3 多帧采样：assist 首次触发后，再间隔采样 2 帧 latest.jpg 识别，
-     *  使车牌识别不再依赖单张快照，降低单帧噪声/时机差导致的误识别。 */
+     *  使车牌识别不再依赖单张快照，降低单帧噪声/时机差导致的误识别。
+     *  首帧立即识别，第 2/3 帧分别在 +200ms/+400ms 触发，3 次抽帧尽量在 500ms 内完成。 */
     private void scheduleHyperLprFrames(PendingTrack pending, String cameraName, FrigateSettings settings) {
         String cam = cameraName;
-        voteScheduler.schedule(() -> captureHyperLprFrame(pending, cam, settings, "frame2"), 400, TimeUnit.MILLISECONDS);
-        voteScheduler.schedule(() -> captureHyperLprFrame(pending, cam, settings, "frame3"), 800, TimeUnit.MILLISECONDS);
+        voteScheduler.schedule(() -> captureHyperLprFrame(pending, cam, settings, "frame2"), 200, TimeUnit.MILLISECONDS);
+        voteScheduler.schedule(() -> captureHyperLprFrame(pending, cam, settings, "frame3"), 400, TimeUnit.MILLISECONDS);
     }
 
     /** 抽一帧相机最新快照交给 HyperLPR3 识别，合法结果计入 pending 的 HyperLPR3 聚簇。 */

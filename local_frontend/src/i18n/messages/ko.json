@@ -1,4 +1,15 @@
 {
+  "form": {
+    "quickToday": "오늘",
+    "quickMonth": "최근 1개월",
+    "quick3m": "최근 3개월",
+    "quick1y": "최근 1년",
+    "quickLong": "장기",
+    "startPlaceholder": "시작일",
+    "endPlaceholder": "종료일",
+    "cancel": "취소",
+    "confirm": "확인"
+  },
   "app": {
     "name": "FreePark 로컬",
     "tagline": "현장 주차 콘솔",
@@ -478,6 +489,7 @@
     "typeAPPOINTMENT": "Appointment",
     "typeVISITOR": "Visitor",
     "typeOTHER": "Other",
+    "colPeriod": "유효기간",
     "colStartTime": "시작 시간",
     "colEndTime": "종료 시간",
     "formTimeRequired": "시작 시간과 종료 시간을 입력하세요",
@@ -494,6 +506,7 @@
     "colPhone": "Phone",
     "colDepartment": "Organization",
     "colRemark": "Remark",
+    "colPeriod": "유효기간",
     "colActions": "Actions",
     "statusActive": "Active",
     "statusDisabled": "Disabled",

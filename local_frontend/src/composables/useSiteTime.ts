@@ -41,6 +41,22 @@ export function formatSiteTime(value: string | null | undefined): string {
   }
 }
 
+/** 带秒的时间格式（用于识别记录等需要精确到秒的页面）。 */
+export function formatSiteTimeWithSeconds(value: string | null | undefined): string {
+  if (!value) {
+    return ''
+  }
+  try {
+    return new Intl.DateTimeFormat(siteDefaultLocale.value, {
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+      timeZone: siteTimezone.value,
+    }).format(new Date(value))
+  } catch {
+    return value
+  }
+}
+
 export function toDateTimeLocal(value: string | null | undefined, timeZone = siteTimezone.value): string {
   if (!value) {
     return ''
@@ -82,5 +98,11 @@ export function defaultDateTimeLocal(offsetMs = 0): string {
 }
 
 export function useSiteTime() {
-  return { formatTime: formatSiteTime, toDateTimeLocal, fromDateTimeLocal, defaultDateTimeLocal }
+  return {
+    formatTime: formatSiteTime,
+    formatTimeWithSeconds: formatSiteTimeWithSeconds,
+    toDateTimeLocal,
+    fromDateTimeLocal,
+    defaultDateTimeLocal,
+  }
 }

@@ -12,6 +12,17 @@
   --danger: #b42318;
   --ok: #067647;
   --shadow: 0 1px 2px rgb(16 33 29 / 6%);
+
+  /* Element Plus 主题跟随项目主色 */
+  --el-color-primary: var(--accent);
+  --el-color-primary-light-3: #4c9b94;
+  --el-color-primary-light-5: #7fb5b0;
+  --el-color-primary-light-7: #b2d4d1;
+  --el-color-primary-light-8: #cce2e0;
+  --el-color-primary-light-9: #e6f1f0;
+  --el-color-primary-dark-2: #0b5b55;
+  --el-border-radius-base: 8px;
+  --el-font-size-base: 14px;
   font-family:
     'Segoe UI',
     system-ui,

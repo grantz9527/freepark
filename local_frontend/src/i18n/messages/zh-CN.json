@@ -1,4 +1,15 @@
 {
+  "form": {
+    "quickToday": "今天",
+    "quickMonth": "近一个月",
+    "quick3m": "近三个月",
+    "quick1y": "近一年",
+    "quickLong": "长期",
+    "startPlaceholder": "开始日期",
+    "endPlaceholder": "结束日期",
+    "cancel": "取消",
+    "confirm": "确定"
+  },
   "app": {
     "name": "FreePark 本地",
     "tagline": "场端停车控制台",
@@ -673,6 +684,7 @@
     "typeAPPOINTMENT": "预约",
     "typeVISITOR": "访客",
     "typeOTHER": "其它",
+    "colPeriod": "有效期",
     "colStartTime": "开始时间",
     "colEndTime": "结束时间",
     "formTimeRequired": "请填写开始时间和结束时间",
@@ -689,6 +701,7 @@
     "colPhone": "联系电话",
     "colDepartment": "所属单位",
     "colRemark": "备注",
+    "colPeriod": "有效期",
     "colActions": "操作",
     "statusActive": "正常",
     "statusDisabled": "已停用",

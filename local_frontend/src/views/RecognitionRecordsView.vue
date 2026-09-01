@@ -18,7 +18,7 @@ import { siteAllowedPlateColors, siteDefaultPlateColor } from '@/site/settings'
 const LOT_STORAGE_KEY = 'freepark.recognitionRecords.lotId'
 
 const { t, locale } = useI18n()
-const { formatTime, fromDateTimeLocal, defaultDateTimeLocal } = useSiteTime()
+const { formatTimeWithSeconds, fromDateTimeLocal, defaultDateTimeLocal } = useSiteTime()
 const { plateColorLabel } = usePlateColorLabel()
 
 const loading = ref(false)
@@ -305,7 +305,7 @@ onMounted(reload)
               <td>
                 <PlateBadge :plate-number="item.plateNumber" :plate-color="item.plateColor" />
               </td>
-              <td>{{ formatTime(item.eventTime) }}</td>
+              <td>{{ formatTimeWithSeconds(item.eventTime) }}</td>
               <td>
                 <button
                   v-if="item.eventImage"

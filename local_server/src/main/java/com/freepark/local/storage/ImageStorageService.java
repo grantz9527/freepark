@@ -62,10 +62,19 @@ public class ImageStorageService {
         if (bytes.length == 0) {
             return null;
         }
+        return saveImage(bytes, mime, deviceCode);
+    }
+
+    /** 保存原始图片字节（Frigate 快照等二进制来源），返回相对存储路径或 null。 */
+    public String saveImage(byte[] bytes, String mime, String deviceCode) {
+        if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        String safeMime = mime == null || mime.isBlank() ? "image/jpeg" : mime;
         try {
             String dateDir = DATE_DIR.format(LocalDate.now());
             String fileName = (deviceCode == null || deviceCode.isBlank() ? "" : sanitize(deviceCode) + "-")
-                    + UUID.randomUUID() + extensionFor(mime);
+                    + UUID.randomUUID() + extensionFor(safeMime);
             Path relative = Paths.get(RECOGNITION_SUBDIR, dateDir, fileName);
             Path target = resolveImagePath(relative.toString());
             Files.createDirectories(target.getParent());

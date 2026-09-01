@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
@@ -66,6 +66,45 @@ const formStartTime = ref('')
 const formEndTime = ref('')
 const formEnabled = ref(true)
 const formError = ref('')
+
+// 有效期范围选择器（Element Plus datetimerange，value-format 直接输出字符串）
+const rangeModel = ref<[string, string] | null>(null)
+
+watch(
+  () => [formStartTime.value, formEndTime.value],
+  ([start, end]) => {
+    rangeModel.value = start && end ? [start, end] : null
+  },
+  { immediate: true },
+)
+
+function onRangeChange(value: unknown): void {
+  if (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === 'string' &&
+    typeof value[1] === 'string'
+  ) {
+    formStartTime.value = value[0]
+    formEndTime.value = value[1]
+  }
+}
+
+const shortcuts = computed(() => [
+  { text: t('form.quickToday'), value: () => dayRange(0) },
+  { text: t('form.quickMonth'), value: () => dayRange(30) },
+  { text: t('form.quick3m'), value: () => dayRange(90) },
+  { text: t('form.quick1y'), value: () => dayRange(365) },
+  { text: t('form.quickLong'), value: () => dayRange(100 * 365) },
+])
+
+function dayRange(days: number): [Date, Date] {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start.getTime() + days * 24 * 60 * 60 * 1000)
+  end.setHours(23, 59, 59, 999)
+  return [start, end]
+}
 
 const showImport = ref(false)
 const importFile = ref<File | null>(null)
@@ -202,6 +241,24 @@ function closeForm(): void {
   showForm.value = false
   resetForm()
 }
+
+// 时间联动：结束时间始终不早于开始时间。开始时间被调大时，结束时间跟随；结束时间被调到开始之前时自动弹回。
+watch(formStartTime, (value) => {
+  if (!value || !formEndTime.value) {
+    return
+  }
+  if (Date.parse(formEndTime.value) < Date.parse(value)) {
+    formEndTime.value = value
+  }
+})
+watch(formEndTime, (value) => {
+  if (!value || !formStartTime.value) {
+    return
+  }
+  if (Date.parse(value) < Date.parse(formStartTime.value)) {
+    formEndTime.value = formStartTime.value
+  }
+})
 
 async function onSubmit(): Promise<void> {
   if (!selectedLotId.value) {
@@ -485,7 +542,7 @@ onMounted(reload)
       <form class="modal" @submit.prevent="onSubmit">
         <h3>{{ isEditing ? t('whitelist.editTitle') : t('whitelist.createTitle') }}</h3>
         <label>
-          <span>{{ t('whitelist.colPlate') }}</span>
+          <span>{{ t('whitelist.colPlate') }} <em class="req">*</em></span>
           <input v-model="formPlate" type="text" autocomplete="off" />
         </label>
         <label>
@@ -505,7 +562,7 @@ onMounted(reload)
           </select>
         </label>
         <label>
-          <span>{{ t('whitelist.colOwner') }}</span>
+          <span>{{ t('whitelist.colOwner') }} <em class="req">*</em></span>
           <input v-model="formOwnerName" type="text" autocomplete="off" />
         </label>
         <label>
@@ -520,16 +577,22 @@ onMounted(reload)
           <span>{{ t('whitelist.colRemark') }}</span>
           <input v-model="formRemark" type="text" autocomplete="off" />
         </label>
-        <div class="time-row">
-          <label>
-            <span>{{ t('whitelist.colStartTime') }}</span>
-            <input v-model="formStartTime" type="datetime-local" />
-          </label>
-          <label>
-            <span>{{ t('whitelist.colEndTime') }}</span>
-            <input v-model="formEndTime" type="datetime-local" />
-          </label>
-        </div>
+        <label>
+          <span>{{ t('whitelist.colPeriod') }} <em class="req">*</em></span>
+          <el-date-picker
+            v-model="rangeModel"
+            type="datetimerange"
+            format="YYYY-MM-DD HH:mm"
+            value-format="YYYY-MM-DDTHH:mm"
+            range-separator="~"
+            :start-placeholder="t('form.startPlaceholder')"
+            :end-placeholder="t('form.endPlaceholder')"
+            :shortcuts="shortcuts"
+            :clearable="false"
+            style="width: 100%"
+            @update:model-value="onRangeChange"
+          />
+        </label>
         <label class="checkbox">
           <input v-model="formEnabled" type="checkbox" />
           <span>{{ t('whitelist.statusActive') }}</span>
@@ -818,18 +881,6 @@ th {
   box-shadow: var(--shadow);
 }
 
-.time-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-
-@media (max-width: 560px) {
-  .time-row {
-    grid-template-columns: 1fr;
-  }
-}
-
 .modal h3 {
   margin: 0;
 }
@@ -843,6 +894,11 @@ label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.req {
+  color: var(--danger);
+  font-style: normal;
 }
 
 .checkbox input {

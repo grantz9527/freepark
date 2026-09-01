@@ -1,4 +1,15 @@
 {
+  "form": {
+    "quickToday": "اليوم",
+    "quickMonth": "الشهر الماضي",
+    "quick3m": "آخر 3 أشهر",
+    "quick1y": "السنة الماضية",
+    "quickLong": "طويل الأجل",
+    "startPlaceholder": "تاريخ البدء",
+    "endPlaceholder": "تاريخ الانتهاء",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد"
+  },
   "app": {
     "name": "FreePark المحلي",
     "tagline": "وحدة تحكم مواقف السيارات في الموقع",
@@ -478,6 +489,7 @@
     "typeAPPOINTMENT": "Appointment",
     "typeVISITOR": "Visitor",
     "typeOTHER": "Other",
+    "colPeriod": "فترة الصلاحية",
     "colStartTime": "وقت البدء",
     "colEndTime": "وقت الانتهاء",
     "formTimeRequired": "وقت البدء ووقت الانتهاء مطلوبان",
@@ -494,6 +506,7 @@
     "colPhone": "Phone",
     "colDepartment": "Organization",
     "colRemark": "Remark",
+    "colPeriod": "فترة الصلاحية",
     "colActions": "Actions",
     "statusActive": "Active",
     "statusDisabled": "Disabled",
