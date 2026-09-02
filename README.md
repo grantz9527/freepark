@@ -71,14 +71,14 @@ Full policy: [ETHICAL_USE.md](ETHICAL_USE.md)
 
 Copyright (C) 2026 顾文斌
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+This project is licensed under the **Apache License 2.0**.
 
 - Full license text: [LICENSE](LICENSE)
-- Summary: you may use, modify, and distribute this software; if you run a modified version as a network service, you must offer corresponding source to users. See the license for full terms.
-- Ethical expectations: [ETHICAL_USE.md](ETHICAL_USE.md) (read together with AGPL).
+- Summary: you may use, modify, and distribute this software, including for commercial purposes; you must retain copyright notices, include the license text, and mark significant changes. See the license for full terms.
+- Ethical expectations: [ETHICAL_USE.md](ETHICAL_USE.md) (read together with the license).
 
-本项目采用 **GNU Affero 通用公共许可证 v3.0（AGPL-3.0）** 授权。
+本项目采用 **Apache License 2.0** 授权。
 
 - 完整协议文本见 [LICENSE](LICENSE)
-- 简要说明：可自由使用、修改和分发；若将修改后的版本作为网络服务提供，须向用户提供相应源代码。具体权利与义务以协议全文为准。
-- 伦理使用期望见 [ETHICAL_USE.md](ETHICAL_USE.md)（与 AGPL 一并阅读）。
+- 简要说明：可自由使用、修改和分发，包括商业用途；须保留版权声明、附上许可证文本，并注明重大修改。具体权利与义务以协议全文为准。
+- 伦理使用期望见 [ETHICAL_USE.md](ETHICAL_USE.md)（与许可证一并阅读）。

@@ -2,15 +2,21 @@
 
 Copyright (C) 2026 顾文斌
 
-FreePark is open source software released under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE). This document states the **ethical conditions** that the author expects every user and organization to follow. It expresses why this project exists and who should **not** benefit from it.
+FreePark is open source software released under the [Apache License 2.0](LICENSE). This document states the **ethical conditions** that the author expects every user and organization to follow. It expresses why this project exists and who should **not** benefit from it.
 
-FreePark 在 [AGPL-3.0](LICENSE) 下开源发布。本文档说明作者对使用者的**伦理期望**：本项目希望帮助尊重劳动者的人与组织，**不**希望被剥削劳动者、损害工人权益的主体所使用。
+FreePark 在 [Apache-2.0](LICENSE) 下开源发布。本文档说明作者对使用者的**伦理期望**：本项目希望帮助尊重劳动者的人与组织，**不**希望被剥削劳动者、损害工人权益的主体所使用。
 
 ## Our stance / 我们的立场
 
 We believe software should serve people fairly. Parking infrastructure should not be built on the suffering of workers.
 
 我们主张技术应公平地服务社会。停车与场站管理系统的价值，不应建立在压榨劳动者之上。
+
+## A message to developers / 致开发者
+
+If you are a programmer, please safeguard the lawful rights and interests of ordinary working people at the grassroots — do not lend your skills to exploitation and injustice.
+
+如果你是一名程序员，请维护所有底层人民的合法权益，不要助纣为虐。
 
 ## Prohibited practices / 反对的行为
 
@@ -62,17 +68,17 @@ This includes using FreePark internally, reselling it as a service, embedding it
 - 合理付酬、对劳动者承担直接责任的社区、公益项目与企业。
 - 愿意改进停车体验、同时不剥削建设与运维者的贡献者。
 
-## Relationship to AGPL-3.0 / 与 AGPL-3.0 的关系
+## Relationship to the license / 与许可证的关系
 
-- **Legal license**: use, modification, and distribution are governed by [LICENSE](LICENSE) (AGPL-3.0).
-- **Ethical authorization**: the author grants this project to the community under AGPL-3.0 **and** expects compliance with this Ethical Use Policy as a **moral and author-intended condition** of use.
+- **Legal license**: use, modification, and distribution are governed by [LICENSE](LICENSE) (Apache-2.0).
+- **Ethical authorization**: the author grants this project to the community under Apache-2.0 **and** expects compliance with this Ethical Use Policy as a **moral and author-intended condition** of use.
 
-If you cannot accept this policy, **do not use** FreePark—even if AGPL-3.0 might otherwise permit your use under applicable law.
+If you cannot accept this policy, **do not use** FreePark—even if Apache-2.0 might otherwise permit your use under applicable law.
 
-- **法律效力**：使用、修改与分发以 [LICENSE](LICENSE)（AGPL-3.0）为准。
-- **伦理授权**：作者在 AGPL-3.0 下发布本项目，同时将遵守本伦理声明视为使用本软件的**道德与作者本意上的前提**。
+- **法律效力**：使用、修改与分发以 [LICENSE](LICENSE)（Apache-2.0）为准。
+- **伦理授权**：作者在 Apache-2.0 下发布本项目，同时将遵守本伦理声明视为使用本软件的**道德与作者本意上的前提**。
 
-若你无法接受本声明，**请勿使用** FreePark——即便在适用法律下 AGPL-3.0 可能仍赋予你其他权利。
+若你无法接受本声明，**请勿使用** FreePark——即便在适用法律下 Apache-2.0 可能仍赋予你其他权利。
 
 ## Reporting / 反馈
 
