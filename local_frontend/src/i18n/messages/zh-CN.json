@@ -849,6 +849,17 @@
   },
   "barriers": {
     "planningHint": "设备登记保存在数据库中。登记后到「通道管理」绑定车道，设备推送识别结果即可入库并联动停车流水。",
+    "driversTitle": "已接入驱动",
+    "driversHint": "由当前构建已引入的厂商驱动模块提供；接入新驱动后，其支持的设备会自动出现在这里。",
+    "driversEmpty": "暂无已接入驱动。引入厂商驱动模块后即可下发平台侧命令。",
+    "driversModelsLabel": "支持型号",
+    "driversAllModels": "整条产品线（型号通配）",
+    "capabilities": {
+      "PLATE_RECOGNITION": "车牌识别",
+      "GATE_CONTROL": "道闸控制",
+      "DISPLAY": "LED / LCD 屏显",
+      "VOICE": "语音播报"
+    },
     "create": "添加识别一体机",
     "createTitle": "登记识别一体机",
     "createHint": "填写识别一体机名称与编号。登记后可在「通道管理」中绑定车道，绑定后设备推送的识别结果归属该通道。",
@@ -862,6 +873,9 @@
     "host": "设备地址",
     "port": "端口",
     "portInvalid": "请输入 1–65535 的端口",
+    "brand": "品牌",
+    "brandHint": "选项来自当前构建已引入的驱动模块，请选择接管该设备的厂商驱动。",
+    "hostHint": "驱动命令通道地址，如 192.168.1.64；留空则该档案暂不能下发驱动命令。",
     "codeExists": "识别一体机编号已存在",
     "colName": "名称",
     "colCode": "编号",

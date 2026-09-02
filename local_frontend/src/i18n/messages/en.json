@@ -812,6 +812,17 @@
   },
   "barriers": {
     "planningHint": "Devices are stored in the database. Register one, bind it to a lane in lane management, and recognition pushes will be saved and linked to parking sessions.",
+    "driversTitle": "Connected drivers",
+    "driversHint": "Provided by the driver modules linked into this build. Adding a vendor driver adds its device support here automatically.",
+    "driversEmpty": "No driver connected yet. Add a vendor driver module to enable platform-side commands.",
+    "driversModelsLabel": "Supported models",
+    "driversAllModels": "Entire product line (wildcard)",
+    "capabilities": {
+      "PLATE_RECOGNITION": "Plate recognition",
+      "GATE_CONTROL": "Gate control",
+      "DISPLAY": "LED / LCD",
+      "VOICE": "Voice"
+    },
     "create": "Add recognition unit",
     "createTitle": "Register recognition unit",
     "createHint": "Enter the unit name and code. After registration you can bind it to a lane in lane management; recognition pushes from a bound device belong to that lane.",
@@ -825,6 +836,9 @@
     "host": "Device address",
     "port": "Port",
     "portInvalid": "Enter a port between 1 and 65535",
+    "brand": "Brand",
+    "brandHint": "Options come from the driver modules linked into this build. Pick the vendor driver that manages this unit.",
+    "hostHint": "Command channel address used by the driver, e.g. 192.168.1.64. Leave blank until this unit is reachable for commands.",
     "codeExists": "Recognition unit code already exists",
     "colName": "Name",
     "colCode": "Code",

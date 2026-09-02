@@ -1,0 +1,3 @@
+# 臻识驱动工厂的 ServiceLoader 声明：平台（Spring）启动时无需改动代码，
+# 只要 classpath 引入本 jar，AioDriverRegistry 即自动发现并注册该工厂。
+com.freepark.driver.zhensi.ZhensiDriverFactory

@@ -61,16 +61,19 @@ public class ParkingBarrierService {
         }
         boolean enabled = request.enabled() == null || request.enabled();
         ParkingBarrier barrier = new ParkingBarrier(null, request.name(), code, enabled);
+        barrier.setBrand(request.brand());
+        barrier.setConnection(request.host(), request.port());
         return BarrierView.from(barriers.save(barrier));
     }
 
-    /** 全局更新设备信息（名称/启用状态）。 */
+    /** 全局更新设备信息（名称/启用状态/品牌/驱动通道连接参数）。 */
     @Transactional
     public BarrierView updateBarrier(UUID requesterId, UUID barrierId, UpdateBarrierRequest request) {
         requireAdmin(requesterId);
         ParkingBarrier barrier = requireBarrier(barrierId);
         boolean enabled = request.enabled() == null ? barrier.isEnabled() : request.enabled();
         barrier.updateDetails(request.name(), enabled);
+        applyConnectionUpdate(barrier, request);
         return BarrierView.from(barriers.save(barrier));
     }
 
@@ -120,6 +123,8 @@ public class ParkingBarrierService {
         }
         boolean enabled = request.enabled() == null || request.enabled();
         ParkingBarrier barrier = new ParkingBarrier(lane, request.name(), code, enabled);
+        barrier.setBrand(request.brand());
+        barrier.setConnection(request.host(), request.port());
         return BarrierView.from(barriers.save(barrier));
     }
 
@@ -131,6 +136,7 @@ public class ParkingBarrierService {
         ParkingBarrier barrier = requireBarrier(laneId, barrierId);
         boolean enabled = request.enabled() == null ? barrier.isEnabled() : request.enabled();
         barrier.updateDetails(request.name(), enabled);
+        applyConnectionUpdate(barrier, request);
         return BarrierView.from(barriers.save(barrier));
     }
 
@@ -140,6 +146,12 @@ public class ParkingBarrierService {
         requireLane(laneId);
         ParkingBarrier barrier = requireBarrier(laneId, barrierId);
         barriers.delete(barrier);
+    }
+
+    /** 全量覆盖驱动通道参数：请求未携带的字段一律清空（PUT 语义，配合表单回填原值）。 */
+    private void applyConnectionUpdate(ParkingBarrier barrier, UpdateBarrierRequest request) {
+        barrier.setBrand(request.brand());
+        barrier.setConnection(request.host(), request.port());
     }
 
     private ParkingBarrier requireBarrier(UUID laneId, UUID barrierId) {

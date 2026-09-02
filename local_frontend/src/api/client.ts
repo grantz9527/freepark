@@ -256,9 +256,40 @@ export interface BarrierView {
   laneCode: string | null
   name: string
   code: string
+  brand: string | null
+  host: string | null
+  port: number | null
   enabled: boolean
   createdAt: string
   updatedAt: string
+}
+
+/** 设备档案写入字段（品牌/连接参数均可选，缺省则档案暂无驱动命令通道）。 */
+export interface BarrierWritePayload {
+  name: string
+  code?: string
+  brand?: string | null
+  host?: string | null
+  port?: number | null
+  enabled?: boolean
+}
+
+/** 一体机驱动能力（与后端 Capability 枚举对齐）。 */
+export type DriverCapability = 'PLATE_RECOGNITION' | 'GATE_CONTROL' | 'DISPLAY' | 'VOICE'
+
+/** 驱动工厂目录视图：来自平台启动时自动发现的驱动模块。 */
+export interface DriverFactoryView {
+  brand: string
+  model: string
+  displayName: string
+  /** 对外展示的受支持设备型号清单；空数组表示覆盖整条产品线（model 通配）。 */
+  supportedModels: string[]
+  capabilities: DriverCapability[]
+}
+
+/** 列出当前构建已接入的全部一体机驱动（多个驱动一并返回）。 */
+export function listDriverFactories(locale: string): Promise<ApiResponse<DriverFactoryView[]>> {
+  return apiCall('/api/v1/aio-drivers', { method: 'GET' }, locale)
 }
 
 /** 设备轮询网关时自动发现并登记的识别设备。 */
@@ -316,10 +347,7 @@ export function createBarrier(
 export function updateBarrier(
   laneId: string,
   barrierId: string,
-  payload: {
-    name: string
-    enabled?: boolean
-  },
+  payload: BarrierWritePayload,
   locale: string,
 ): Promise<ApiResponse<BarrierView>> {
   return apiCall(
@@ -361,10 +389,7 @@ export function createBarrierGlobal(
 /** 全局更新设备信息。 */
 export function updateBarrierGlobal(
   barrierId: string,
-  payload: {
-    name: string
-    enabled?: boolean
-  },
+  payload: BarrierWritePayload,
   locale: string,
 ): Promise<ApiResponse<BarrierView>> {
   return apiCall(

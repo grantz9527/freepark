@@ -33,6 +33,14 @@ public class ParkingBarrier extends BaseEntity {
     @Column(length = 64)
     private String brand;
 
+    /** 一体机命令通道地址（平台主动下发命令时使用，驱动只认注入配置）。 */
+    @Column(length = 64)
+    private String host;
+
+    /** 一体机命令通道端口，空则用驱动默认端口。 */
+    @Column
+    private Integer port;
+
     /** 最近一次轮询时间戳，用于推导设备在线状态。 */
     @Column
     private Instant lastPollAt;
@@ -72,6 +80,26 @@ public class ParkingBarrier extends BaseEntity {
     }
 
     public void setBrand(String brand) {
+        this.brand = brand;
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public Integer getPort() {
+        return port;
+    }
+
+    /** 更新一体机命令通道连接参数（可为空，表示未配置驱动通道）。 */
+    public void setConnection(String host, Integer port) {
+        this.host = host;
+        this.port = port;
+    }
+
+    public void setConnection(String host, Integer port, String brand) {
+        this.host = host;
+        this.port = port;
         this.brand = brand;
     }
 

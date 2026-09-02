@@ -10,10 +10,12 @@ import {
   deleteBarrierGlobal,
   listAllBarriers,
   listAutoRegisteredDevices,
+  listDriverFactories,
   listLanes,
   updateBarrierGlobal,
   type AutoRegisteredDeviceView,
   type BarrierView,
+  type DriverFactoryView,
   type LaneView,
 } from '@/api/client'
 import { getUser } from '@/auth/session'
@@ -31,10 +33,24 @@ const lanes = ref<LaneView[]>([])
 const searchQuery = ref('')
 const errorMessage = ref('')
 
+// 已接入驱动目录（来自驱动模块自动发现，多个驱动一并展示）
+const drivers = ref<DriverFactoryView[]>([])
+const driversLoading = ref(false)
+const driverBrands = computed(() => {
+  const set = new Set<string>()
+  for (const d of drivers.value) {
+    if (d.brand) set.add(d.brand)
+  }
+  return [...set]
+})
+
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formName = ref('')
 const formCode = ref('')
+const formBrand = ref('')
+const formHost = ref('')
+const formPortText = ref('')
 const formEnabled = ref(true)
 const formError = ref('')
 const saving = ref(false)
@@ -99,6 +115,19 @@ async function loadAutoDevices(): Promise<void> {
   }
 }
 
+// 已接入驱动目录：来自当前构建引入的驱动模块
+async function loadDrivers(): Promise<void> {
+  driversLoading.value = true
+  try {
+    const result = await listDriverFactories(locale.value)
+    drivers.value = result.data
+  } catch {
+    drivers.value = []
+  } finally {
+    driversLoading.value = false
+  }
+}
+
 async function removeAutoDevice(device: AutoRegisteredDeviceView): Promise<void> {
   autoBusyId.value = device.id
   try {
@@ -158,6 +187,7 @@ const filteredDevices = computed(() => {
 onMounted(() => {
   void loadDevices()
   void loadAutoDevices()
+  void loadDrivers()
   void listLanes(locale.value)
     .then((result) => {
       lanes.value = result.data
@@ -191,6 +221,9 @@ function resetForm(): void {
   editingId.value = null
   formName.value = ''
   formCode.value = ''
+  formBrand.value = ''
+  formHost.value = ''
+  formPortText.value = ''
   formEnabled.value = true
   formError.value = ''
 }
@@ -204,6 +237,9 @@ function openEdit(device: BarrierView): void {
   editingId.value = device.id
   formName.value = device.name
   formCode.value = device.code
+  formBrand.value = device.brand ?? ''
+  formHost.value = device.host ?? ''
+  formPortText.value = device.port != null ? String(device.port) : ''
   formEnabled.value = device.enabled
   formError.value = ''
   showForm.value = true
@@ -233,20 +269,26 @@ async function onSubmit(): Promise<void> {
     formError.value = t('barriers.codeExists')
     return
   }
+  const port = parsePort()
+  if (port === 'invalid') {
+    formError.value = t('barriers.portInvalid')
+    return
+  }
+  // 全量提交：清空输入即从档案清除品牌/连接参数
+  const payload = {
+    name,
+    enabled: formEnabled.value,
+    brand: formBrand.value.trim() || null,
+    host: formHost.value.trim() || null,
+    port,
+  }
   saving.value = true
   try {
     if (isEditing.value && editingId.value) {
-      const result = await updateBarrierGlobal(
-        editingId.value,
-        { name, enabled: formEnabled.value },
-        locale.value,
-      )
+      const result = await updateBarrierGlobal(editingId.value, payload, locale.value)
       devices.value = devices.value.map((item) => (item.id === result.data.id ? result.data : item))
     } else {
-      const result = await createBarrierGlobal(
-        { name, code, enabled: formEnabled.value },
-        locale.value,
-      )
+      const result = await createBarrierGlobal({ ...payload, code }, locale.value)
       devices.value = [result.data, ...devices.value]
     }
     closeForm()
@@ -256,12 +298,48 @@ async function onSubmit(): Promise<void> {
     saving.value = false
   }
 }
+
+/** 端口解析：空=null；非 1-65535 整数返回 'invalid'。 */
+function parsePort(): number | null | 'invalid' {
+  const raw = formPortText.value.trim()
+  if (!raw) return null
+  const value = Number(raw)
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    return 'invalid'
+  }
+  return value
+}
 </script>
 
 <template>
   <section class="page">
     <p class="banner planning">{{ t('barriers.planningHint') }}</p>
     <p v-if="errorMessage" class="banner error">{{ errorMessage }}</p>
+
+    <section class="table-card driver-card">
+      <div class="auto-head">
+        <div>
+          <h4>{{ t('barriers.driversTitle') }}</h4>
+          <p class="field-hint">{{ t('barriers.driversHint') }}</p>
+        </div>
+      </div>
+      <div v-if="drivers.length > 0" class="driver-grid">
+        <div v-for="d in drivers" :key="`${d.brand}|${d.model}`" class="driver-item">
+          <strong class="driver-name">{{ d.displayName }}</strong>
+          <div v-if="d.supportedModels.length > 0" class="driver-models">
+            <span class="field-hint">{{ t('barriers.driversModelsLabel') }}</span>
+            <span v-for="m in d.supportedModels" :key="m" class="model-chip">{{ m }}</span>
+          </div>
+          <span v-else class="driver-models all">{{ t('barriers.driversAllModels') }}</span>
+        </div>
+      </div>
+      <div v-else-if="driversLoading" class="empty">
+        <p>{{ t('lanes.loading') }}</p>
+      </div>
+      <div v-else class="empty">
+        <p>{{ t('barriers.driversEmpty') }}</p>
+      </div>
+    </section>
 
     <div class="toolbar">
       <label class="search">
@@ -419,6 +497,23 @@ async function onSubmit(): Promise<void> {
             :class="{ locked: isEditing }"
           />
           <span v-if="isEditing" class="field-hint">{{ t('barriers.codeLocked') }}</span>
+        </label>
+        <label>
+          <span>{{ t('barriers.brand') }}</span>
+          <select v-model="formBrand">
+            <option value="">{{ t('barriers.unknownBrand') }}</option>
+            <option v-for="b in driverBrands" :key="b" :value="b">{{ b }}</option>
+          </select>
+          <span class="field-hint">{{ t('barriers.brandHint') }}</span>
+        </label>
+        <label>
+          <span>{{ t('barriers.host') }}</span>
+          <input v-model="formHost" type="text" autocomplete="off" />
+          <span class="field-hint">{{ t('barriers.hostHint') }}</span>
+        </label>
+        <label>
+          <span>{{ t('barriers.port') }}</span>
+          <input v-model="formPortText" type="number" min="1" max="65535" autocomplete="off" />
         </label>
         <div class="endpoint-guide">
           <p class="endpoint-title">{{ t('barriers.endpoints.title') }}</p>
@@ -659,12 +754,14 @@ label {
   width: auto;
 }
 
-input {
+input,
+select {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.6rem 0.75rem;
   background: #fff;
   color: var(--text);
+  font: inherit;
 }
 
 .endpoint-guide {
@@ -776,6 +873,52 @@ input {
 
 .auto-head h4 {
   margin: 0 0 0.15rem;
+}
+
+.driver-card {
+  padding-bottom: 0.4rem;
+}
+
+.driver-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.65rem;
+  padding: 0.5rem 1rem 0.95rem;
+}
+
+.driver-item {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.driver-name {
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.driver-models {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.driver-models.all {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.model-chip {
+  border-radius: 999px;
+  padding: 0.12rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--accent);
+  background: #e6f2ec;
+  border: 1px solid #d6e8dd;
 }
 
 .sr-only {

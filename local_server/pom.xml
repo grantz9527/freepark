@@ -77,6 +77,17 @@
 			<artifactId>org.eclipse.paho.client.mqttv3</artifactId>
 			<version>1.2.5</version>
 		</dependency>
+		<!-- 识别一体机驱动：依赖式接入。新增厂商 = 在此加一个驱动依赖即可 -->
+		<dependency>
+			<groupId>com.freepark</groupId>
+			<artifactId>freepark-driver-api</artifactId>
+			<version>0.1.0-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>com.freepark</groupId>
+			<artifactId>zhensi-driver</artifactId>
+			<version>0.1.0-SNAPSHOT</version>
+		</dependency>
 		<dependency>
 			<groupId>com.h2database</groupId>
 			<artifactId>h2</artifactId>

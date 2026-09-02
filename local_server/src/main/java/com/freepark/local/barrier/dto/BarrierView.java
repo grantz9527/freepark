@@ -13,6 +13,9 @@ public record BarrierView(
         String laneCode,
         String name,
         String code,
+        String brand,
+        String host,
+        Integer port,
         boolean enabled,
         Instant createdAt,
         Instant updatedAt) {
@@ -26,6 +29,9 @@ public record BarrierView(
                 lane == null ? null : lane.getCode(),
                 barrier.getName(),
                 barrier.getCode(),
+                barrier.getBrand(),
+                barrier.getHost(),
+                barrier.getPort(),
                 barrier.isEnabled(),
                 barrier.getCreatedAt(),
                 barrier.getUpdatedAt());
