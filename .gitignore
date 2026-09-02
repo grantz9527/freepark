@@ -1,2 +1,41 @@
 # IDE / editor config
 .cursor/
+
+# IDE files (per repository convention)
+.classpath
+.project
+.settings/
+.idea/
+*.iml
+
+# Local scratch / temp files
+_tmp_*.js
+_tmp_*.json
+
+# External repositories
+/yolo26-plate/
+
+# Frigate runtime state (tracked config files: frigate/config/config.yml, backup_config.yaml)
+frigate/config/.exports
+frigate/config/.jwt_secret
+frigate/config/.search_stats.json
+frigate/config/.timeline
+frigate/config/.vacuum
+frigate/config/*.db
+frigate/config/*.db-shm
+frigate/config/*.db-wal
+frigate/config/go2rtc_homekit.yml
+frigate/config/model_cache/
+frigate/gen_move.sh
+
+# Mosquitto runtime / credentials (tracked config file: mosquitto/config/mosquitto.conf)
+mosquitto/config/pwfile
+mosquitto/data/
+mosquitto/log/
+
+# Server local runtime data
+local_server/data/
+
+# Frontend generated declaration files
+local_frontend/src/auto-imports.d.ts
+local_frontend/src/components.d.ts
