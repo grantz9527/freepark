@@ -20,6 +20,12 @@ FreePark 是一套部署在车场本地的**停车场边缘计算**系统：`loc
 
 **如果没有收费需求，本仓库可直接投入使用**：白名单 / 黑名单 / 正则名单通行控制、人工识别补录、道闸与岗亭开闸 / 关闸、停车流水等能力开箱即用，无需额外接入收费模块。
 
+## Built with AI / 由 AI 驱动构建
+
+This project is an **attempt to be built by AI**: we strive to let AI write the code while humans focus on requirements, design decisions, and review — minimizing hand-written code as much as possible.
+
+本项目**尝试完全由 AI 来构建**：尽力让 AI 完成代码编写，人类只负责提出需求、做设计决策并进行审查，努力做到人工不直接编写代码。
+
 ## Vision / 愿景
 
 - Make it easier to find, share, and manage parking spaces across countries and cities.
