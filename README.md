@@ -4,6 +4,12 @@ Use AI and related open-source tools to build an I18N (internationalized) parkin
 
 用 AI 与开源工具构建一套国际化（I18N）停车系统，帮助全球用户更高效地解决停车问题。
 
+## Product Preview / 界面预览
+
+![FreePark Product Preview / FreePark 界面预览](product_imgs/90a3a33b-8ab7-46b0-939e-51a7e14544f7.png)
+
+![FreePark Product Preview / FreePark 界面预览](product_imgs/33fb8782-35a7-4d4c-b867-20acd9a4f1ac.png)
+
 ## What is it / 项目定位
 
 FreePark is an on-premise **edge computing** parking system: `local_server` + `local_frontend` run entirely at the site. Vehicle recognition, lane / booth control, whitelist / blacklist, access judgment, and parking flow all close the loop locally without depending on a cloud service.
@@ -36,6 +42,19 @@ The backend uses Java 21, Spring Data JPA, MySQL, and HTTP I18N (`Accept-Languag
 
 - [`local_server`](local_server/README.md): on-premise / edge service, default port `8081`
 - [`local_frontend`](local_frontend/README.md): Vue 3 + vue-i18n console for `local_server`, default port `5173`
+
+## Default account / 默认账号
+
+On first startup, sign in with the default account:
+
+首次启动后，使用以下默认账号登录：
+
+- username / 用户名：`admin`
+- password / 密码：`admin123`
+
+Override via environment variables `FREEPARK_ADMIN_USERNAME` and `FREEPARK_ADMIN_PASSWORD`. **Change this password in production.**
+
+可通过环境变量 `FREEPARK_ADMIN_USERNAME` / `FREEPARK_ADMIN_PASSWORD` 覆盖。**生产环境请务必修改默认密码。**
 
 ## Status / 当前状态
 
