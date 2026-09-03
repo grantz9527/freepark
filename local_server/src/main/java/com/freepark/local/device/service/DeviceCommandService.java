@@ -42,19 +42,36 @@ public class DeviceCommandService {
 
     @Transactional
     public DeviceCommandView enqueue(UUID requesterId, UUID deviceId, DeviceCommand.Action action, String source) {
+        return enqueue(requesterId, deviceId, action, source, null);
+    }
+
+    @Transactional
+    public DeviceCommandView enqueue(UUID requesterId, UUID deviceId, DeviceCommand.Action action,
+                                     String source, String payload) {
         requireAdmin(requesterId);
-        return enqueueSystem(deviceId, action, source);
+        return enqueueSystemInternal(deviceId, action, source, payload);
     }
 
     /** 系统内部入队（Frigate 联动等），不校验管理员。 */
     @Transactional
     public DeviceCommandView enqueueSystem(UUID deviceId, DeviceCommand.Action action, String source) {
+        return enqueueSystem(deviceId, action, source, null);
+    }
+
+    @Transactional
+    public DeviceCommandView enqueueSystem(UUID deviceId, DeviceCommand.Action action,
+                                           String source, String payload) {
+        return enqueueSystemInternal(deviceId, action, source, payload);
+    }
+
+    private DeviceCommandView enqueueSystemInternal(UUID deviceId, DeviceCommand.Action action,
+                                                    String source, String payload) {
         ParkingBarrier device = barriers.findById(deviceId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (!device.isEnabled()) {
             throw new BusinessException(ErrorCode.DEVICE_DISABLED);
         }
-        DeviceCommand cmd = commands.save(new DeviceCommand(device, action, source));
+        DeviceCommand cmd = commands.save(new DeviceCommand(device, action, source, payload));
         return DeviceCommandView.from(cmd);
     }
 
@@ -75,13 +92,27 @@ public class DeviceCommandService {
         }
     }
 
-    /** 轮询出队：取最早一条 PENDING，标记 DELIVERED 后返回。无则返回 empty。 */
+    /** 指令有效时限：入队后超过该时长仍未被设备轮询取走，视为过期丢弃。 */
+    private static final java.time.Duration COMMAND_TTL = java.time.Duration.ofSeconds(5);
+
+    /**
+     * 轮询出队：按 FIFO 取该设备最早的 PENDING 指令。
+     * 已超过 {@link #COMMAND_TTL} 未取走的滞留指令会被标记 EXPIRED 并跳过，
+     * 避免相机离线一段时间后恢复轮询时误执行早该作废的开闸指令。
+     */
     @Transactional
     public Optional<DeviceCommand> dequeueForDevice(UUID deviceId) {
-        Optional<DeviceCommand> pending = commands.findFirstByDevice_IdAndStatusOrderByCreatedAtAsc(
-                deviceId, DeviceCommand.Status.PENDING);
-        pending.ifPresent(cmd -> cmd.markDelivered(Instant.now()));
-        return pending;
+        Instant now = Instant.now();
+        for (DeviceCommand cmd : commands.findByDevice_IdAndStatusOrderByCreatedAtAsc(
+                deviceId, DeviceCommand.Status.PENDING)) {
+            if (cmd.getCreatedAt().isBefore(now.minus(COMMAND_TTL))) {
+                cmd.markExpired();
+                continue;
+            }
+            cmd.markDelivered(now);
+            return Optional.of(cmd);
+        }
+        return Optional.empty();
     }
 
     @Transactional(readOnly = true)

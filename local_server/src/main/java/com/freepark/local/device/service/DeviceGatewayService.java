@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.JsonNodeFactory;
+import tools.jackson.databind.node.ObjectNode;
 import com.freepark.local.accessdecision.dto.AccessDecisionRequest;
 import com.freepark.local.accessdecision.dto.AccessDecisionView;
 import com.freepark.local.accessdecision.dto.AccessDirection;
@@ -23,10 +25,10 @@ import com.freepark.local.accessdecision.service.AccessDecisionService;
 import com.freepark.local.aiodriver.service.AioDriverService;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
-import com.freepark.local.device.dto.DevicePollResponse;
 import com.freepark.local.device.protocol.CameraProtocol;
 import com.freepark.local.device.protocol.ZhenshiProtocol;
 import com.freepark.local.domain.DeviceCommand;
+import com.freepark.local.domain.LaneType;
 import com.freepark.local.domain.ParkingBarrier;
 import com.freepark.local.domain.ParkingBarrierRepository;
 import com.freepark.local.domain.RecognitionRecord;
@@ -46,6 +48,18 @@ public class DeviceGatewayService {
 
     /** 轮询设备档案缓存 TTL：心跳轮询非常频繁，1 分钟内复用档案、避免每次查库。 */
     private static final long POLL_CACHE_TTL_MILLIS = TimeUnit.SECONDS.toMillis(60);
+
+    /** 通行判定「黑名单拦截」remark（AccessDecisionService 命中黑名单规则时返回）。 */
+    private static final String REMARK_BLACKLISTED_VEHICLE = "blacklisted_vehicle";
+    /**
+     * 黑名单拦截固定文案：语音文本按控制板语音库词组（词间 ASCII 逗号分隔）播报，
+     * LED 文字分行显示（每行须在控制板单行 32 字节内）。词库已确认：此车为黑名单车辆(#202)、
+     * 禁止入场(#242)、无权出场(#152)。
+     */
+    private static final String BLACKLIST_VOICE_ENTRANCE = "此车为黑名单车辆,禁止入场";
+    private static final String BLACKLIST_VOICE_EXIT = "此车为黑名单车辆,无权出场";
+    private static final String BLACKLIST_LED_ENTRANCE = "此车为黑名单车辆\n禁止入场";
+    private static final String BLACKLIST_LED_EXIT = "此车为黑名单车辆\n无权出场";
 
     private final ParkingBarrierRepository barriers;
     private final RecognitionRecordService recognitionRecordService;
@@ -98,12 +112,12 @@ public class DeviceGatewayService {
     }
 
     @Transactional
-    public DevicePollResponse handlePoll(String code) {
+    public JsonNode handlePoll(String code) {
         ParkingBarrier device = findCachedDeviceForPoll(code);
         if (device == null) {
-            // 未登记的设备：自动注册到「识别一体机对接」，并返回空轮询响应
+            // 未登记的设备：自动注册到「识别一体机对接」，返回心跳确认，等待管理员收录绑定车道
             autoDeviceService.upsertOnPoll(code);
-            return DevicePollResponse.empty();
+            return heartbeatAck();
         }
         if (!device.isEnabled()) {
             throw new BusinessException(ErrorCode.DEVICE_DISABLED);
@@ -111,7 +125,21 @@ public class DeviceGatewayService {
         // 缓存复用 detached 实体，心跳用批量 UPDATE 落库（避免 merge 产生额外 SELECT）
         barriers.touchLastPollAt(device.getId(), Instant.now());
         DeviceCommand cmd = commandService.dequeueForDevice(device.getId()).orElse(null);
-        return resolveProtocol(device).buildPollResponse(cmd);
+        CameraProtocol protocol = resolveProtocol(device);
+        // 指令（手动）开闸也按车道方向播报欢迎/欢送语：入口“欢迎光临”、出口“一路顺风”
+        JsonNode response = protocol.buildPollResponse(cmd, pollVoiceText(device, cmd));
+        if (cmd != null && cmd.getAction() == DeviceCommand.Action.SYNC_TIME) {
+            // 时间同步不参与开/关闸：按心跳应答后，在响应中附带 0x05 主板时间同步帧
+            response = protocol.appendTimeSync(response);
+        }
+        return response;
+    }
+
+    /** 心跳/注册确认应答：臻识官方 demo 对设备注册的标准回复，相机收到即继续下一轮询，不触发任何动作。 */
+    private static JsonNode heartbeatAck() {
+        ObjectNode ok = JsonNodeFactory.instance.objectNode();
+        ok.put("status", "ok");
+        return ok;
     }
 
     /**
@@ -158,10 +186,18 @@ public class DeviceGatewayService {
         // 1) 先消费预排命令（管理员/规则显式开/关闸优先，沿用原队列语义）
         Optional<DeviceCommand> pending = commandService.dequeueForDevice(device.getId());
         if (pending.isPresent()) {
-            boolean open = pending.get().getAction() == DeviceCommand.Action.OPEN;
-            log.info("识别 device={} plate={}：命中预排命令 {}，推送了开闸指令={}",
-                    device.getCode(), record.getPlate(), pending.get().getAction(), open);
-            return protocol.buildPushResponse(open);
+            DeviceCommand cmd = pending.get();
+            if (cmd.getAction() == DeviceCommand.Action.SYNC_TIME) {
+                // 时间同步为“附加”指令，不参与识别放行决策：消费后继续常规通行判定，最终响应附带 485 同步时间帧
+                log.info("识别 device={} plate={}：消费预排指令 SYNC_TIME，继续常规通行判定并附带时间同步",
+                        device.getCode(), record.getPlate());
+                return protocol.appendTimeSync(respondOpenOnAllowed(device, record, protocol));
+            }
+            boolean open = cmd.getAction() == DeviceCommand.Action.OPEN;
+            log.info("识别 device={} plate={}：命中预排命令 {}，开闸={}", device.getCode(), record.getPlate(),
+                    cmd.getAction(), open);
+            // 预排开闸按行进方向附欢迎/欢送语音；CLOSE 由协议层转译为 ivs_ioctrl（落闸）等设备控制报文
+            return protocol.buildPushResponse(cmd, welcomeVoice(toAccessDirection(record.getDirection())));
         }
 
         // 2) 无预排命令：按通行判定规则决定放行，放行才向识别一体机下发开闸指令
@@ -205,20 +241,68 @@ public class DeviceGatewayService {
         if (decision.result() == AccessDecisionView.Result.INTERCEPTED) {
             log.info("识别拦截不开闸：device={} plate={} direction={} remark={}",
                     device.getCode(), plate, direction, decision.remark());
-            return protocol.buildPushResponse(false);
+            return interceptResponse(protocol, direction, decision.remark());
         }
 
         // 放行：优先平台主动 HTTP 下发开闸指令
+        String voiceText = welcomeVoice(direction);
         if (aioDrivers.openGateSystem(device, "recognition:" + device.getCode())) {
             log.info("识别放行 device={} plate={} direction={}：推送了开闸指令（平台主动下发）",
                     device.getCode(), plate, direction);
-            // 已主动下发开闸，响应不再重复指示设备开闸
-            return protocol.buildPushResponse(false);
+            // 已主动下发开闸，响应不再重复指示设备开闸（欢迎语音仍随响应带回）
+            return protocol.buildPushResponse(false, voiceText);
         }
         // 档案无驱动或连接地址不可用：回退响应带回，由设备按响应自行开闸
         log.info("识别放行 device={} plate={} direction={}：推送了开闸指令（响应带回）",
                 device.getCode(), plate, direction);
-        return protocol.buildPushResponse(true);
+        return protocol.buildPushResponse(true, voiceText);
+    }
+
+    /**
+     * 拦截提示响应：黑名单拦截在不开闸的同时，经相机串口向控制板下发「LED 文字 + 语音」固定文案
+     * （入口“此车为黑名单车辆,禁止入场”、出口“此车为黑名单车辆,无权出场”，词条均匹配板卡语音库）；
+     * 其它拦截仅返回不开闸。
+     */
+    private JsonNode interceptResponse(CameraProtocol protocol, AccessDirection direction, String remark) {
+        if (!REMARK_BLACKLISTED_VEHICLE.equals(remark)) {
+            return protocol.buildPushResponse(false);
+        }
+        if (direction == AccessDirection.ENTRANCE) {
+            return protocol.buildPushResponse(false, BLACKLIST_VOICE_ENTRANCE, BLACKLIST_LED_ENTRANCE);
+        }
+        if (direction == AccessDirection.EXIT) {
+            return protocol.buildPushResponse(false, BLACKLIST_VOICE_EXIT, BLACKLIST_LED_EXIT);
+        }
+        return protocol.buildPushResponse(false);
+    }
+
+    /** 放行播报语：入场播“欢迎光临”，出场播“一路顺风”；方向不可判定不播。 */
+    private String welcomeVoice(AccessDirection direction) {
+        if (direction == AccessDirection.ENTRANCE) {
+            return "欢迎光临";
+        }
+        if (direction == AccessDirection.EXIT) {
+            return "一路顺风";
+        }
+        return null;
+    }
+
+    /**
+     * 指令（手动）开闸的播报语：按设备绑定车道方向推断（入口“欢迎光临”、出口“一路顺风”）。
+     * 仅 OPEN 指令播报；双向车道/未绑定车道/其它动作方向不明，不播。
+     */
+    private String pollVoiceText(ParkingBarrier device, DeviceCommand cmd) {
+        if (cmd == null || cmd.getAction() != DeviceCommand.Action.OPEN) {
+            return null;
+        }
+        LaneType laneType = barriers.findBoundLaneType(device.getId()).orElse(null);
+        if (laneType == LaneType.ENTRANCE) {
+            return "欢迎光临";
+        }
+        if (laneType == LaneType.EXIT) {
+            return "一路顺风";
+        }
+        return null;
     }
 
     /** 对齐流水层的方向解释：IN/ENTRANCE/1 → 入场，OUT/EXIT/2 → 出场，其余不可判定。 */

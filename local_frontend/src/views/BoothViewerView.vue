@@ -5,13 +5,15 @@ import { useI18n } from 'vue-i18n'
 
 import {
   ApiError,
+  enqueueDeviceCommand,
+  listBarriers,
   listBooths,
+  type BarrierView,
   type BoothLaneView,
   type BoothView,
 } from '@/api/client'
 import PlateBadge from '@/components/PlateBadge.vue'
 import { useSiteTime } from '@/composables/useSiteTime'
-import { listBarrierDevices, type BarrierDevice } from '@/hardware/barrierDevices'
 import { listRecognitionRecords, type RecognitionRecord } from '@/hardware/recognitionRecords'
 
 const LOT_STORAGE_KEY = 'freepark.booths.lotId'
@@ -64,13 +66,35 @@ async function load(): Promise<void> {
     if (!booth.value) {
       errorMessage.value = t('booths.viewNotFound')
     } else {
-      await loadLatestRecognitions()
+      await Promise.all([loadLatestRecognitions(), loadLaneDevices()])
     }
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : t('booths.loadFailed')
   } finally {
     loading.value = false
   }
+}
+
+/** 每通道后端真实绑定的一体机档案（parking_barrier）。 */
+const laneDevices = ref<Record<string, BarrierView[]>>({})
+
+async function loadLaneDevices(): Promise<void> {
+  const lanes = booth.value?.lanes ?? []
+  const map: Record<string, BarrierView[]> = {}
+  for (const lane of lanes) {
+    try {
+      const result = await listBarriers(lane.id, locale.value)
+      map[lane.id] = result.data
+    } catch {
+      map[lane.id] = []
+    }
+  }
+  laneDevices.value = map
+}
+
+/** 该通道可下发的一体机：后端真实绑定且启用。 */
+function gateDevicesFor(laneId: string): BarrierView[] {
+  return (laneDevices.value[laneId] ?? []).filter((device) => device.enabled)
 }
 
 const laneRecognitions = ref<Record<string, RecognitionRecord | null>>({})
@@ -107,27 +131,71 @@ function laneTypeLabel(laneType: string): string {
   return t('booths.laneBidirectional')
 }
 
-function gateDevicesFor(laneId: string): BarrierDevice[] {
-  return listBarrierDevices().filter(
-    (device) => device.laneId === laneId && device.linkStatus === 'CONNECTED',
-  )
-}
+/** 开闸/落闸/常开：把指令写入设备 HTTP 轮询队列，由臻识设备下次轮询取走执行。
+ *  OPEN → info=ok 开闸；CLOSE → ivs_ioctrl 落杆/解除常开；
+ *  HOLD_OPEN → ivs_ioctrl 持续通电，闸杆保持抬起（常开）。 */
+type GateCommand = 'open' | 'close' | 'holdOpen'
 
-function onGateCommand(lane: BoothLaneView, command: 'open' | 'close'): void {
-  const devices = gateDevicesFor(lane.id)
+async function onGateCommand(lane: BoothLaneView, command: GateCommand): Promise<void> {
+  const confirmText =
+    command === 'open'
+      ? t('booths.confirmGateOpen', { lane: lane.name })
+      : command === 'holdOpen'
+        ? t('booths.confirmGateHoldOpen', { lane: lane.name })
+        : t('booths.confirmGateClose', { lane: lane.name })
+  if (!window.confirm(confirmText)) {
+    return
+  }
+  const action = command === 'holdOpen' ? 'HOLD_OPEN' : command.toUpperCase()
+  let devices = gateDevicesFor(lane.id)
+  if (devices.length === 0) {
+    // 进入页面后可能刚完成绑定，兜底再拉一次
+    try {
+      const result = await listBarriers(lane.id, locale.value)
+      devices = result.data
+      laneDevices.value = { ...laneDevices.value, [lane.id]: result.data }
+    } catch {
+      devices = []
+    }
+  }
   if (devices.length === 0) {
     logs.value.push(
-      command === 'open' ? t('booths.gateNoDeviceOpen') : t('booths.gateNoDeviceClose'),
+      t(
+        command === 'open'
+          ? 'booths.gateNoDeviceOpen'
+          : command === 'holdOpen'
+            ? 'booths.gateNoDeviceHoldOpen'
+            : 'booths.gateNoDeviceClose',
+        { lane: lane.name },
+      ),
     )
     return
   }
-  logs.value.push(
-    t('booths.gateLinked', {
-      lane: lane.name,
-      command: t(command === 'open' ? 'booths.gateOpen' : 'booths.gateClose'),
-      devices: devices.map((device) => device.name).join(' · '),
-    }),
-  )
+  for (const device of devices) {
+    if (!device.enabled) {
+      continue
+    }
+    const label = device.name || device.code
+    try {
+      const queued = await enqueueDeviceCommand(device.id, action, `booth:${lane.name}`, locale.value)
+      logs.value.push(
+        t('booths.gateQueued', {
+          lane: lane.name,
+          name: label,
+          queueStatus: queued.data.status,
+        }),
+      )
+    } catch (error) {
+      const queueReason = error instanceof ApiError ? error.message : String(error)
+      logs.value.push(
+        t('booths.gateQueueFailed', {
+          lane: lane.name,
+          name: label,
+          queueReason,
+        }),
+      )
+    }
+  }
 }
 
 onMounted(load)
@@ -207,6 +275,9 @@ onMounted(load)
           <div class="lane-actions">
             <button type="button" class="primary gate-open" @click="onGateCommand(lane, 'open')">
               {{ t('booths.gateOpen') }}
+            </button>
+            <button type="button" class="primary gate-hold" @click="onGateCommand(lane, 'holdOpen')">
+              {{ t('booths.gateHoldOpen') }}
             </button>
             <button type="button" class="primary gate-close" @click="onGateCommand(lane, 'close')">
               {{ t('booths.gateClose') }}
@@ -416,6 +487,10 @@ onMounted(load)
 
 .gate-open {
   background: var(--ok);
+}
+
+.gate-hold {
+  background: var(--accent);
 }
 
 .gate-close {

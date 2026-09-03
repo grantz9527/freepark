@@ -8,8 +8,10 @@ import {
   createBarrierGlobal,
   deleteAutoRegisteredDevice,
   deleteBarrierGlobal,
+  enqueueDeviceCommand,
   listAllBarriers,
   listAutoRegisteredDevices,
+  listDeviceCommands,
   listDriverFactories,
   listLanes,
   updateBarrierGlobal,
@@ -32,6 +34,11 @@ const autoBusyId = ref<string | null>(null)
 const lanes = ref<LaneView[]>([])
 const searchQuery = ref('')
 const errorMessage = ref('')
+
+// 「同步主板时间」行操作：入队后轮询指令状态，等待设备取走（DELIVERED 即时间帧已随响应下发）
+const syncBusyId = ref<string | null>(null)
+const syncNotice = ref<{ kind: 'ok' | 'error'; text: string } | null>(null)
+let syncNoticeTimer: ReturnType<typeof setTimeout> | null = null
 
 // 已接入驱动目录（来自驱动模块自动发现，多个驱动一并展示）
 const drivers = ref<DriverFactoryView[]>([])
@@ -359,12 +366,65 @@ function parsePort(): number | null | 'invalid' {
   }
   return value
 }
+
+/** 同步主板时间：轮询指令状态的间隔与总超时。服务端指令有效时限 5s（约 1~2 个轮询周期）。 */
+const SYNC_POLL_INTERVAL_MS = 1000
+const SYNC_POLL_TIMEOUT_MS = 12000
+
+function showSyncNotice(kind: 'ok' | 'error', text: string): void {
+  syncNotice.value = { kind, text }
+  if (syncNoticeTimer !== null) {
+    clearTimeout(syncNoticeTimer)
+    syncNoticeTimer = null
+  }
+  syncNoticeTimer = setTimeout(() => {
+    syncNotice.value = null
+    syncNoticeTimer = null
+  }, 6000)
+}
+
+/** 「同步主板时间」行操作：写入 SYNC_TIME 预排指令后轮询其状态。
+ *  设备下次轮询/推送时，服务端在响应中附带 0x05 时间同步帧并标记 DELIVERED；
+ *  EXPIRED / 超时说明设备未在有效时限内取走，多半离线或未接入识别网关。 */
+async function syncDeviceTime(device: BarrierView): Promise<void> {
+  if (syncBusyId.value !== null) return
+  const name = device.name || device.code
+  syncBusyId.value = device.id
+  syncNotice.value = null
+  try {
+    const queued = await enqueueDeviceCommand(device.id, 'SYNC_TIME', 'sync-time:manual', locale.value)
+    const commandId = queued.data.id
+    let status = queued.data.status
+    const deadline = Date.now() + SYNC_POLL_TIMEOUT_MS
+    while (status === 'PENDING' && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, SYNC_POLL_INTERVAL_MS))
+      const recent = await listDeviceCommands(device.id, 20, locale.value)
+      const found = recent.data.find((cmd) => cmd.id === commandId)
+      if (found) {
+        status = found.status
+      }
+    }
+    if (status === 'DELIVERED') {
+      showSyncNotice('ok', t('barriers.syncTimeOk', { name }))
+    } else {
+      showSyncNotice('error', t('barriers.syncTimeNotTaken', { name }))
+    }
+  } catch (error) {
+    const reason = error instanceof ApiError ? error.message : String(error)
+    showSyncNotice('error', t('barriers.syncTimeQueueFailed', { name, reason }))
+  } finally {
+    syncBusyId.value = null
+  }
+}
 </script>
 
 <template>
   <section class="page">
     <p class="banner planning">{{ t('barriers.planningHint') }}</p>
     <p v-if="errorMessage" class="banner error">{{ errorMessage }}</p>
+    <p v-if="syncNotice" class="banner" :class="syncNotice.kind === 'ok' ? 'ok' : 'error'">
+      {{ syncNotice.text }}
+    </p>
 
     <section class="table-card driver-card">
       <div class="auto-head">
@@ -426,6 +486,15 @@ function parsePort(): number | null | 'invalid' {
               <div class="action-group">
                 <button v-if="isAdmin" type="button" class="link-btn" @click="openEdit(item)">
                   {{ t('barriers.edit') }}
+                </button>
+                <button
+                  v-if="isAdmin && item.enabled"
+                  type="button"
+                  class="link-btn"
+                  :disabled="syncBusyId !== null"
+                  @click="syncDeviceTime(item)"
+                >
+                  {{ syncBusyId === item.id ? t('barriers.syncTimeSyncing') : t('barriers.syncTime') }}
                 </button>
                 <button
                   v-if="isAdmin"
@@ -648,6 +717,14 @@ function parsePort(): number | null | 'invalid' {
   background: #fdecec;
 }
 
+.banner.ok {
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: 8px;
+  color: var(--ok);
+  background: #e8f5ef;
+}
+
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -709,13 +786,14 @@ th {
 }
 
 .col-actions {
-  width: 10rem;
+  width: 16rem;
   text-align: end;
 }
 
 .action-group {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.75rem;
 }
 
@@ -734,6 +812,11 @@ tbody tr:last-child td {
 
 .link-btn.danger {
   color: var(--danger);
+}
+
+.link-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .pill {

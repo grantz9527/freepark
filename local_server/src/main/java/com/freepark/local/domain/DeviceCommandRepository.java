@@ -13,6 +13,8 @@ public interface DeviceCommandRepository extends JpaRepository<DeviceCommand, UU
     /** 取该设备最早一条 PENDING 指令（FIFO），用于轮询出队。 */
     Optional<DeviceCommand> findFirstByDevice_IdAndStatusOrderByCreatedAtAsc(UUID deviceId, DeviceCommand.Status status);
 
+    List<DeviceCommand> findByDevice_IdAndStatusOrderByCreatedAtAsc(UUID deviceId, DeviceCommand.Status status);
+
     List<DeviceCommand> findByDevice_IdAndStatusOrderByCreatedAtDesc(UUID deviceId, DeviceCommand.Status status);
 
     /** 清理指定时间之前已投递的指令。 */

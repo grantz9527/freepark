@@ -70,7 +70,7 @@ public class DeviceAdminController {
         return ApiResponse.ok(messages, queryService.listCommands(deviceId, clamp(limit)));
     }
 
-    /** 下发指令到设备排队（仅管理员）。action 取值：OPEN/CLOSE/QUERY。 */
+    /** 下发指令到设备排队（仅管理员）。action 取值：OPEN/CLOSE/HOLD_OPEN/SYNC_TIME/QUERY。 */
     @PostMapping("/{deviceId}/commands")
     public ApiResponse<DeviceCommandView> enqueueCommand(
             @AuthenticationPrincipal Jwt jwt,
@@ -78,7 +78,7 @@ public class DeviceAdminController {
             @Valid @RequestBody EnqueueCommandRequest request) {
         UUID requesterId = UUID.fromString(jwt.getSubject());
         DeviceCommand.Action action = DeviceCommand.Action.valueOf(request.action().toUpperCase());
-        DeviceCommandView view = commandService.enqueue(requesterId, deviceId, action, request.source());
+        DeviceCommandView view = commandService.enqueue(requesterId, deviceId, action, request.source(), request.payload());
         return ApiResponse.ok(messages, view);
     }
 
@@ -102,7 +102,10 @@ public class DeviceAdminController {
         return Math.min(Math.max(1, limit), MAX_LIMIT);
     }
 
-    /** 下发指令请求体：action 为 OPEN/CLOSE/QUERY，source 为来源说明。 */
-    public record EnqueueCommandRequest(String action, String source) {
+    /**
+     * 下发指令请求体：action 为 OPEN/CLOSE/HOLD_OPEN/SYNC_TIME/QUERY，source 为来源说明；
+     * payload 为可选协议参数（JSON 字符串，如落闸 IO 控制 {"io":0,"value":2,"delay":500}）。
+     */
+    public record EnqueueCommandRequest(String action, String source, String payload) {
     }
 }

@@ -61,10 +61,10 @@ public final class ZhensiDriverFactory implements AIODriverFactory {
 
     @Override
     public List<String> supportedModels() {
-        // DEMO：列举常见接管型号供对接页「品牌 → 具体型号」选择演示。
-        // 真实厂商驱动按可接管清单返回（如 List.of("HTZ-S02", "V500")）；
-        // 若整条产品线不做型号细分，返回空列表表示型号通配。
-        return List.of("HTZ-S02", "V500");
+        // 可接管清单供对接页「品牌 → 具体型号/设备类型」选择：
+        // - HTZ-S02 / V500：识别一体机型号；
+        // - BULE_CARD_LED_LINE2：臻识蓝卡（RS485 蓝色主板）驱动 2 行 LED 屏的设备类型。
+        return List.of("HTZ-S02", "V500", "BULE_CARD_LED_LINE2");
     }
 
     @Override

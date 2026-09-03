@@ -11,6 +11,7 @@ public record DeviceCommandView(
         String action,
         String status,
         String source,
+        String payload,
         Instant createdAt,
         Instant deliveredAt) {
 
@@ -21,6 +22,7 @@ public record DeviceCommandView(
                 cmd.getAction().name(),
                 cmd.getStatus().name(),
                 cmd.getSource(),
+                cmd.getPayload(),
                 cmd.getCreatedAt(),
                 cmd.getDeliveredAt());
     }

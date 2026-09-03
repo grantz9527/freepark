@@ -22,4 +22,8 @@ public interface ParkingBarrierRepository extends JpaRepository<ParkingBarrier, 
     @Modifying
     @Query("update ParkingBarrier b set b.lastPollAt = :at where b.id = :id")
     int touchLastPollAt(@Param("id") UUID id, @Param("at") Instant at);
+
+    /** 查设备绑定车道的类型（入口/出口/双向），用于指令开闸时推断欢迎/欢送播报语；未绑车道返回 empty。 */
+    @Query("select b.lane.laneType from ParkingBarrier b where b.id = :id")
+    Optional<LaneType> findBoundLaneType(@Param("id") UUID id);
 }

@@ -21,14 +21,22 @@ import jakarta.persistence.Table;
 public class DeviceCommand extends BaseEntity {
 
     public enum Action {
+        /** 开闸：触发一次放行，闸杆抬起。 */
         OPEN,
+        /** 落闸：解除常开并落下闸杆。 */
         CLOSE,
+        /** 常开：保持闸杆抬起、车辆持续放行（如高峰期），由设备 IO 持续输出实现。 */
+        HOLD_OPEN,
+        /** 同步主板时间：设备下次轮询/推送时，服务器在响应中带回当前时间供出入口控制主板（显示屏控制板）校准 RTC。 */
+        SYNC_TIME,
         QUERY
     }
 
     public enum Status {
         PENDING,
-        DELIVERED
+        DELIVERED,
+        /** 入队后超过有效时限仍未被设备取走，出队时作废。 */
+        EXPIRED
     }
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -47,6 +55,10 @@ public class DeviceCommand extends BaseEntity {
     @Column(length = 64)
     private String source;
 
+    /** 指令附加参数（JSON 字符串，可选）：落闸/常开等场景指定协议细节，如 {"io":0,"value":2,"delay":500}。 */
+    @Column(length = 1024)
+    private String payload;
+
     @Column
     private Instant deliveredAt;
 
@@ -54,9 +66,14 @@ public class DeviceCommand extends BaseEntity {
     }
 
     public DeviceCommand(ParkingBarrier device, Action action, String source) {
+        this(device, action, source, null);
+    }
+
+    public DeviceCommand(ParkingBarrier device, Action action, String source, String payload) {
         this.device = device;
         this.action = action;
         this.source = source;
+        this.payload = payload;
     }
 
     public ParkingBarrier getDevice() {
@@ -75,6 +92,10 @@ public class DeviceCommand extends BaseEntity {
         return source;
     }
 
+    public String getPayload() {
+        return payload;
+    }
+
     public Instant getDeliveredAt() {
         return deliveredAt;
     }
@@ -82,6 +103,11 @@ public class DeviceCommand extends BaseEntity {
     public void markDelivered(Instant at) {
         this.status = Status.DELIVERED;
         this.deliveredAt = at;
+    }
+
+    /** 出队时发现已超过有效时限：作废（保留记录便于追溯，不再下发）。 */
+    public void markExpired() {
+        this.status = Status.EXPIRED;
     }
 
     public UUID getDeviceId() {
