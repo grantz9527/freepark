@@ -13,8 +13,8 @@ import {
   listInternalVehicles,
   listLots,
   updateInternalVehicle,
-  type InternalVehicleType,
   type InternalVehicleView,
+  type VehicleType,
   type LotView,
   type PlateColor,
 } from '@/api/client'
@@ -32,9 +32,9 @@ const { plateColorLabel } = usePlateColorLabel()
 
 const plateColorOptions = computed(() => siteAllowedPlateColors.value)
 
-const vehicleTypeOptions: InternalVehicleType[] = ['TENANT', 'OWNER', 'APPOINTMENT', 'VISITOR', 'OTHER']
+const vehicleTypeOptions: VehicleType[] = ['TEMPORARY', 'RESERVED', 'VIP', 'OWNER', 'MONTHLY', 'OTHER']
 
-function vehicleTypeLabel(type: InternalVehicleType): string {
+function vehicleTypeLabel(type: VehicleType): string {
   return t(`internalVehicles.type${type}`)
 }
 
@@ -57,7 +57,7 @@ const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formPlate = ref('')
 const formPlateColor = ref<PlateColor>('BLUE')
-const formType = ref<InternalVehicleType>('OTHER')
+const formType = ref<VehicleType>('OTHER')
 const formOwnerName = ref('')
 const formPhone = ref('')
 const formDepartment = ref('')
@@ -438,6 +438,7 @@ onMounted(reload)
               <th>{{ t('internalVehicles.colType') }}</th>
               <th>{{ t('internalVehicles.colPhone') }}</th>
               <th>{{ t('internalVehicles.colDepartment') }}</th>
+              <th>{{ t('internalVehicles.colRemark') }}</th>
               <th>{{ t('internalVehicles.colBatch') }}</th>
               <th>{{ t('page.colStatus') }}</th>
               <th>{{ t('page.colUpdated') }}</th>
@@ -454,6 +455,10 @@ onMounted(reload)
               <td>{{ vehicleTypeLabel(item.type) }}</td>
               <td>{{ item.phone || '—' }}</td>
               <td>{{ item.department || '—' }}</td>
+              <td>
+                <span v-if="item.remark" class="cell-text" :title="item.remark">{{ item.remark }}</span>
+                <span v-else>—</span>
+              </td>
               <td>
                 <span v-if="item.batchId" class="batch-tag" :title="item.batchId">
                   {{ shortBatchId(item.batchId) }}
@@ -510,7 +515,7 @@ onMounted(reload)
       <form class="modal" @submit.prevent="onSubmit">
         <h3>{{ isEditing ? t('internalVehicles.editTitle') : t('internalVehicles.createTitle') }}</h3>
         <label>
-          <span>{{ t('internalVehicles.colPlate') }}</span>
+          <span>{{ t('internalVehicles.colPlate') }} <em class="req">*</em></span>
           <input v-model="formPlate" type="text" autocomplete="off" />
         </label>
         <label>
@@ -530,7 +535,7 @@ onMounted(reload)
           </select>
         </label>
         <label>
-          <span>{{ t('internalVehicles.colOwner') }}</span>
+          <span>{{ t('internalVehicles.colOwner') }} <em class="req">*</em></span>
           <input v-model="formOwnerName" type="text" autocomplete="off" />
         </label>
         <label>
@@ -817,6 +822,15 @@ th {
   background: #f2f4f3;
 }
 
+.cell-text {
+  display: inline-block;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
 .empty {
   padding: 2.5rem 1.5rem;
   text-align: center;
@@ -947,6 +961,11 @@ th {
 label {
   display: grid;
   gap: 0.35rem;
+}
+
+.req {
+  color: var(--danger);
+  font-style: normal;
 }
 
 .checkbox {
