@@ -6,6 +6,9 @@ import java.util.Set;
 
 import com.freepark.driver.api.model.Capability;
 import com.freepark.driver.api.model.DeviceConfig;
+import com.freepark.driver.api.model.DisplayCapability;
+import com.freepark.driver.api.model.DisplayMessage;
+import com.freepark.driver.api.model.VoiceCapability;
 
 /**
  * 一体机驱动工厂（类型级契约）。
@@ -44,6 +47,28 @@ public interface AIODriverFactory {
     default Set<Capability> capabilities() {
         return Set.of(Capability.PLATE_RECOGNITION, Capability.GATE_CONTROL,
                 Capability.DISPLAY, Capability.VOICE);
+    }
+
+    /**
+     * 语音播报能力（仅当 {@link #capabilities()} 含 {@link Capability#VOICE} 时有意义）。
+     *
+     * <p>区分“万能语音（任意文本）”与“仅预置语音（固定句/编号）”两类一体机；
+     * 万能设备默认 {@link VoiceCapability#free()}，预置设备应返回
+     * {@link VoiceCapability#presetOnly(List)} 并列出设备端可播话术。
+     */
+    default VoiceCapability voiceCapability() {
+        return VoiceCapability.free();
+    }
+
+    /**
+     * 屏显能力（仅当 {@link #capabilities()} 含 {@link Capability#DISPLAY} 时有意义）。
+     *
+     * <p>声明设备屏幕规格（行数/是否可滚动），区分 2 行屏、4 行屏与单行滚动条等。
+     * 平台按场景下发有序建议行（{@link DisplayMessage#lines()}），由驱动按本声明
+     * 截取/滚动排版。默认按 2 行静态屏处理，驱动应按产品线重写。
+     */
+    default DisplayCapability displayCapability() {
+        return DisplayCapability.fixed(2);
     }
 
     /**

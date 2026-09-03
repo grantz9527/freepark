@@ -7,6 +7,8 @@ import com.freepark.driver.api.AIODriverFactory;
 import com.freepark.driver.api.ParkingAIODevice;
 import com.freepark.driver.api.model.Capability;
 import com.freepark.driver.api.model.DeviceConfig;
+import com.freepark.driver.api.model.DisplayCapability;
+import com.freepark.driver.api.model.VoiceCapability;
 import com.freepark.driver.zhensi.transport.HttpZhensiCommandTransport;
 
 /**
@@ -42,11 +44,27 @@ public final class ZhensiDriverFactory implements AIODriverFactory {
     }
 
     @Override
+    public VoiceCapability voiceCapability() {
+        // DEMO 采用万能语音：任意文本可播。真实厂商若只有预置语音，应返回
+        // VoiceCapability.presetOnly(List.of("欢迎光临", "一路平安", ...)) 并在驱动内
+        // 按 (VoiceKind, VehicleType) 把平台播报意图映射到设备端固定话术。
+        return VoiceCapability.free();
+    }
+
+    @Override
+    public DisplayCapability displayCapability() {
+        // DEMO 一体机为 2 行静态屏：平台下发的有序建议行只取前 2 行显示。
+        // 真实厂商按产品线声明，如 4 行屏 DisplayCapability.fixed(4)，
+        // 单行 LED 滚动条 DisplayCapability.scrolling()。
+        return DisplayCapability.fixed(2);
+    }
+
+    @Override
     public List<String> supportedModels() {
-        // DEMO：型号不做细分，整条臻识产品线通配（model="*"）。
-        // 真实厂商驱动在此返回可接管的设备型号清单，如 List.of("HTZ-S02", "V500")，
-        // 对接页的驱动卡片会逐一列出。
-        return List.of();
+        // DEMO：列举常见接管型号供对接页「品牌 → 具体型号」选择演示。
+        // 真实厂商驱动按可接管清单返回（如 List.of("HTZ-S02", "V500")）；
+        // 若整条产品线不做型号细分，返回空列表表示型号通配。
+        return List.of("HTZ-S02", "V500");
     }
 
     @Override

@@ -3,6 +3,7 @@ package com.freepark.driver.api;
 import java.util.List;
 
 import com.freepark.driver.api.model.DeviceStatus;
+import com.freepark.driver.api.model.DisplayCapability;
 import com.freepark.driver.api.model.DisplayMessage;
 import com.freepark.driver.api.model.GateState;
 import com.freepark.driver.api.model.RecognitionEvent;
@@ -43,12 +44,26 @@ public interface ParkingAIODevice {
 
     // ==================== LED / LCD 屏显示 ====================
 
-    /** 下发屏显语义内容（欢迎语/车牌/余位/自由文本），协议翻译由驱动完成。 */
+    /**
+     * 下发屏显内容。
+     *
+     * <p>{@link DisplayMessage#lines()} 为平台按场景拼好的有序建议行（如 [车牌, 欢迎语,
+     * 收费提示]），驱动按自身屏幕规格取舍排版：静态多行屏取前
+     * {@link DisplayCapability#rows()} 行逐行显示，可滚动屏滚动播出全部内容。
+     * 行宽/字库/协议翻译（LED 屏 / LCD 屏、网络 / 串口）由驱动实现，平台不感知。
+     */
     void show(DisplayMessage message);
 
     // ==================== 语音播报 ====================
 
-    /** 下发语音播报语义内容。 */
+    /**
+     * 下发语音播报意图。
+     *
+     * <p>{@link VoiceMessage} 携带 场景（kind）+ 车辆类型（vehicleType）+ 平台生成的
+     * 建议文本：万能语音设备直接播建议文本；仅预置语音设备由本驱动把 (kind,
+     * vehicleType) 翻译成设备端固定话术（建议文本仅供参考，含变量的话术可丢弃）。
+     * 无合适话术/播报失败时须静默降级（不抛异常、不阻断业务）。
+     */
     void speak(VoiceMessage voice);
 
     // ==================== 识别上报 ====================

@@ -33,6 +33,10 @@ public class ParkingBarrier extends BaseEntity {
     @Column(length = 64)
     private String brand;
 
+    /** 品牌下的具体设备型号（如 HTZ-S02），用于驱动按型号路由；空表示整条产品线通配。 */
+    @Column(length = 64)
+    private String model;
+
     /** 一体机命令通道地址（平台主动下发命令时使用，驱动只认注入配置）。 */
     @Column(length = 64)
     private String host;
@@ -81,6 +85,14 @@ public class ParkingBarrier extends BaseEntity {
 
     public void setBrand(String brand) {
         this.brand = brand;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
     }
 
     public String getHost() {

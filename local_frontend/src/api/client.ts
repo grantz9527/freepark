@@ -257,6 +257,7 @@ export interface BarrierView {
   name: string
   code: string
   brand: string | null
+  model: string | null
   host: string | null
   port: number | null
   enabled: boolean
@@ -264,11 +265,12 @@ export interface BarrierView {
   updatedAt: string
 }
 
-/** 设备档案写入字段（品牌/连接参数均可选，缺省则档案暂无驱动命令通道）。 */
+/** 设备档案写入字段（品牌/型号/连接参数均可选，缺省则档案暂无驱动命令通道）。 */
 export interface BarrierWritePayload {
   name: string
   code?: string
   brand?: string | null
+  model?: string | null
   host?: string | null
   port?: number | null
   enabled?: boolean
@@ -371,6 +373,10 @@ export function createBarrierGlobal(
   payload: {
     name: string
     code: string
+    brand?: string | null
+    model?: string | null
+    host?: string | null
+    port?: number | null
     enabled?: boolean
   },
   locale: string,

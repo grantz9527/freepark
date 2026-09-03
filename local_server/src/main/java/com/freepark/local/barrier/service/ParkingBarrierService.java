@@ -62,6 +62,7 @@ public class ParkingBarrierService {
         boolean enabled = request.enabled() == null || request.enabled();
         ParkingBarrier barrier = new ParkingBarrier(null, request.name(), code, enabled);
         barrier.setBrand(request.brand());
+        barrier.setModel(request.model());
         barrier.setConnection(request.host(), request.port());
         return BarrierView.from(barriers.save(barrier));
     }
@@ -124,6 +125,7 @@ public class ParkingBarrierService {
         boolean enabled = request.enabled() == null || request.enabled();
         ParkingBarrier barrier = new ParkingBarrier(lane, request.name(), code, enabled);
         barrier.setBrand(request.brand());
+        barrier.setModel(request.model());
         barrier.setConnection(request.host(), request.port());
         return BarrierView.from(barriers.save(barrier));
     }
@@ -151,6 +153,7 @@ public class ParkingBarrierService {
     /** 全量覆盖驱动通道参数：请求未携带的字段一律清空（PUT 语义，配合表单回填原值）。 */
     private void applyConnectionUpdate(ParkingBarrier barrier, UpdateBarrierRequest request) {
         barrier.setBrand(request.brand());
+        barrier.setModel(request.model());
         barrier.setConnection(request.host(), request.port());
     }
 

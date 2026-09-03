@@ -55,7 +55,11 @@ public class AioDriverController {
         return ApiResponse.ok(messages, driverService.devices());
     }
 
-    /** 下发统一命令。body: { "action": "OPEN|CLOSE|ALWAYS_ON|ALWAYS_OFF|SHOW|SPEAK|STATUS", "kind"?, "text"? } */
+    /**
+     * 下发统一命令。body: { "action": "OPEN|CLOSE|ALWAYS_ON|ALWAYS_OFF|SHOW|SPEAK|STATUS",
+     * "kind"?, "vehicleType"?, "text"? }。
+     * SHOW 的 text 支持用换行分隔多行建议（驱动按屏幕行数取舍）；SPEAK 的 text 为播报文本。
+     */
     @PostMapping("/{code}/commands")
     public ApiResponse<CommandResult> command(
             @AuthenticationPrincipal Jwt jwt,
@@ -63,12 +67,17 @@ public class AioDriverController {
             @RequestBody AioCommandRequest request) {
         Action action = parseAction(request.action());
         CommandResult result = driverService.execute(
-                UUID.fromString(jwt.getSubject()), code, action, request.kind(), request.text());
+                UUID.fromString(jwt.getSubject()), code, action,
+                request.kind(), request.vehicleType(), request.text());
         return ApiResponse.ok(messages, result);
     }
 
-    /** 命令请求体。kind 仅 SHOW（DisplayKind）/ SPEAK（VoiceKind）使用，缺省 FREE_TEXT。 */
-    public record AioCommandRequest(String action, String kind, String text) {
+    /**
+     * 命令请求体。
+     * kind：SHOW 用 DisplayKind / SPEAK 用 VoiceKind，缺省 FREE_TEXT；
+     * vehicleType：SPEAK 用 VehicleType（临时/预约/贵宾/业主/月租…），缺省 OTHER。
+     */
+    public record AioCommandRequest(String action, String kind, String vehicleType, String text) {
     }
 
     private Action parseAction(String raw) {

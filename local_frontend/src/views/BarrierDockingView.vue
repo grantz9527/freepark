@@ -44,11 +44,33 @@ const driverBrands = computed(() => {
   return [...set]
 })
 
+/** 当前所选品牌下、驱动上报的具体型号清单；空数组表示整条产品线通配。 */
+const modelOptions = computed(() => {
+  const brand = formBrand.value.trim().toUpperCase()
+  if (!brand) return []
+  const set = new Set<string>()
+  for (const d of drivers.value) {
+    if (d.brand.trim().toUpperCase() === brand) {
+      for (const m of d.supportedModels) set.add(m)
+    }
+  }
+  return [...set]
+})
+
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formName = ref('')
 const formCode = ref('')
 const formBrand = ref('')
+const formModel = ref('')
+/** 型号搜索建议是否展开（聚焦/输入时打开，选中、失焦或按 Esc 时收起）。 */
+const modelSuggestOpen = ref(false)
+/** 按已输入关键字过滤后的型号建议（大小写不敏感包含匹配）。 */
+const modelSuggestions = computed(() => {
+  const keyword = formModel.value.trim().toLowerCase()
+  if (!keyword) return modelOptions.value
+  return modelOptions.value.filter((m) => m.toLowerCase().includes(keyword))
+})
 const formHost = ref('')
 const formPortText = ref('')
 const formEnabled = ref(true)
@@ -222,6 +244,8 @@ function resetForm(): void {
   formName.value = ''
   formCode.value = ''
   formBrand.value = ''
+  formModel.value = ''
+  modelSuggestOpen.value = false
   formHost.value = ''
   formPortText.value = ''
   formEnabled.value = true
@@ -238,11 +262,31 @@ function openEdit(device: BarrierView): void {
   formName.value = device.name
   formCode.value = device.code
   formBrand.value = device.brand ?? ''
+  formModel.value = device.model ?? ''
+  modelSuggestOpen.value = false
   formHost.value = device.host ?? ''
   formPortText.value = device.port != null ? String(device.port) : ''
   formEnabled.value = device.enabled
   formError.value = ''
   showForm.value = true
+}
+
+/** 切换品牌时型号不兼容，清空待选型号并收起建议。 */
+function onBrandChange(): void {
+  formModel.value = ''
+  modelSuggestOpen.value = false
+}
+
+/** 点击/回车选中某条型号建议。 */
+function pickModel(model: string): void {
+  formModel.value = model
+  modelSuggestOpen.value = false
+}
+
+/** 回车选中当前过滤结果的第一条建议。 */
+function pickTopModel(): void {
+  const first = modelSuggestions.value[0]
+  if (modelSuggestOpen.value && first) pickModel(first)
 }
 
 function closeForm(): void {
@@ -274,11 +318,17 @@ async function onSubmit(): Promise<void> {
     formError.value = t('barriers.portInvalid')
     return
   }
-  // 全量提交：清空输入即从档案清除品牌/连接参数
+  // 品牌下有明确型号时必须选定具体型号
+  if (modelOptions.value.length > 0 && !formModel.value.trim()) {
+    formError.value = t('barriers.modelRequired')
+    return
+  }
+  // 全量提交：清空输入即从档案清除品牌/型号/连接参数
   const payload = {
     name,
     enabled: formEnabled.value,
     brand: formBrand.value.trim() || null,
+    model: formModel.value.trim() || null,
     host: formHost.value.trim() || null,
     port,
   }
@@ -500,12 +550,37 @@ function parsePort(): number | null | 'invalid' {
         </label>
         <label>
           <span>{{ t('barriers.brand') }}</span>
-          <select v-model="formBrand">
+          <select v-model="formBrand" @change="onBrandChange">
             <option value="">{{ t('barriers.unknownBrand') }}</option>
             <option v-for="b in driverBrands" :key="b" :value="b">{{ b }}</option>
           </select>
           <span class="field-hint">{{ t('barriers.brandHint') }}</span>
         </label>
+        <label v-if="modelOptions.length > 0">
+          <span>{{ t('barriers.model') }}</span>
+          <div class="suggest-wrap">
+            <input
+              v-model="formModel"
+              type="text"
+              autocomplete="off"
+              :placeholder="t('barriers.modelPlaceholder')"
+              @focus="modelSuggestOpen = true"
+              @input="modelSuggestOpen = true"
+              @keydown.enter.prevent="pickTopModel()"
+              @keydown.esc="modelSuggestOpen = false"
+              @blur="modelSuggestOpen = false"
+            />
+            <ul v-if="modelSuggestOpen && modelSuggestions.length > 0" class="suggest-list">
+              <li v-for="m in modelSuggestions" :key="m" @mousedown.prevent="pickModel(m)">
+                {{ m }}
+              </li>
+            </ul>
+          </div>
+          <span class="field-hint">{{ t('barriers.modelHint') }}</span>
+        </label>
+        <span v-else-if="formBrand.trim() !== ''" class="field-hint">
+          {{ t('barriers.modelWildcardHint') }}
+        </span>
         <label>
           <span>{{ t('barriers.host') }}</span>
           <input v-model="formHost" type="text" autocomplete="off" />
@@ -919,6 +994,44 @@ select {
   color: var(--accent);
   background: #e6f2ec;
   border: 1px solid #d6e8dd;
+}
+
+/* 型号搜索框 + 建议面板 */
+.suggest-wrap {
+  position: relative;
+}
+
+.suggest-wrap input {
+  width: 100%;
+}
+
+.suggest-list {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 11rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.suggest-list li {
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.suggest-list li:hover {
+  background: #eef4f0;
+  color: var(--accent);
 }
 
 .sr-only {

@@ -1,5 +1,6 @@
 package com.freepark.local.aiodriver.service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -17,9 +18,12 @@ import com.freepark.driver.api.model.AioDriverException;
 import com.freepark.driver.api.model.Capability;
 import com.freepark.driver.api.model.DeviceConfig;
 import com.freepark.driver.api.model.DeviceStatus;
+import com.freepark.driver.api.model.DisplayCapability;
 import com.freepark.driver.api.model.DisplayKind;
 import com.freepark.driver.api.model.DisplayMessage;
 import com.freepark.driver.api.model.GateState;
+import com.freepark.driver.api.model.VehicleType;
+import com.freepark.driver.api.model.VoiceCapability;
 import com.freepark.driver.api.model.VoiceKind;
 import com.freepark.driver.api.model.VoiceMessage;
 import com.freepark.driver.api.registry.AioDriverRegistry;
@@ -53,7 +57,8 @@ public class AioDriverService {
     /** 已装配的驱动工厂视图。 */
     public record FactoryView(
             String brand, String model, String displayName,
-            List<String> supportedModels, Set<Capability> capabilities) {
+            List<String> supportedModels, Set<Capability> capabilities,
+            VoiceCapability voiceCapability, DisplayCapability displayCapability) {
     }
 
     /** 一台绑定实例的运行时快照。 */
@@ -87,7 +92,7 @@ public class AioDriverService {
         return registry.factories().stream()
                 .sorted(Comparator.comparing(AIODriverFactory::brand))
                 .map(f -> new FactoryView(f.brand(), f.model(), f.displayName(),
-                        f.supportedModels(), f.capabilities()))
+                        f.supportedModels(), f.capabilities(), f.voiceCapability(), f.displayCapability()))
                 .toList();
     }
 
@@ -102,12 +107,15 @@ public class AioDriverService {
     /**
      * 对指定设备档案执行统一命令（仅管理员）。
      *
-     * @param code   设备序列号（parking_barrier.code）
-     * @param action 命令动作
-     * @param kind   SHOW 用 DisplayKind / SPEAK 用 VoiceKind，缺省 FREE_TEXT
-     * @param text   SHOW / SPEAK 的显示或播报文本
+     * @param code        设备序列号（parking_barrier.code）
+     * @param action      命令动作
+     * @param kind        SHOW 用 DisplayKind / SPEAK 用 VoiceKind，缺省 FREE_TEXT
+     * @param vehicleType SPEAK 用 VehicleType（面向哪类车辆的话术），缺省 OTHER
+     * @param text        SHOW 屏显内容（用换行分隔的有序建议行，驱动按屏幕行数取舍）；
+     *                    SPEAK 为播报文本
      */
-    public CommandResult execute(UUID requesterId, String code, Action action, String kind, String text) {
+    public CommandResult execute(UUID requesterId, String code, Action action,
+                                 String kind, String vehicleType, String text) {
         requireAdmin(requesterId);
         ParkingBarrier barrier = barriers.findByCodeIgnoreCase(code.trim())
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEVICE_NOT_FOUND));
@@ -115,13 +123,13 @@ public class AioDriverService {
             throw new BusinessException(ErrorCode.DEVICE_DISABLED);
         }
         String brand = barrier.getBrand() == null ? "" : barrier.getBrand().trim();
-        if (!registry.supports(brand, "*")) {
+        if (!registry.supports(brand, modelOf(barrier))) {
             throw new BusinessException(ErrorCode.DEVICE_NOT_FOUND);
         }
         DeviceConfig config = config(barrier, brand);
         ParkingAIODevice device = registry.deviceFor(config);
         try {
-            apply(device, action, kind, text);
+            apply(device, action, kind, vehicleType, text);
             return new CommandResult(device.deviceKey(), brand, config.model(), action,
                     true, "ok", runtimeOf(device));
         } catch (AioDriverException e) {
@@ -147,7 +155,7 @@ public class AioDriverService {
             return false;
         }
         String brand = barrier.getBrand() == null ? "" : barrier.getBrand().trim();
-        if (brand.isBlank() || !registry.supports(brand, "*")) {
+        if (brand.isBlank() || !registry.supports(brand, modelOf(barrier))) {
             log.warn("识别联动跳过开闸：code={} 品牌='{}' 无已接入驱动（source={}）",
                     barrier.getCode(), brand, source);
             return false;
@@ -177,7 +185,7 @@ public class AioDriverService {
         return new DeviceConfig(
                 barrier.getCode(),
                 brand,
-                "*",
+                modelOf(barrier),
                 barrier.getHost(),
                 barrier.getPort(),
                 null,
@@ -185,7 +193,13 @@ public class AioDriverService {
                 Map.of());
     }
 
-    private void apply(ParkingAIODevice device, Action action, String kind, String text) {
+    /** 档案型号未填时按整条产品线通配（factory.model() == "*"）。 */
+    private String modelOf(ParkingBarrier barrier) {
+        String model = barrier.getModel();
+        return model == null || model.isBlank() ? "*" : model.trim();
+    }
+
+    private void apply(ParkingAIODevice device, Action action, String kind, String vehicleType, String text) {
         switch (action) {
             case OPEN -> device.openGate();
             case CLOSE -> device.closeGate();
@@ -193,11 +207,11 @@ public class AioDriverService {
             case ALWAYS_OFF -> device.setAlwaysOpen(false);
             case SHOW -> {
                 requireText(text, action);
-                device.show(DisplayMessage.of(displayKind(kind), text, 0));
+                device.show(DisplayMessage.of(displayKind(kind), splitLines(text), 0));
             }
             case SPEAK -> {
                 requireText(text, action);
-                device.speak(VoiceMessage.of(voiceKind(kind), text));
+                device.speak(VoiceMessage.of(voiceKind(kind), vehicleType(vehicleType), text));
             }
             case STATUS -> {
                 // 无需动作，execute 末尾会返回最新状态
@@ -205,11 +219,27 @@ public class AioDriverService {
         }
     }
 
+    private VehicleType vehicleType(String raw) {
+        return enumValue(VehicleType.class, raw, VehicleType.OTHER);
+    }
+
     private void requireText(String text, Action action) {
         if (text == null || text.isBlank()) {
             throw new BusinessException(ErrorCode.VALIDATION_FAILED,
                     action + " 需要 text 内容");
         }
+    }
+
+    /** 屏显文本按换行拆成有序建议行（去首尾空白与空行，行序即优先级）。 */
+    private List<String> splitLines(String text) {
+        List<String> lines = new ArrayList<>();
+        for (String line : text.split("\\R")) {
+            String s = line.trim();
+            if (!s.isEmpty()) {
+                lines.add(s);
+            }
+        }
+        return lines;
     }
 
     private DisplayKind displayKind(String kind) {

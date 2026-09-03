@@ -44,7 +44,7 @@ class AioDriverRegistryTest {
 
         @Override public GateState gateState() { return gate; }
 
-        @Override public void show(com.freepark.driver.api.model.DisplayMessage m) { actionLog.add("show:" + m.text()); }
+        @Override public void show(com.freepark.driver.api.model.DisplayMessage m) { actionLog.add("show:" + String.join("/", m.lines())); }
 
         @Override public void speak(com.freepark.driver.api.model.VoiceMessage v) { actionLog.add("speak:" + v.text()); }
 

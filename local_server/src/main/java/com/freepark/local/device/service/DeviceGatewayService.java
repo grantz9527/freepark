@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -42,6 +44,9 @@ public class DeviceGatewayService {
 
     private static final Logger log = LoggerFactory.getLogger(DeviceGatewayService.class);
 
+    /** 轮询设备档案缓存 TTL：心跳轮询非常频繁，1 分钟内复用档案、避免每次查库。 */
+    private static final long POLL_CACHE_TTL_MILLIS = TimeUnit.SECONDS.toMillis(60);
+
     private final ParkingBarrierRepository barriers;
     private final RecognitionRecordService recognitionRecordService;
     private final DeviceCommandService commandService;
@@ -51,6 +56,24 @@ public class DeviceGatewayService {
     private final ParkingSessionService parkingSessions;
     private final ZhenshiProtocol defaultProtocol;
     private final Map<String, CameraProtocol> protocolsByBrand;
+
+    /** 轮询设备缓存（key 为小写 code）。 */
+    private final ConcurrentHashMap<String, PollCacheEntry> pollCache = new ConcurrentHashMap<>();
+
+    /** 轮询缓存条目；device 为 null 表示该 code 当前未登记（同样短时缓存，防未登记设备高频打库）。 */
+    private static final class PollCacheEntry {
+        private final ParkingBarrier device;
+        private final long loadedAtMillis;
+
+        PollCacheEntry(ParkingBarrier device) {
+            this.device = device;
+            this.loadedAtMillis = System.currentTimeMillis();
+        }
+
+        boolean expired() {
+            return System.currentTimeMillis() - loadedAtMillis >= POLL_CACHE_TTL_MILLIS;
+        }
+    }
 
     public DeviceGatewayService(
             ParkingBarrierRepository barriers,
@@ -76,7 +99,7 @@ public class DeviceGatewayService {
 
     @Transactional
     public DevicePollResponse handlePoll(String code) {
-        ParkingBarrier device = barriers.findByCodeIgnoreCase(code).orElse(null);
+        ParkingBarrier device = findCachedDeviceForPoll(code);
         if (device == null) {
             // 未登记的设备：自动注册到「识别一体机对接」，并返回空轮询响应
             autoDeviceService.upsertOnPoll(code);
@@ -85,9 +108,25 @@ public class DeviceGatewayService {
         if (!device.isEnabled()) {
             throw new BusinessException(ErrorCode.DEVICE_DISABLED);
         }
-        device.markPolled(Instant.now());
+        // 缓存复用 detached 实体，心跳用批量 UPDATE 落库（避免 merge 产生额外 SELECT）
+        barriers.touchLastPollAt(device.getId(), Instant.now());
         DeviceCommand cmd = commandService.dequeueForDevice(device.getId()).orElse(null);
         return resolveProtocol(device).buildPollResponse(cmd);
+    }
+
+    /**
+     * 轮询设备定位（1 分钟缓存）：命中且未过期直接复用，避免高频心跳反复查库。
+     * 缓存失效后回源刷新；未登记设备以空条目短时缓存，同样避免反复查询。
+     */
+    private ParkingBarrier findCachedDeviceForPoll(String code) {
+        String key = code.toLowerCase();
+        PollCacheEntry entry = pollCache.get(key);
+        if (entry != null && !entry.expired()) {
+            return entry.device;
+        }
+        ParkingBarrier device = barriers.findByCodeIgnoreCase(code).orElse(null);
+        pollCache.put(key, new PollCacheEntry(device));
+        return device;
     }
 
     /**
