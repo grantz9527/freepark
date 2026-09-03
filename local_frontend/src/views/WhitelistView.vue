@@ -13,7 +13,7 @@ import {
   listLots,
   updateWhitelistVehicle,
   type WhitelistVehicleView,
-  type InternalVehicleType,
+  type VehicleType,
   type LotView,
   type PlateColor,
 } from '@/api/client'
@@ -32,9 +32,9 @@ const { plateColorLabel } = usePlateColorLabel()
 
 const plateColorOptions = computed(() => siteAllowedPlateColors.value)
 
-const vehicleTypeOptions: InternalVehicleType[] = ['TENANT', 'OWNER', 'APPOINTMENT', 'VISITOR', 'OTHER']
+const vehicleTypeOptions: VehicleType[] = ['TEMPORARY', 'RESERVED', 'VIP', 'OWNER', 'MONTHLY', 'OTHER']
 
-function vehicleTypeLabel(type: InternalVehicleType): string {
+function vehicleTypeLabel(type: VehicleType): string {
   return t(`whitelist.type${type}`)
 }
 
@@ -57,7 +57,7 @@ const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formPlate = ref('')
 const formPlateColor = ref<PlateColor>('BLUE')
-const formType = ref<InternalVehicleType>('OTHER')
+const formType = ref<VehicleType>('OTHER')
 const formOwnerName = ref('')
 const formPhone = ref('')
 const formDepartment = ref('')

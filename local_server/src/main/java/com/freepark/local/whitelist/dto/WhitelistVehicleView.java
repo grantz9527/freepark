@@ -3,7 +3,7 @@ package com.freepark.local.whitelist.dto;
 import java.time.Instant;
 import java.util.UUID;
 
-import com.freepark.local.domain.InternalVehicleType;
+import com.freepark.driver.api.model.VehicleType;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.WhitelistVehicle;
 
@@ -13,7 +13,7 @@ public record WhitelistVehicleView(
         String plateNumber,
         PlateColor plateColor,
         String ownerName,
-        InternalVehicleType type,
+        VehicleType type,
         String phone,
         String department,
         String remark,

@@ -3,8 +3,8 @@ package com.freepark.local.internalvehicle.dto;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.freepark.driver.api.model.VehicleType;
 import com.freepark.local.domain.InternalVehicle;
-import com.freepark.local.domain.InternalVehicleType;
 import com.freepark.local.domain.PlateColor;
 
 public record InternalVehicleView(
@@ -13,7 +13,7 @@ public record InternalVehicleView(
         String plateNumber,
         PlateColor plateColor,
         String ownerName,
-        InternalVehicleType type,
+        VehicleType type,
         String phone,
         String department,
         String remark,

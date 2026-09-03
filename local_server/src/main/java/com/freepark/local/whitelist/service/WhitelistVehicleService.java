@@ -21,9 +21,9 @@ import com.freepark.local.common.api.PageView;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
 import com.freepark.local.common.importing.VehicleSpreadsheetImportSupport;
+import com.freepark.driver.api.model.VehicleType;
 import com.freepark.local.domain.InternalVehicle;
 import com.freepark.local.domain.InternalVehicleRepository;
-import com.freepark.local.domain.InternalVehicleType;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
 import com.freepark.local.domain.ParkingLot;
@@ -194,7 +194,7 @@ public class WhitelistVehicleService {
                 skipped++;
                 continue;
             }
-            InternalVehicleType type = VehicleSpreadsheetImportSupport.parseInternalVehicleType(
+            VehicleType type = VehicleSpreadsheetImportSupport.parseVehicleType(
                     VehicleSpreadsheetImportSupport.cell(cells, 8));
             if (type == null) {
                 skipped++;

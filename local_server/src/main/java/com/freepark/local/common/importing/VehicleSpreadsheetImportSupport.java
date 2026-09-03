@@ -21,9 +21,9 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.freepark.driver.api.model.VehicleType;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
-import com.freepark.local.domain.InternalVehicleType;
 import com.freepark.local.domain.PlateColor;
 
 public final class VehicleSpreadsheetImportSupport {
@@ -198,37 +198,58 @@ public final class VehicleSpreadsheetImportSupport {
         }
     }
 
-    public static InternalVehicleType parseInternalVehicleType(String token) {
+    public static VehicleType parseVehicleType(String token) {
         if (token == null || token.isBlank()) {
-            return InternalVehicleType.OTHER;
+            return VehicleType.OTHER;
         }
         String value = token.trim().toUpperCase();
-        for (InternalVehicleType type : InternalVehicleType.values()) {
+        for (VehicleType type : VehicleType.values()) {
             if (type.name().equals(value)) {
                 return type;
             }
         }
         switch (value) {
-            case "TENANT":
-            case "租户":
-            case "租戶":
-                return InternalVehicleType.TENANT;
-            case "OWNER":
-            case "业主":
-            case "業主":
-                return InternalVehicleType.OWNER;
+            case "TEMPORARY":
+            case "临时车":
+            case "臨時車":
+            case "临时":
+            case "臨時":
+            case "临停":
+            case "臨停":
+                return VehicleType.TEMPORARY;
+            case "RESERVED":
             case "APPOINTMENT":
+            case "预约车":
+            case "預約車":
             case "预约":
             case "預約":
-                return InternalVehicleType.APPOINTMENT;
+                return VehicleType.RESERVED;
+            case "VIP":
+            case "贵宾车":
+            case "貴賓車":
+            case "贵宾":
+            case "貴賓":
+                return VehicleType.VIP;
+            case "OWNER":
+            case "业主车":
+            case "業主車":
+            case "业主":
+            case "業主":
+                return VehicleType.OWNER;
+            case "MONTHLY":
+            case "TENANT":
+            case "月租车":
+            case "月租車":
+            case "月租":
+            case "租户":
+            case "租戶":
+                return VehicleType.MONTHLY;
             case "VISITOR":
             case "访客":
             case "訪客":
-                return InternalVehicleType.VISITOR;
-            case "OTHER":
             case "其它":
             case "其他":
-                return InternalVehicleType.OTHER;
+                return VehicleType.OTHER;
             default:
                 return null;
         }

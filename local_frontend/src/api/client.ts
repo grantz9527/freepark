@@ -436,6 +436,86 @@ export function unbindBarrier(barrierId: string, locale: string): Promise<ApiRes
   return apiCall(`/api/v1/barriers/${barrierId}/bind`, { method: 'DELETE' }, locale)
 }
 
+/** 一体机驱动的运行时快照（后端 AioDriverService.DeviceRuntimeView）。 */
+export interface AioRuntimeStatusView {
+  deviceKey: string
+  online: boolean
+  gateState: string
+  message: string | null
+  epochMillis: number
+}
+
+/** 一次一体机命令下发的结果（后端 AioDriverService.CommandResult）。 */
+export interface AioCommandResultView {
+  deviceKey: string
+  brand: string | null
+  model: string | null
+  action: string
+  success: boolean
+  message: string | null
+  status: AioRuntimeStatusView
+}
+
+/** 通过一体机驱动主动下发统一命令（OPEN/CLOSE/ALWAYS_ON/ALWAYS_OFF/SHOW/SPEAK/STATUS）。 */
+export function sendAioCommand(
+  code: string,
+  payload: {
+    action: string
+    kind?: string | null
+    vehicleType?: string | null
+    text?: string | null
+  },
+  locale: string,
+): Promise<ApiResponse<AioCommandResultView>> {
+  return apiCall(
+    `/api/v1/aio-drivers/${encodeURIComponent(code)}/commands`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+/** 设备轮询队列中的指令视图（后端 DeviceCommandView）。 */
+export interface DeviceCommandView {
+  id: string
+  deviceId: string
+  action: string
+  status: string
+  source: string | null
+  createdAt: string
+  deliveredAt: string | null
+}
+
+/** 向设备轮询队列写入指令（设备下次轮询取走执行；action 取值 OPEN/CLOSE/HOLD_OPEN/SYNC_TIME/QUERY）。 */
+export function enqueueDeviceCommand(
+  deviceId: string,
+  action: string,
+  source: string | null,
+  locale: string,
+): Promise<ApiResponse<DeviceCommandView>> {
+  return apiCall(
+    `/api/v1/devices/${deviceId}/commands`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, source }),
+    },
+    locale,
+  )
+}
+
+/** 列出设备最近的指令记录（用于确认排队指令是否已被设备轮询取走：PENDING/DELIVERED/EXPIRED）。 */
+export function listDeviceCommands(
+  deviceId: string,
+  limit: number,
+  locale: string,
+): Promise<ApiResponse<DeviceCommandView[]>> {
+  return apiCall(`/api/v1/devices/${deviceId}/commands?limit=${limit}`, { method: 'GET' }, locale)
+}
+
 export function updateLot(
   lotId: string,
   payload: {
@@ -699,7 +779,8 @@ export async function importSpaces(
 
 export type PlateColor = string
 
-export type InternalVehicleType = 'TENANT' | 'OWNER' | 'APPOINTMENT' | 'VISITOR' | 'OTHER'
+// 车辆类型与 driver-api VehicleType 保持一致
+export type VehicleType = 'TEMPORARY' | 'RESERVED' | 'VIP' | 'OWNER' | 'MONTHLY' | 'OTHER'
 
 export interface InternalVehicleView {
   id: string
@@ -707,7 +788,7 @@ export interface InternalVehicleView {
   plateNumber: string
   plateColor: PlateColor
   ownerName: string
-  type: InternalVehicleType
+  type: VehicleType
   phone: string | null
   department: string | null
   remark: string | null
@@ -870,7 +951,7 @@ export function createInternalVehicle(
     plateNumber: string
     plateColor: PlateColor
     ownerName: string
-    type?: InternalVehicleType
+    type?: VehicleType
     phone?: string
     department?: string
     remark?: string
@@ -896,7 +977,7 @@ export function updateInternalVehicle(
     plateNumber: string
     plateColor: PlateColor
     ownerName: string
-    type?: InternalVehicleType
+    type?: VehicleType
     phone?: string
     department?: string
     remark?: string
@@ -995,7 +1076,7 @@ export interface WhitelistVehicleView {
   plateNumber: string
   plateColor: PlateColor
   ownerName: string
-  type: InternalVehicleType
+  type: VehicleType
   phone: string | null
   department: string | null
   remark: string | null
@@ -1025,7 +1106,7 @@ export function createWhitelistVehicle(
     plateNumber: string
     plateColor: PlateColor
     ownerName: string
-    type?: InternalVehicleType
+    type?: VehicleType
     phone?: string
     department?: string
     remark?: string
@@ -1053,7 +1134,7 @@ export function updateWhitelistVehicle(
     plateNumber: string
     plateColor: PlateColor
     ownerName: string
-    type?: InternalVehicleType
+    type?: VehicleType
     phone?: string
     department?: string
     remark?: string

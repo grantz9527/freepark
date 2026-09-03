@@ -68,11 +68,11 @@ class InternalVehicleControllerTest {
         mockMvc.perform(post("/api/v1/lots/" + lotId + "/internal-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"TENANT\",\"phone\":\"13800000000\",\"department\":\"行政部\"}"))
+                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"MONTHLY\",\"phone\":\"13800000000\",\"department\":\"行政部\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.plateNumber").value("京A12345"))
                 .andExpect(jsonPath("$.data.plateColor").value("BLUE"))
-                .andExpect(jsonPath("$.data.type").value("TENANT"));
+                .andExpect(jsonPath("$.data.type").value("MONTHLY"));
 
         mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles")
                         .header("Authorization", "Bearer " + token)
@@ -165,7 +165,7 @@ class InternalVehicleControllerTest {
         mockMvc.perform(post("/api/v1/lots/" + lotId + "/internal-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"TENANT\",\"department\":\"行政部\"}"))
+                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"MONTHLY\",\"department\":\"行政部\"}"))
                 .andExpect(status().isOk());
 
         MvcResult export = mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles/export")
@@ -183,7 +183,7 @@ class InternalVehicleControllerTest {
             org.junit.jupiter.api.Assertions.assertEquals("张三", row.getCell(1).getStringCellValue());
             org.junit.jupiter.api.Assertions.assertEquals("BLUE", row.getCell(2).getStringCellValue());
             org.junit.jupiter.api.Assertions.assertEquals("行政部", row.getCell(4).getStringCellValue());
-            org.junit.jupiter.api.Assertions.assertEquals("TENANT", row.getCell(6).getStringCellValue());
+            org.junit.jupiter.api.Assertions.assertEquals("MONTHLY", row.getCell(6).getStringCellValue());
         }
     }
 

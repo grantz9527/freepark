@@ -66,11 +66,11 @@ class WhitelistVehicleControllerTest {
         mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"VISITOR\",\"phone\":\"13800000000\",\"department\":\"访客\",\"startTime\":\"2026-08-23T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
+                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"MONTHLY\",\"phone\":\"13800000000\",\"department\":\"访客\",\"startTime\":\"2026-08-23T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.plateNumber").value("京A12345"))
                 .andExpect(jsonPath("$.data.plateColor").value("BLUE"))
-                .andExpect(jsonPath("$.data.type").value("VISITOR"))
+                .andExpect(jsonPath("$.data.type").value("MONTHLY"))
                 .andExpect(jsonPath("$.data.startTime").value("2026-08-23T00:00:00Z"))
                 .andExpect(jsonPath("$.data.endTime").value("2026-12-31T23:59:59Z"));
 
@@ -81,7 +81,7 @@ class WhitelistVehicleControllerTest {
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.items[0].plateNumber").value("京A12345"))
                 .andExpect(jsonPath("$.data.items[0].ownerName").value("张三"))
-                .andExpect(jsonPath("$.data.items[0].type").value("VISITOR"));
+                .andExpect(jsonPath("$.data.items[0].type").value("MONTHLY"));
 
         mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
@@ -92,7 +92,7 @@ class WhitelistVehicleControllerTest {
         MvcResult create = mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京B88888\",\"plateColor\":\"GREEN\",\"ownerName\":\"李四\",\"type\":\"TENANT\",\"startTime\":\"2026-01-01T00:00:00Z\",\"endTime\":\"2026-06-30T23:59:59Z\"}"))
+                        .content("{\"plateNumber\":\"京B88888\",\"plateColor\":\"GREEN\",\"ownerName\":\"李四\",\"type\":\"TEMPORARY\",\"startTime\":\"2026-01-01T00:00:00Z\",\"endTime\":\"2026-06-30T23:59:59Z\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         String vehicleId = jsonMapper.readTree(create.getResponse().getContentAsString())
@@ -209,7 +209,7 @@ class WhitelistVehicleControllerTest {
         mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"TENANT\",\"department\":\"访客\",\"startTime\":\"2026-08-23T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
+                        .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\",\"type\":\"MONTHLY\",\"department\":\"访客\",\"startTime\":\"2026-08-23T00:00:00Z\",\"endTime\":\"2026-12-31T23:59:59Z\"}"))
                 .andExpect(status().isOk());
 
         MvcResult export = mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles/export")
@@ -227,7 +227,7 @@ class WhitelistVehicleControllerTest {
             org.junit.jupiter.api.Assertions.assertEquals("BLUE", row.getCell(2).getStringCellValue());
             org.junit.jupiter.api.Assertions.assertFalse(row.getCell(6).getStringCellValue().isEmpty());
             org.junit.jupiter.api.Assertions.assertFalse(row.getCell(7).getStringCellValue().isEmpty());
-            org.junit.jupiter.api.Assertions.assertEquals("TENANT", row.getCell(8).getStringCellValue());
+            org.junit.jupiter.api.Assertions.assertEquals("MONTHLY", row.getCell(8).getStringCellValue());
         }
     }
 
