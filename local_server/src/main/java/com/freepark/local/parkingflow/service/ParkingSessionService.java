@@ -60,8 +60,9 @@ public class ParkingSessionService {
 
     /**
      * 核心联动：将识别记录应用到停车流水。
-     * - ENTRANCE → 生成在场流水
-     * - EXIT → 匹配同车场同车牌、入场时间在出场之前的最近在场流水并关闭
+     * - ENTRANCE → 若该车仍有多余的在场流水则先作废，再生成新的在场流水；
+     * - EXIT → 匹配同车场同车牌、入场时间在出场之前的最近在场流水并关闭；
+     *   无在场流水时兜底：将离场数据回写到该车最近一条未作废流水（不限状态）
      * - 其余 → skipped
      */
     @Transactional
@@ -70,6 +71,7 @@ public class ParkingSessionService {
             return ParkingFlowResult.skipped();
         }
         if (isEntrance(record.getDirection())) {
+            voidStaleOpenSessions(record.getLotId(), record.getPlate());
             ParkingSession session = new ParkingSession(
                     record.getLotId(),
                     record.getLotName(),
@@ -83,26 +85,58 @@ public class ParkingSessionService {
             return ParkingFlowResult.entry(ParkingSessionView.from(sessions.save(session)));
         }
         if (isExit(record.getDirection())) {
-            Optional<ParkingSession> best = sessions
+            Optional<ParkingSession> open = sessions
                     .findFirstByLotIdAndPlateNumberIgnoreCaseAndStatusOrderByEntryTimeDesc(
                             record.getLotId(),
                             record.getPlate(),
                             ParkingSessionStatus.OPEN);
-            if (best.isPresent()) {
-                ParkingSession open = best.get();
-                if (open.getEntryTime().isBefore(record.getCapturedAt())) {
-                    open.closeWithExit(
-                            record.getCapturedAt(),
-                            record.getLaneId(),
-                            record.getLaneName(),
-                            record.getId(),
-                            record.getEventImage());
-                    return ParkingFlowResult.exitMatched(ParkingSessionView.from(sessions.save(open)));
+            if (open.isPresent() && open.get().getEntryTime().isBefore(record.getCapturedAt())) {
+                return exitMatched(open.get(), record);
+            }
+            // 匹配不到入场数据（无在场流水）：回写该车最近一条未作废流水的离场数据
+            if (open.isEmpty()) {
+                Optional<ParkingSession> latest = sessions
+                        .findFirstByLotIdAndPlateNumberIgnoreCaseAndStatusNotOrderByEntryTimeDesc(
+                                record.getLotId(),
+                                record.getPlate(),
+                                ParkingSessionStatus.VOIDED);
+                if (latest.isPresent() && latest.get().getEntryTime().isBefore(record.getCapturedAt())) {
+                    return exitMatched(latest.get(), record);
                 }
             }
             return ParkingFlowResult.exitUnmatched();
         }
         return ParkingFlowResult.skipped();
+    }
+
+    /** 将离场数据写入流水并关闭，返回匹配结果。 */
+    private ParkingFlowResult exitMatched(ParkingSession session, RecognitionRecord record) {
+        session.closeWithExit(
+                record.getCapturedAt(),
+                record.getLaneId(),
+                record.getLaneName(),
+                record.getId(),
+                record.getEventImage());
+        return ParkingFlowResult.exitMatched(ParkingSessionView.from(sessions.save(session)));
+    }
+
+    /**
+     * 入场时若该车（同车场同车牌）仍有在场流水，说明是上次出场未识别或重复入场，
+     * 先将其作废（含关联识别记录），保证同一辆车只保留一条新的在场流水。
+     */
+    private void voidStaleOpenSessions(UUID lotId, String plate) {
+        if (lotId == null || plate == null || plate.trim().isEmpty()) {
+            return;
+        }
+        List<ParkingSession> staleOpens = sessions
+                .findAllByLotIdAndPlateNumberIgnoreCaseAndStatus(
+                        lotId, plate.trim(), ParkingSessionStatus.OPEN);
+        for (ParkingSession stale : staleOpens) {
+            stale.markVoided();
+            sessions.save(stale);
+            markRecognitionVoided(stale.getEntryRecognitionId());
+            markRecognitionVoided(stale.getExitRecognitionId());
+        }
     }
 
     /**

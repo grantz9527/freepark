@@ -13,7 +13,13 @@ public interface ParkingSessionRepository
     Optional<ParkingSession> findFirstByLotIdAndPlateNumberIgnoreCaseAndStatusOrderByEntryTimeDesc(
             UUID lotId, String plateNumber, ParkingSessionStatus status);
 
+    Optional<ParkingSession> findFirstByLotIdAndPlateNumberIgnoreCaseAndStatusNotOrderByEntryTimeDesc(
+            UUID lotId, String plateNumber, ParkingSessionStatus excludedStatus);
+
     boolean existsByLotIdAndPlateNumberIgnoreCaseAndStatus(
+            UUID lotId, String plateNumber, ParkingSessionStatus status);
+
+    List<ParkingSession> findAllByLotIdAndPlateNumberIgnoreCaseAndStatus(
             UUID lotId, String plateNumber, ParkingSessionStatus status);
 
     List<ParkingSession> findAllByOrderByEntryTimeDesc();
