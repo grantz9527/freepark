@@ -61,6 +61,9 @@ public class DeviceGatewayService {
     private static final String BLACKLIST_LED_ENTRANCE = "此车为黑名单车辆\n禁止入场";
     private static final String BLACKLIST_LED_EXIT = "此车为黑名单车辆\n无权出场";
 
+    /** 通行判定「内部车场：非内部车入场拦截」remark（AccessDecisionService 命中 INTERNAL 车场入场校验时返回）。 */
+    private static final String REMARK_NOT_INTERNAL_VEHICLE = "not_internal_vehicle";
+
     private final ParkingBarrierRepository barriers;
     private final RecognitionRecordService recognitionRecordService;
     private final DeviceCommandService commandService;
@@ -241,37 +244,54 @@ public class DeviceGatewayService {
         if (decision.result() == AccessDecisionView.Result.INTERCEPTED) {
             log.info("识别拦截不开闸：device={} plate={} direction={} remark={}",
                     device.getCode(), plate, direction, decision.remark());
-            return interceptResponse(protocol, direction, decision.remark());
+            return interceptResponse(protocol, direction, decision.remark(), plate);
         }
 
         // 放行：优先平台主动 HTTP 下发开闸指令
-        String voiceText = welcomeVoice(direction);
+        String farewell = welcomeVoice(direction);
+        // 识别放行语音统一拼车牌后播报（“车牌,欢迎光临”/“车牌,一路顺风”）：控制板语音按词组匹配，
+        // 车牌为变量信息可自动识别播报（显示屏通信协议 2.5 播报车牌匹配格式 P，词间 ASCII 逗号分隔）。
+        // 入场/离场均下发 LED 两行“车牌 / 欢迎光临”（或“车牌 / 一路顺风”，0x6E 文字+语音一体帧）。
+        String normalizedPlate = plate.trim();
+        String voiceText = normalizedPlate + "," + farewell;
+        String ledText = normalizedPlate + "\n" + farewell;
         if (aioDrivers.openGateSystem(device, "recognition:" + device.getCode())) {
             log.info("识别放行 device={} plate={} direction={}：推送了开闸指令（平台主动下发）",
                     device.getCode(), plate, direction);
-            // 已主动下发开闸，响应不再重复指示设备开闸（欢迎语音仍随响应带回）
-            return protocol.buildPushResponse(false, voiceText);
+            // 已主动下发开闸，响应不再重复指示设备开闸（语音与 LED 提示仍随响应带回）
+            return protocol.buildPushResponse(false, voiceText, ledText);
         }
         // 档案无驱动或连接地址不可用：回退响应带回，由设备按响应自行开闸
         log.info("识别放行 device={} plate={} direction={}：推送了开闸指令（响应带回）",
                 device.getCode(), plate, direction);
-        return protocol.buildPushResponse(true, voiceText);
+        return protocol.buildPushResponse(true, voiceText, ledText);
     }
 
     /**
-     * 拦截提示响应：黑名单拦截在不开闸的同时，经相机串口向控制板下发「LED 文字 + 语音」固定文案
-     * （入口“此车为黑名单车辆,禁止入场”、出口“此车为黑名单车辆,无权出场”，词条均匹配板卡语音库）；
+     * 拦截提示响应：不开闸的同时经相机串口向控制板下发「LED 文字 + 语音」一体提示：
+     * <ul>
+     *   <li>黑名单：固定文案（入口“此车为黑名单车辆,禁止入场”、出口“此车为黑名单车辆,无权出场”，
+     *       词条均匹配板卡语音库）；</li>
+     *   <li>内部车场非内部车入场：语音“车牌,无权入场”、LED 两行“车牌 / 无权入场”
+     *       （“无权入场”为板卡语音库 #153，车牌为变量信息自动识别播报）；</li>
+     * </ul>
      * 其它拦截仅返回不开闸。
      */
-    private JsonNode interceptResponse(CameraProtocol protocol, AccessDirection direction, String remark) {
-        if (!REMARK_BLACKLISTED_VEHICLE.equals(remark)) {
+    private JsonNode interceptResponse(CameraProtocol protocol, AccessDirection direction, String remark, String plate) {
+        if (REMARK_BLACKLISTED_VEHICLE.equals(remark)) {
+            if (direction == AccessDirection.ENTRANCE) {
+                return protocol.buildPushResponse(false, BLACKLIST_VOICE_ENTRANCE, BLACKLIST_LED_ENTRANCE);
+            }
+            if (direction == AccessDirection.EXIT) {
+                return protocol.buildPushResponse(false, BLACKLIST_VOICE_EXIT, BLACKLIST_LED_EXIT);
+            }
             return protocol.buildPushResponse(false);
         }
-        if (direction == AccessDirection.ENTRANCE) {
-            return protocol.buildPushResponse(false, BLACKLIST_VOICE_ENTRANCE, BLACKLIST_LED_ENTRANCE);
-        }
-        if (direction == AccessDirection.EXIT) {
-            return protocol.buildPushResponse(false, BLACKLIST_VOICE_EXIT, BLACKLIST_LED_EXIT);
+        if (REMARK_NOT_INTERNAL_VEHICLE.equals(remark) && direction == AccessDirection.ENTRANCE) {
+            String normalizedPlate = plate.trim();
+            return protocol.buildPushResponse(false,
+                    normalizedPlate + ",无权入场",
+                    normalizedPlate + "\n无权入场");
         }
         return protocol.buildPushResponse(false);
     }

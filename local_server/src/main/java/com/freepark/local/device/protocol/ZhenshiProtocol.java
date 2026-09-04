@@ -160,7 +160,7 @@ public class ZhenshiProtocol implements CameraProtocol {
     }
 
     /**
-     * 生成推送响应并附带「LED 文字 + 语音」一体提示（拦截场景，如黑名单车辆）：
+     * 生成推送响应并附带「LED 文字 + 语音」一体提示（拦截场景如黑名单车辆、离场正常放行两行屏均走此帧）：
      * ledText 非空时组 0x6E 单包多行 485 帧（显示屏显示分行文字并同步按语音库播报），
      * 否则退化为纯语音响应 {@link #buildPushResponse(boolean, String)}。
      */
