@@ -1,5 +1,6 @@
 package com.freepark.local.accessdecision.dto;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -16,4 +17,6 @@ public record AccessDecisionRequest(
     /** Lane plate colors configured to intercept; provided by the caller when available. */
     List<PlateColor> interceptColors,
     /** Whether an open in-lot session exists; only meaningful for EXIT. */
-    Boolean hasOpenSession) {}
+    Boolean hasOpenSession,
+    /** 欠费金额（算费接口返回）：>0 时且车场配置了该方向「欠费拦截」则拦截；null 表示未查询/无欠费。 */
+    BigDecimal dueAmount) {}

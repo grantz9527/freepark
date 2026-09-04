@@ -1,5 +1,7 @@
 package com.freepark.local.nodeconfig.dto;
 
+import java.math.BigDecimal;
+
 import com.freepark.local.domain.NodeMode;
 
 import jakarta.validation.constraints.Max;
@@ -14,5 +16,8 @@ public record UpdateNodeSettingsRequest(
         @Size(max = 128) String mqttClientId,
         @Size(max = 128) String mqttUsername,
         @Size(max = 255) String mqttPassword,
-        @Size(max = 255) String mqttTopicPrefix) {
+        @Size(max = 255) String mqttTopicPrefix,
+        @Size(max = 255) String feeApiUrl,
+        Boolean feeMockEnabled,
+        BigDecimal feeMockAmount) {
 }

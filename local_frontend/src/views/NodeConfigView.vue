@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { ApiError, getNodeSettings, updateNodeSettings, type NodeMode } from '@/api/client'
+import { ApiError, getNodeSettings, quoteFee, updateNodeSettings, type NodeMode } from '@/api/client'
 import { formatSiteTime } from '@/composables/useSiteTime'
 
 const { t, locale } = useI18n()
@@ -19,6 +19,14 @@ const mqttUsername = ref('')
 const mqttPassword = ref('')
 const mqttPasswordSet = ref(false)
 const mqttTopicPrefix = ref('')
+const feeApiUrl = ref('')
+const feeMockEnabled = ref(false)
+const feeMockAmount = ref<number | null>(null)
+const quotePlate = ref('')
+const quoteColor = ref('')
+const quoting = ref(false)
+const quoteError = ref(false)
+const quoteMessage = ref('')
 const updatedAt = ref('')
 
 const isEdge = computed(() => mode.value === 'EDGE')
@@ -30,6 +38,13 @@ const passwordPlaceholder = computed(() =>
 
 function formatUpdatedAt(iso: string): string {
   return formatSiteTime(iso)
+}
+
+function mockAmountOrNull(): number | null {
+  const raw = String(feeMockAmount.value ?? '').trim()
+  if (!raw) return null
+  const n = Number(raw)
+  return Number.isNaN(n) ? null : n
 }
 
 async function loadSettings(): Promise<void> {
@@ -53,6 +68,9 @@ function applySettings(data: {
   mqttUsername: string
   mqttPasswordSet: boolean
   mqttTopicPrefix: string
+  feeApiUrl: string
+  feeMockEnabled: boolean
+  feeMockAmount: number | null
   updatedAt: string
 }): void {
   mode.value = data.mode
@@ -63,6 +81,9 @@ function applySettings(data: {
   mqttPasswordSet.value = data.mqttPasswordSet
   mqttPassword.value = ''
   mqttTopicPrefix.value = data.mqttTopicPrefix || ''
+  feeApiUrl.value = data.feeApiUrl || ''
+  feeMockEnabled.value = data.feeMockEnabled
+  feeMockAmount.value = data.feeMockAmount
   updatedAt.value = data.updatedAt
 }
 
@@ -78,6 +99,11 @@ async function onSubmit(): Promise<void> {
     errorMessage.value = t('nodeConfig.portInvalid')
     return
   }
+  const mockAmount = mockAmountOrNull()
+  if (feeMockEnabled.value && (mockAmount === null || mockAmount < 0)) {
+    errorMessage.value = t('nodeConfig.feeMockAmountInvalid')
+    return
+  }
   submitting.value = true
   try {
     const response = await updateNodeSettings(
@@ -89,6 +115,9 @@ async function onSubmit(): Promise<void> {
         mqttUsername: mqttUsername.value.trim(),
         mqttPassword: mqttPassword.value,
         mqttTopicPrefix: mqttTopicPrefix.value.trim(),
+        feeApiUrl: feeApiUrl.value.trim(),
+        feeMockEnabled: feeMockEnabled.value,
+        feeMockAmount: feeMockEnabled.value ? mockAmount : null,
       },
       locale.value,
     )
@@ -98,6 +127,25 @@ async function onSubmit(): Promise<void> {
     errorMessage.value = error instanceof ApiError ? error.message : t('nodeConfig.saveFailed')
   } finally {
     submitting.value = false
+  }
+}
+
+async function onQuote(): Promise<void> {
+  if (!quotePlate.value.trim() || quoting.value) return
+  quoting.value = true
+  quoteError.value = false
+  quoteMessage.value = ''
+  try {
+    const response = await quoteFee(
+      { plateNumber: quotePlate.value.trim(), plateColor: quoteColor.value.trim() },
+      locale.value,
+    )
+    quoteMessage.value = t('nodeConfig.feeQuoteResult', { amount: response.data.amount })
+  } catch (error) {
+    quoteError.value = true
+    quoteMessage.value = error instanceof ApiError ? error.message : t('nodeConfig.feeQuoteFailed')
+  } finally {
+    quoting.value = false
   }
 }
 
@@ -172,6 +220,67 @@ onMounted(() => {
               :placeholder="t('nodeConfig.mqttTopicPrefixPlaceholder')"
             />
           </label>
+        </div>
+      </article>
+
+      <article v-if="isEdge" class="card">
+        <h3>{{ t('nodeConfig.feeApi') }}</h3>
+        <p class="hint">{{ t('nodeConfig.feeApiHint') }}</p>
+        <div class="form">
+          <label>
+            <span>{{ t('nodeConfig.feeApiUrl') }}</span>
+            <input v-model="feeApiUrl" type="text" :placeholder="t('nodeConfig.feeApiUrlPlaceholder')" />
+          </label>
+          <label class="mock-toggle">
+            <input v-model="feeMockEnabled" type="checkbox" />
+            <span class="mock-toggle-text">
+              <strong>{{ t('nodeConfig.feeMockEnabled') }}</strong>
+              <em>{{ t('nodeConfig.feeMockEnabledHint') }}</em>
+            </span>
+          </label>
+          <label v-if="feeMockEnabled">
+            <span>{{ t('nodeConfig.feeMockAmount') }}</span>
+            <input
+              v-model="feeMockAmount"
+              type="number"
+              min="0"
+              step="0.01"
+              :placeholder="t('nodeConfig.feeMockAmountPlaceholder')"
+            />
+          </label>
+        </div>
+        <div class="quote-panel">
+          <div class="form form-row">
+            <label>
+              <span>{{ t('nodeConfig.feeQuotePlate') }}</span>
+              <input
+                v-model="quotePlate"
+                type="text"
+                :placeholder="t('nodeConfig.feeQuotePlatePlaceholder')"
+              />
+            </label>
+            <label>
+              <span>{{ t('nodeConfig.feeQuoteColor') }}</span>
+              <input
+                v-model="quoteColor"
+                type="text"
+                :placeholder="t('nodeConfig.feeQuoteColorPlaceholder')"
+              />
+            </label>
+          </div>
+          <div class="quote-footer">
+            <p v-if="quoteMessage" class="quote-result" :class="quoteError ? 'error' : 'ok'">
+              {{ quoteMessage }}
+            </p>
+            <button
+              type="button"
+              class="quote-btn"
+              :disabled="quoting || !quotePlate.trim()"
+              @click="onQuote"
+            >
+              {{ quoting ? t('nodeConfig.feeQuoting') : t('nodeConfig.feeQuote') }}
+            </button>
+          </div>
         </div>
       </article>
 
@@ -273,6 +382,34 @@ label {
   gap: 0.35rem;
 }
 
+.mock-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+
+.mock-toggle input {
+  width: auto;
+}
+
+.mock-toggle-text {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.mock-toggle-text strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.mock-toggle-text em {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: normal;
+  line-height: 1.4;
+}
+
 select,
 input[type='text'],
 input[type='password'],
@@ -354,5 +491,43 @@ button:disabled {
   button {
     width: 100%;
   }
+}
+
+.quote-panel {
+  margin-top: 1rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.quote-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.quote-result {
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.quote-result.error {
+  color: var(--danger);
+  background: #fdecec;
+}
+
+.quote-result.ok {
+  color: var(--ok);
+  background: #e8f5ef;
+}
+
+.quote-btn {
+  justify-self: end;
+  min-width: 7rem;
 }
 </style>

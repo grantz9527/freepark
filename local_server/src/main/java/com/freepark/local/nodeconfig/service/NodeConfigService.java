@@ -58,6 +58,17 @@ public class NodeConfigService {
             settings.setMqttTopicPrefix(trimToNull(request.mqttTopicPrefix()) != null
                     ? stripTrailingSlash(trimToNull(request.mqttTopicPrefix()))
                     : NodeSettings.DEFAULT_MQTT_TOPIC_PREFIX);
+            // 算费请求接口仅在边缘节点模式下配置并生效
+            settings.setFeeApiUrl(trimToNull(request.feeApiUrl()));
+            // 模拟金额开关与金额
+            boolean mockEnabled = Boolean.TRUE.equals(request.feeMockEnabled());
+            settings.setFeeMockEnabled(mockEnabled);
+            if (mockEnabled) {
+                if (request.feeMockAmount() == null || request.feeMockAmount().signum() < 0) {
+                    throw new BusinessException(ErrorCode.INVALID_FEE_MOCK_CONFIG);
+                }
+                settings.setFeeMockAmount(request.feeMockAmount());
+            }
             if (!isBlank(request.mqttPassword())) {
                 settings.setMqttPassword(request.mqttPassword());
             }
@@ -87,6 +98,9 @@ public class NodeConfigService {
                 settings.getMqttUsername(),
                 password != null && !password.isBlank(),
                 settings.getMqttTopicPrefix(),
+                settings.getFeeApiUrl(),
+                settings.isFeeMockEnabled(),
+                settings.getFeeMockAmount(),
                 settings.getUpdatedAt());
     }
 

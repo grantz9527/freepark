@@ -1554,6 +1554,9 @@ export interface NodeSettingsView {
   mqttUsername: string
   mqttPasswordSet: boolean
   mqttTopicPrefix: string
+  feeApiUrl: string
+  feeMockEnabled: boolean
+  feeMockAmount: number | null
   updatedAt: string
 }
 
@@ -1570,6 +1573,9 @@ export function updateNodeSettings(
     mqttUsername: string
     mqttPassword: string
     mqttTopicPrefix: string
+    feeApiUrl: string
+    feeMockEnabled: boolean
+    feeMockAmount: number | null
   },
   locale: string,
 ): Promise<ApiResponse<NodeSettingsView>> {
@@ -1577,6 +1583,25 @@ export function updateNodeSettings(
     '/api/v1/node-settings',
     {
       method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export interface FeeQuoteView {
+  amount: number
+}
+
+export function quoteFee(
+  payload: { plateNumber: string; plateColor: string },
+  locale: string,
+): Promise<ApiResponse<FeeQuoteView>> {
+  return apiCall(
+    '/api/v1/node-settings/fee-quote',
+    {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     },

@@ -1,5 +1,6 @@
 package com.freepark.local.device.service;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -31,9 +32,11 @@ import com.freepark.local.domain.DeviceCommand;
 import com.freepark.local.domain.LaneType;
 import com.freepark.local.domain.ParkingBarrier;
 import com.freepark.local.domain.ParkingBarrierRepository;
+import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.RecognitionRecord;
 import com.freepark.local.parkingflow.service.ParkingSessionService;
 import com.freepark.local.recognition.service.RecognitionRecordService;
+import com.freepark.local.nodeconfig.service.FeeQuoteClient;
 
 /**
  * 识别设备接入网关核心编排：
@@ -64,6 +67,9 @@ public class DeviceGatewayService {
     /** 通行判定「内部车场：非内部车入场拦截」remark（AccessDecisionService 命中 INTERNAL 车场入场校验时返回）。 */
     private static final String REMARK_NOT_INTERNAL_VEHICLE = "not_internal_vehicle";
 
+    /** 通行判定「欠费拦截」remark：车场该方向配置了欠费拦截且算费接口返回金额 > 0。 */
+    private static final String REMARK_FEE_PENDING = "fee_pending";
+
     private final ParkingBarrierRepository barriers;
     private final RecognitionRecordService recognitionRecordService;
     private final DeviceCommandService commandService;
@@ -71,6 +77,7 @@ public class DeviceGatewayService {
     private final AccessDecisionService accessDecisions;
     private final AioDriverService aioDrivers;
     private final ParkingSessionService parkingSessions;
+    private final FeeQuoteClient feeQuoteClient;
     private final ZhenshiProtocol defaultProtocol;
     private final Map<String, CameraProtocol> protocolsByBrand;
 
@@ -100,6 +107,7 @@ public class DeviceGatewayService {
             AccessDecisionService accessDecisions,
             AioDriverService aioDrivers,
             ParkingSessionService parkingSessions,
+            FeeQuoteClient feeQuoteClient,
             ZhenshiProtocol defaultProtocol,
             List<CameraProtocol> protocols) {
         this.barriers = barriers;
@@ -109,6 +117,7 @@ public class DeviceGatewayService {
         this.accessDecisions = accessDecisions;
         this.aioDrivers = aioDrivers;
         this.parkingSessions = parkingSessions;
+        this.feeQuoteClient = feeQuoteClient;
         this.defaultProtocol = defaultProtocol;
         this.protocolsByBrand = protocols.stream()
                 .collect(Collectors.toMap(CameraProtocol::brand, Function.identity(), (a, b) -> a));
@@ -234,17 +243,37 @@ public class DeviceGatewayService {
         }
 
         UUID lotId = device.getLane().getLot().getId();
+        // 欠费拦截：仅当车场该方向配置了「欠费拦截」且本节点具备算费数据源
+        // （节点配置了算费接口地址或开启模拟金额）才向算费接口查询欠费金额；
+        // 本地服务自身不提供计价，两者皆无时欠费拦截不生效、不发请求。
+        // 查询失败（远程异常/模拟配置无效）不拦截，只记日志，避免外部故障影响通行。
+        boolean interceptArrears = direction == AccessDirection.ENTRANCE
+                ? device.getLane().getLot().isEntryInterceptArrears()
+                : device.getLane().getLot().isExitInterceptArrears();
+        BigDecimal dueAmount = null;
+        if (interceptArrears) {
+            if (feeQuoteClient.hasFeeQuoteSource()) {
+                dueAmount = quoteFeeQuietly(plate, record.getPlateColor());
+            } else {
+                log.debug("车场({}) 配置了欠费拦截，但本节点未配置算费接口/模拟金额，欠费拦截不生效", lotId);
+            }
+        }
         AccessDecisionView decision = accessDecisions.decide(lotId, new AccessDecisionRequest(
                 device.getLane().getId(),
                 plate,
                 record.getPlateColor(),
                 direction,
                 null, // 通道未配置拦截色，由调用方具备时提供
-                direction == AccessDirection.EXIT ? parkingSessions.hasOpenSession(lotId, plate) : null));
+                direction == AccessDirection.EXIT ? parkingSessions.hasOpenSession(lotId, plate) : null,
+                dueAmount));
+        log.info("识别通行判定 device={} plate={} direction={} lot={} arrearsIntercept={} feeSource={} due={} result={} remark={}",
+                device.getCode(), plate, direction, lotId, interceptArrears,
+                feeQuoteClient.hasFeeQuoteSource(), dueAmount,
+                decision.result(), decision.remark());
         if (decision.result() == AccessDecisionView.Result.INTERCEPTED) {
-            log.info("识别拦截不开闸：device={} plate={} direction={} remark={}",
-                    device.getCode(), plate, direction, decision.remark());
-            return interceptResponse(protocol, direction, decision.remark(), plate);
+            log.info("识别拦截不开闸：device={} plate={} direction={} remark={} due={}",
+                    device.getCode(), plate, direction, decision.remark(), dueAmount);
+            return interceptResponse(protocol, direction, decision.remark(), plate, dueAmount);
         }
 
         // 放行：优先平台主动 HTTP 下发开闸指令
@@ -274,10 +303,13 @@ public class DeviceGatewayService {
      *       词条均匹配板卡语音库）；</li>
      *   <li>内部车场非内部车入场：语音“车牌,无权入场”、LED 两行“车牌 / 无权入场”
      *       （“无权入场”为板卡语音库 #153，车牌为变量信息自动识别播报）；</li>
+     *   <li>欠费拦截：LED 两行“车牌 / 请缴费 X 元”（金额为动态数字不上屏语音），
+     *       语音报“车牌,请缴费”固定提示；</li>
      * </ul>
      * 其它拦截仅返回不开闸。
      */
-    private JsonNode interceptResponse(CameraProtocol protocol, AccessDirection direction, String remark, String plate) {
+    private JsonNode interceptResponse(
+            CameraProtocol protocol, AccessDirection direction, String remark, String plate, BigDecimal dueAmount) {
         if (REMARK_BLACKLISTED_VEHICLE.equals(remark)) {
             if (direction == AccessDirection.ENTRANCE) {
                 return protocol.buildPushResponse(false, BLACKLIST_VOICE_ENTRANCE, BLACKLIST_LED_ENTRANCE);
@@ -293,7 +325,29 @@ public class DeviceGatewayService {
                     normalizedPlate + ",无权入场",
                     normalizedPlate + "\n无权入场");
         }
+        if (REMARK_FEE_PENDING.equals(remark)) {
+            String normalizedPlate = plate.trim();
+            String amountText = dueAmount == null ? null : dueAmount.stripTrailingZeros().toPlainString();
+            String feeText = amountText == null ? "请缴费" : "请缴费" + amountText + "元";
+            return protocol.buildPushResponse(false,
+                    normalizedPlate + ",请缴费",
+                    normalizedPlate + "\n" + feeText);
+        }
         return protocol.buildPushResponse(false);
+    }
+
+    /**
+     * 向算费接口查询欠费金额（仅车场该方向配置了欠费拦截时调用）：
+     * 成功返回金额（≥0），任何失败（未配置接口、远程异常、模拟配置无效）均返回 null 且不拦截，
+     * 避免外部算费服务故障阻断正常通行。
+     */
+    private BigDecimal quoteFeeQuietly(String plate, PlateColor plateColor) {
+        try {
+            return feeQuoteClient.quote(plate, plateColor == null ? null : plateColor.name());
+        } catch (BusinessException e) {
+            log.warn("欠费金额查询失败（不拦截放行）：plate={} reason={}", plate, e.getMessage());
+            return null;
+        }
     }
 
     /** 放行播报语：入场播“欢迎光临”，出场播“一路顺风”；方向不可判定不播。 */

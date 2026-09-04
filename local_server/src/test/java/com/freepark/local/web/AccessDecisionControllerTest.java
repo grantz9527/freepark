@@ -114,6 +114,48 @@ class AccessDecisionControllerTest {
     }
 
     @Test
+    void arrearsInterceptHoldsEntryWhenConfiguredAndFeeDue() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token, "PUBLIC");
+        String laneId = createLane(token, lotId);
+
+        // Not configured: a due amount is reported but the vehicle still passes.
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\","
+                        + "\"direction\":\"ENTRANCE\",\"dueAmount\":8.5}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"));
+
+        // Enable arrears intercept for entry; a positive due amount now intercepts.
+        mockMvc.perform(put("/api/v1/lots/" + lotId + "/intercept")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryRules\":[\"ARREARS\"],\"exitRules\":[]}"))
+                .andExpect(status().isOk());
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\","
+                        + "\"direction\":\"ENTRANCE\",\"dueAmount\":8.5}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("INTERCEPTED"))
+                .andExpect(jsonPath("$.data.remark").value("fee_pending"));
+
+        // Zero due amount is not intercepted.
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\","
+                        + "\"direction\":\"ENTRANCE\",\"dueAmount\":0}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"));
+
+        // Exit rules are still off, so the same due amount passes on exit.
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\","
+                        + "\"direction\":\"EXIT\",\"dueAmount\":8.5}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"));
+    }
+
+    @Test
     void whitelistFirstOrderAllowsBlacklistedPlate() throws Exception {
         String token = adminToken();
         String lotId = createLot(token, "PUBLIC");

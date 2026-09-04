@@ -56,17 +56,55 @@ class NodeConfigControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"mode\":\"EDGE\",\"mqttHost\":\"192.168.1.50\",\"mqttPort\":1883,"
                                 + "\"mqttClientId\":\"edge-01\",\"mqttUsername\":\"parking\","
-                                + "\"mqttPassword\":\"secret\",\"mqttTopicPrefix\":\"freepark/edge/\"}"))
+                                + "\"mqttPassword\":\"secret\",\"mqttTopicPrefix\":\"freepark/edge/\","
+                                + "\"feeApiUrl\":\"https://billing.example.com/api/v1/fee/quote\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.mode").value("EDGE"))
                 .andExpect(jsonPath("$.data.mqttHost").value("192.168.1.50"))
                 .andExpect(jsonPath("$.data.mqttPort").value(1883))
-                .andExpect(jsonPath("$.data.mqttPasswordSet").value(true));
+                .andExpect(jsonPath("$.data.mqttPasswordSet").value(true))
+                .andExpect(jsonPath("$.data.feeApiUrl").value("https://billing.example.com/api/v1/fee/quote"));
 
         mockMvc.perform(get("/api/v1/node-settings").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.mode").value("EDGE"))
-                .andExpect(jsonPath("$.data.mqttTopicPrefix").value("freepark/edge"));
+                .andExpect(jsonPath("$.data.mqttTopicPrefix").value("freepark/edge"))
+                .andExpect(jsonPath("$.data.feeApiUrl").value("https://billing.example.com/api/v1/fee/quote"));
+    }
+
+    @Test
+    void feeQuoteWithoutConfiguredUrlIsRejected() throws Exception {
+        String token = adminToken();
+
+        mockMvc.perform(post("/api/v1/node-settings/fee-quote")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plateNumber\":\"粤R888G8\",\"plateColor\":\"BLUE\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("fee_api_not_configured"));
+    }
+
+    @Test
+    void mockFeeQuoteReturnsMockedAmountWithoutRemoteUrl() throws Exception {
+        String token = adminToken();
+
+        // 启用模拟金额（无需配置远程算费接口地址）
+        mockMvc.perform(put("/api/v1/node-settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mode\":\"EDGE\",\"mqttHost\":\"192.168.1.50\","
+                                + "\"feeMockEnabled\":true,\"feeMockAmount\":12.5}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.feeMockEnabled").value(true))
+                .andExpect(jsonPath("$.data.feeMockAmount").value(12.5));
+
+        // 算费请求直接返回模拟金额
+        mockMvc.perform(post("/api/v1/node-settings/fee-quote")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"plateNumber\":\"粤R888G8\",\"plateColor\":\"BLUE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.amount").value(12.5));
     }
 
     @Test

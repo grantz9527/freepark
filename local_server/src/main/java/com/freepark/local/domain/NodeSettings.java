@@ -1,5 +1,6 @@
 package com.freepark.local.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 import org.springframework.data.annotation.LastModifiedDate;
@@ -49,6 +50,18 @@ public class NodeSettings {
 
     @Column(name = "mqtt_topic_prefix", length = 255)
     private String mqttTopicPrefix;
+
+    /** 算费请求接口地址：边缘节点向远程算费服务请求费用（入参车牌+车牌颜色，返回金额）。 */
+    @Column(name = "fee_api_url", length = 255)
+    private String feeApiUrl;
+
+    /** 是否启用模拟金额（本地调试）：启用后算费请求直接返回模拟金额，不再调用远程算费接口。 */
+    @Column(name = "fee_mock_enabled", nullable = false)
+    private boolean feeMockEnabled = false;
+
+    /** 模拟金额：feeMockEnabled=true 时算费请求返回的固定金额。 */
+    @Column(name = "fee_mock_amount", precision = 10, scale = 2)
+    private BigDecimal feeMockAmount;
 
     @LastModifiedDate
     @Column(nullable = false)
@@ -119,6 +132,30 @@ public class NodeSettings {
 
     public void setMqttTopicPrefix(String mqttTopicPrefix) {
         this.mqttTopicPrefix = mqttTopicPrefix;
+    }
+
+    public String getFeeApiUrl() {
+        return feeApiUrl;
+    }
+
+    public void setFeeApiUrl(String feeApiUrl) {
+        this.feeApiUrl = feeApiUrl;
+    }
+
+    public boolean isFeeMockEnabled() {
+        return feeMockEnabled;
+    }
+
+    public void setFeeMockEnabled(boolean feeMockEnabled) {
+        this.feeMockEnabled = feeMockEnabled;
+    }
+
+    public BigDecimal getFeeMockAmount() {
+        return feeMockAmount;
+    }
+
+    public void setFeeMockAmount(BigDecimal feeMockAmount) {
+        this.feeMockAmount = feeMockAmount;
     }
 
     public Instant getUpdatedAt() {

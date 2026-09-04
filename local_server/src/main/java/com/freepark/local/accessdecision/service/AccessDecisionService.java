@@ -101,7 +101,14 @@ public class AccessDecisionService {
             return AccessDecisionView.intercepted("plate_color_intercept");
         }
 
-        // 4. Exit without an open in-lot session is allowed but flagged.
+        // 4. Arrears intercept: when the lot enables it for this direction and the fee service
+        //    reports a due amount > 0, hold the vehicle for payment.
+        boolean interceptArrears = isEntry ? lot.isEntryInterceptArrears() : lot.isExitInterceptArrears();
+        if (interceptArrears && request.dueAmount() != null && request.dueAmount().signum() > 0) {
+            return AccessDecisionView.intercepted("fee_pending");
+        }
+
+        // 5. Exit without an open in-lot session is allowed but flagged.
         if (!isEntry && Boolean.FALSE.equals(request.hasOpenSession())) {
             return AccessDecisionView.allowed("no_open_session");
         }
