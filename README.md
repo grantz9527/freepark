@@ -29,15 +29,21 @@ This project is an **attempt to be built by AI**: we strive to let AI write the 
 ## Vision / 愿景
 
 - Make it easier to find, share, and manage parking spaces across countries and cities.
+
 - 降低找车位、共享车位、管理停车资源的成本，覆盖多国家、多城市场景。
 
 ## Goals / 目标
 
 - **I18N first**: language, locale, currency, time zone, and map data should work worldwide.
+
 - **AI-assisted**: use AI to improve search, matching, occupancy prediction, and operations.
+
 - **Open source**: prefer existing open-source components over reinventing the stack.
+
 - **国际化优先**：语言、地区、货币、时区、地图数据面向全球可用。
+
 - **AI 辅助**：用 AI 提升搜索、匹配、占用预测与运营效率。
+
 - **开源优先**：尽量复用成熟开源组件，而不是从零造轮子。
 
 ## Backend / 后端
@@ -47,6 +53,7 @@ The backend uses Java 21, Spring Data JPA, MySQL, and HTTP I18N (`Accept-Languag
 后端使用 Java 21、Spring Data JPA、MySQL，并支持接口国际化。
 
 - [`local_server`](local_server/README.md): on-premise / edge service, default port `8081`
+
 - [`local_frontend`](local_frontend/README.md): Vue 3 + vue-i18n console for `local_server`, default port `5173`
 
 ## Default account / 默认账号
@@ -56,6 +63,7 @@ On first startup, sign in with the default account:
 首次启动后，使用以下默认账号登录：
 
 - username / 用户名：`admin`
+
 - password / 密码：`admin123`
 
 Override via environment variables `FREEPARK_ADMIN_USERNAME` and `FREEPARK_ADMIN_PASSWORD`. **Change this password in production.**
@@ -67,6 +75,12 @@ Override via environment variables `FREEPARK_ADMIN_USERNAME` and `FREEPARK_ADMIN
 FreePark is **still under active development**. A runnable on-premise prototype is already in place, covering: plate recognition (Frigate + HyperLPR3), whitelist / blacklist / pattern allowlist access control, lane and booth control, barrier open / close, parking flow and recognition records, a multi-floor parking map editor (lanes, spaces, entrances / exits), and a 10-language I18N web console. Features and fixes are landing continuously; no stable release yet.
 
 FreePark **仍在积极开发中**。目前已具备可运行的本地部署雏形，涵盖：车牌识别（Frigate + HyperLPR3）、白名单 / 黑名单 / 正则名单通行控制、通道 / 岗亭控制与道闸开关、停车流水与识别记录、多楼层停车场地图编辑器（通道、车位、出入口），以及 10 种语言的国际化 Web 控制台。功能与修复持续更新中，尚未发布稳定版本。
+
+## Support / 支持
+
+If you find this project helpful, please give me a **star**. Your support is my greatest motivation to keep building.
+
+如果觉得本项目对您有帮助，请给我一个 **star**，您的支持是我持续开发的动力。
 
 ## Contributing / 参与
 
@@ -85,12 +99,14 @@ FreePark 面向**尊重劳动者权益**的个人与组织。我们反对下列�
 **实施以下任一做法的组织不得使用本软件**（含部署、运营或对外提供服务）：
 
 - **“996”** and systemic exploitative overtime / **996** 与系统性剥削性加班
+
 - **Unequal pay for equal work** / **同工不同酬**
+
 - **Labor outsourcing** used to evade employer duties and worker protections / 以规避用工责任、损害劳动者保障的**人力外包**
 
-Full policy: [ETHICAL_USE.md](ETHICAL_USE.md)
+Full policy: [ETHICAL\_USE.md](ETHICAL_USE.md)
 
-完整声明见 [ETHICAL_USE.md](ETHICAL_USE.md)。
+完整声明见 [ETHICAL\_USE.md](ETHICAL_USE.md)。
 
 ## License / 许可证
 
@@ -99,11 +115,16 @@ Copyright (C) 2026 顾文斌
 This project is licensed under the **Apache License 2.0**.
 
 - Full license text: [LICENSE](LICENSE)
+
 - Summary: you may use, modify, and distribute this software, including for commercial purposes; you must retain copyright notices, include the license text, and mark significant changes. See the license for full terms.
-- Ethical expectations: [ETHICAL_USE.md](ETHICAL_USE.md) (read together with the license).
+
+- Ethical expectations: [ETHICAL\_USE.md](ETHICAL_USE.md) (read together with the license).
 
 本项目采用 **Apache License 2.0** 授权。
 
 - 完整协议文本见 [LICENSE](LICENSE)
+
 - 简要说明：可自由使用、修改和分发，包括商业用途；须保留版权声明、附上许可证文本，并注明重大修改。具体权利与义务以协议全文为准。
-- 伦理使用期望见 [ETHICAL_USE.md](ETHICAL_USE.md)（与许可证一并阅读）。
+
+- 伦理使用期望见 [ETHICAL\_USE.md](ETHICAL_USE.md)（与许可证一并阅读）。
+
