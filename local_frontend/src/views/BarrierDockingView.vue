@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
@@ -144,6 +144,25 @@ async function loadAutoDevices(): Promise<void> {
   }
 }
 
+// 页面停留期间定时刷新设备状态（静默，不置 loading），让在线/离线随心跳实时可见
+const STATUS_REFRESH_MS = 10_000
+let statusTimer: ReturnType<typeof setInterval> | null = null
+
+async function refreshDeviceStatus(): Promise<void> {
+  try {
+    const result = await listAllBarriers(locale.value)
+    devices.value = result.data
+  } catch {
+    // 静默失败：保留上次数据等待下一轮
+  }
+  try {
+    const result = await listAutoRegisteredDevices(locale.value)
+    autoDevices.value = result.data
+  } catch {
+    // 静默失败：保留上次数据等待下一轮
+  }
+}
+
 // 已接入驱动目录：来自当前构建引入的驱动模块
 async function loadDrivers(): Promise<void> {
   driversLoading.value = true
@@ -224,6 +243,16 @@ onMounted(() => {
     .catch(() => {
       lanes.value = []
     })
+  statusTimer = setInterval(() => {
+    void refreshDeviceStatus()
+  }, STATUS_REFRESH_MS)
+})
+
+onUnmounted(() => {
+  if (statusTimer !== null) {
+    clearInterval(statusTimer)
+    statusTimer = null
+  }
 })
 
 function laneName(device: BarrierView): string {
@@ -476,8 +505,20 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
             <td>{{ item.name }}</td>
             <td>{{ item.code }}</td>
             <td>
-              <span class="pill" :class="item.enabled ? 'ok' : 'fail'">
-                {{ item.enabled ? t('lanes.statusActive') : t('lanes.statusDisabled') }}
+              <span v-if="!item.enabled" class="pill fail">
+                {{ t('lanes.statusDisabled') }}
+              </span>
+              <span
+                v-else
+                class="pill"
+                :class="item.online ? 'ok' : 'off'"
+                :title="
+                  item.lastPollAt
+                    ? `${t('barriers.colLastPoll')}: ${formatTime(item.lastPollAt)}`
+                    : undefined
+                "
+              >
+                {{ item.online ? t('barriers.statusOnline') : t('barriers.statusOffline') }}
               </span>
             </td>
             <td>{{ laneName(item) }}</td>
@@ -834,6 +875,11 @@ tbody tr:last-child td {
 .pill.fail {
   color: var(--danger);
   background: #fdecec;
+}
+
+.pill.off {
+  color: #b45309;
+  background: #fef3c7;
 }
 
 .empty {

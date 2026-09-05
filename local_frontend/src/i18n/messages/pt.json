@@ -619,6 +619,8 @@
     "searchNoResults": "Nenhuma cancela correspondente",
     "panelTitle": "Cancelas da via",
     "panelHint": "As cancelas são configuradas numa via. Uma via pode ligar um ou dois parques.",
+    "statusOnline": "Online",
+    "statusOffline": "Offline",
     "endpoints": {
       "title": "Configuração de endpoints do servidor",
       "push": "HTTP Push (Zhenshi 500 e superiores)",

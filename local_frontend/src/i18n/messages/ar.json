@@ -619,6 +619,8 @@
     "searchNoResults": "لا توجد بوابات مطابقة",
     "panelTitle": "بوابات المسار",
     "panelHint": "تُضبط البوابات على المسار. يمكن للمسار ربط موقف أو موقفين.",
+    "statusOnline": "متصل",
+    "statusOffline": "غير متصل",
     "endpoints": {
       "title": "تكوين نقاط نهاية الخادم",
       "push": "HTTP Push (Zhenshi 500 والأحدث)",

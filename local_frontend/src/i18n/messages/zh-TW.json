@@ -919,6 +919,8 @@
     "syncTimeNotTaken": "{name} 未在時限內取走時間同步指令，可能離線或未接入辨識閘道，請確認設備在線後重試。",
     "syncTimeQueueFailed": "向 {name} 寫入時間同步指令失敗：{reason}",
     "bindFailed": "綁定操作失敗",
+    "statusOnline": "在線",
+    "statusOffline": "離線",
     "endpoints": {
       "title": "伺服器端點設定",
       "push": "HTTP 推送（真識 500 及更新版本）",

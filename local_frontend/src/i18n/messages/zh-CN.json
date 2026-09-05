@@ -1020,6 +1020,8 @@
     "syncTimeNotTaken": "{name} 未在时限内取走时间同步指令，可能离线或未接入识别网关，请确认设备在线后重试。",
     "syncTimeQueueFailed": "向 {name} 写入时间同步指令失败：{reason}",
     "bindFailed": "绑定操作失败",
+    "statusOnline": "在线",
+    "statusOffline": "离线",
     "endpoints": {
       "title": "服务器对接地址",
       "push": "HTTP 推送（臻识500等新型号）",

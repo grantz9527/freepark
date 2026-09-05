@@ -23,25 +23,35 @@ public class AutoRegisteredDeviceService {
 
     private final AutoRegisteredDeviceRepository devices;
     private final ParkingBarrierRepository barriers;
+    private final DeviceHeartbeatTracker heartbeats;
 
     public AutoRegisteredDeviceService(
-            AutoRegisteredDeviceRepository devices, ParkingBarrierRepository barriers) {
+            AutoRegisteredDeviceRepository devices,
+            ParkingBarrierRepository barriers,
+            DeviceHeartbeatTracker heartbeats) {
         this.devices = devices;
         this.barriers = barriers;
+        this.heartbeats = heartbeats;
     }
 
     @Transactional(readOnly = true)
     public List<AutoRegisteredDeviceView> listAll() {
         return devices.findAllByAdoptedFalseOrderByLastPollAtDesc().stream()
-                .map(AutoRegisteredDeviceView::from)
+                .map(this::toView)
                 .toList();
+    }
+
+    /** 自动发现设备视图：最后轮询时间取心跳登记中心实时值（内存优先）。 */
+    private AutoRegisteredDeviceView toView(AutoRegisteredDevice device) {
+        Instant last = heartbeats.resolveLastPollAt(device.getCode(), device.getLastPollAt());
+        return AutoRegisteredDeviceView.from(device, last);
     }
 
     @Transactional
     public void delete(UUID deviceId) {
-        if (!devices.existsById(deviceId)) {
-            throw new BusinessException(ErrorCode.NOT_FOUND);
-        }
+        AutoRegisteredDevice device = devices.findById(deviceId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        heartbeats.forget(device.getCode());
         devices.deleteById(deviceId);
     }
 
@@ -65,6 +75,9 @@ public class AutoRegisteredDeviceService {
      */
     @Transactional
     public void upsertOnPoll(String code) {
+        // 心跳实时进内存登记中心，lastPollAt 落库按 60 秒节流
+        Instant now = Instant.now();
+        boolean persist = heartbeats.record(code, now);
         AutoRegisteredDevice device = devices.findByCodeIgnoreCase(code).orElse(null);
         if (device == null) {
             devices.save(new AutoRegisteredDevice(code));
@@ -78,6 +91,8 @@ public class AutoRegisteredDeviceService {
             // 已收录但正式设备不存在：重新发现
             device.markNotAdopted();
         }
-        device.markPolled(Instant.now());
+        if (persist) {
+            device.markPolled(now);
+        }
     }
 }

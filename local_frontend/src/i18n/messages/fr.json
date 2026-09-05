@@ -619,6 +619,8 @@
     "searchNoResults": "Aucune barrière correspondante",
     "panelTitle": "Barrières de la voie",
     "panelHint": "Les barrières se configurent sur une voie. Une voie peut relier un ou deux parkings.",
+    "statusOnline": "En ligne",
+    "statusOffline": "Hors ligne",
     "endpoints": {
       "title": "Configuration des points de terminaison du serveur",
       "push": "HTTP Push (Zhenshi 500 et versions ultérieures)",

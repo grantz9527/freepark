@@ -18,10 +18,22 @@ public record BarrierView(
         String host,
         Integer port,
         boolean enabled,
+        Instant lastPollAt,
+        boolean online,
         Instant createdAt,
         Instant updatedAt) {
 
+    /**
+     * 档案视图（不计算在线状态）：仅作即时写操作的返回，lastPollAt 取实体落库值。
+     */
     public static BarrierView from(ParkingBarrier barrier) {
+        return from(barrier, barrier.getLastPollAt(), false);
+    }
+
+    /**
+     * 实时视图：lastPollAt 由心跳登记中心给出（内存优先），online 由心跳新鲜度推导。
+     */
+    public static BarrierView from(ParkingBarrier barrier, Instant lastPollAt, boolean online) {
         ParkingLane lane = barrier.getLane();
         return new BarrierView(
                 barrier.getId(),
@@ -35,6 +47,8 @@ public record BarrierView(
                 barrier.getHost(),
                 barrier.getPort(),
                 barrier.isEnabled(),
+                lastPollAt,
+                online,
                 barrier.getCreatedAt(),
                 barrier.getUpdatedAt());
     }

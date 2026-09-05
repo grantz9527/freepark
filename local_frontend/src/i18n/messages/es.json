@@ -619,6 +619,8 @@
     "searchNoResults": "No hay barreras coincidentes",
     "panelTitle": "Barreras del carril",
     "panelHint": "Las barreras se configuran en un carril. Un carril puede conectar uno o dos aparcamientos.",
+    "statusOnline": "En línea",
+    "statusOffline": "Desconectado",
     "endpoints": {
       "title": "Configuración de puntos de conexión del servidor",
       "push": "HTTP Push (Zhenshi 500 y posteriores)",

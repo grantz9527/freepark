@@ -15,12 +15,17 @@ public record AutoRegisteredDeviceView(
         Instant createdAt) {
 
     public static AutoRegisteredDeviceView from(AutoRegisteredDevice device) {
+        return from(device, device.getLastPollAt());
+    }
+
+    /** 以指定最后轮询时间构建视图（调用方可传入心跳登记中心的实时值）。 */
+    public static AutoRegisteredDeviceView from(AutoRegisteredDevice device, Instant lastPollAt) {
         return new AutoRegisteredDeviceView(
                 device.getId(),
                 device.getCode(),
                 device.getName(),
                 device.getBrand(),
-                device.getLastPollAt(),
+                lastPollAt,
                 device.getCreatedAt());
     }
 }

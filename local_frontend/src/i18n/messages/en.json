@@ -983,6 +983,8 @@
     "syncTimeNotTaken": "{name} did not pick up the time-sync command in time. The device may be offline or not connected to the recognition gateway. Verify and retry.",
     "syncTimeQueueFailed": "Failed to queue time-sync command for {name}: {reason}",
     "bindFailed": "Bind operation failed",
+    "statusOnline": "Online",
+    "statusOffline": "Offline",
     "endpoints": {
       "title": "Server Endpoint Configuration",
       "push": "HTTP Push (Zhenshi 500 and newer)",

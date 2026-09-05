@@ -619,6 +619,8 @@
     "searchNoResults": "Keine passenden Schranken",
     "panelTitle": "Spurschranken",
     "panelHint": "Schranken werden an einer Spur konfiguriert. Eine Spur kann ein oder zwei Parkplätze verbinden.",
+    "statusOnline": "Online",
+    "statusOffline": "Offline",
     "endpoints": {
       "title": "Server-Endpunktkonfiguration",
       "push": "HTTP-Push (Zhenshi 500 und neuer)",

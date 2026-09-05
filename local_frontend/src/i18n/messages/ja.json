@@ -619,6 +619,8 @@
     "searchNoResults": "一致するゲートがありません",
     "panelTitle": "レーンのゲート",
     "panelHint": "ゲートはレーンに設定します。レーンは1つまたは2つの駐車場に接続できます。",
+    "statusOnline": "オンライン",
+    "statusOffline": "オフライン",
     "endpoints": {
       "title": "サーバーエンドポイント設定",
       "push": "HTTPプッシュ（Zhenshi 500以降）",

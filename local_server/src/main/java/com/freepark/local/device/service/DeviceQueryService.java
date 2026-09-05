@@ -29,14 +29,17 @@ public class DeviceQueryService {
     private final ParkingBarrierRepository barriers;
     private final DeviceCommandService commandService;
     private final RecognitionRecordRepository records;
+    private final DeviceHeartbeatTracker heartbeats;
 
     public DeviceQueryService(
             ParkingBarrierRepository barriers,
             DeviceCommandService commandService,
-            RecognitionRecordRepository records) {
+            RecognitionRecordRepository records,
+            DeviceHeartbeatTracker heartbeats) {
         this.barriers = barriers;
         this.commandService = commandService;
         this.records = records;
+        this.heartbeats = heartbeats;
     }
 
     @Transactional(readOnly = true)
@@ -76,7 +79,8 @@ public class DeviceQueryService {
     }
 
     private boolean isOnline(ParkingBarrier barrier) {
-        Instant last = barrier.getLastPollAt();
+        // lastPollAt 落库有 60 秒节流，取心跳登记中心实时值再判定，避免误判离线
+        Instant last = heartbeats.resolveLastPollAt(barrier.getCode(), barrier.getLastPollAt());
         return last != null && last.plus(ONLINE_TIMEOUT).isAfter(Instant.now());
     }
 }

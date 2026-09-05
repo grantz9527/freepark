@@ -4,6 +4,7 @@ import com.freepark.local.barrier.dto.BarrierView;
 import com.freepark.local.barrier.dto.CreateBarrierRequest;
 import com.freepark.local.barrier.dto.UpdateBarrierRequest;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
+import com.freepark.local.device.service.DeviceHeartbeatTracker;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
 import com.freepark.local.domain.ParkingBarrier;
@@ -26,19 +28,24 @@ public class ParkingBarrierService {
     private final ParkingLaneRepository lanes;
     private final ParkingBarrierRepository barriers;
     private final LocalUserRepository users;
+    private final DeviceHeartbeatTracker heartbeats;
 
     public ParkingBarrierService(
-            ParkingLaneRepository lanes, ParkingBarrierRepository barriers, LocalUserRepository users) {
+            ParkingLaneRepository lanes,
+            ParkingBarrierRepository barriers,
+            LocalUserRepository users,
+            DeviceHeartbeatTracker heartbeats) {
         this.lanes = lanes;
         this.barriers = barriers;
         this.users = users;
+        this.heartbeats = heartbeats;
     }
 
     @Transactional(readOnly = true)
     public List<BarrierView> listBarriers(UUID laneId) {
         requireLane(laneId);
         return barriers.findAllByLaneIdOrderByCreatedAtDesc(laneId).stream()
-                .map(BarrierView::from)
+                .map(this::toLiveView)
                 .toList();
     }
 
@@ -47,8 +54,14 @@ public class ParkingBarrierService {
     public List<BarrierView> listAll() {
         return barriers.findAll().stream()
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
-                .map(BarrierView::from)
+                .map(this::toLiveView)
                 .toList();
+    }
+
+    /** 实时设备视图：lastPollAt 取心跳登记中心实时值，online 由心跳新鲜度推导。 */
+    private BarrierView toLiveView(ParkingBarrier barrier) {
+        Instant last = heartbeats.resolveLastPollAt(barrier.getCode(), barrier.getLastPollAt());
+        return BarrierView.from(barrier, last, heartbeats.isOnline(last));
     }
 
     /** 全局创建设备（可暂不绑定车道，之后通过 bindToLane 绑定）。 */
@@ -64,7 +77,7 @@ public class ParkingBarrierService {
         barrier.setBrand(request.brand());
         barrier.setModel(request.model());
         barrier.setConnection(request.host(), request.port());
-        return BarrierView.from(barriers.save(barrier));
+        return toLiveView(barriers.save(barrier));
     }
 
     /** 全局更新设备信息（名称/启用状态/品牌/驱动通道连接参数）。 */
@@ -75,7 +88,7 @@ public class ParkingBarrierService {
         boolean enabled = request.enabled() == null ? barrier.isEnabled() : request.enabled();
         barrier.updateDetails(request.name(), enabled);
         applyConnectionUpdate(barrier, request);
-        return BarrierView.from(barriers.save(barrier));
+        return toLiveView(barriers.save(barrier));
     }
 
     /** 全局删除设备。 */
@@ -83,6 +96,7 @@ public class ParkingBarrierService {
     public void deleteBarrier(UUID requesterId, UUID barrierId) {
         requireAdmin(requesterId);
         ParkingBarrier barrier = requireBarrier(barrierId);
+        heartbeats.forget(barrier.getCode());
         barriers.delete(barrier);
     }
 
@@ -93,13 +107,13 @@ public class ParkingBarrierService {
         ParkingBarrier barrier = requireBarrier(barrierId);
         ParkingLane lane = requireLane(laneId);
         if (barrier.getLane() != null && barrier.getLane().getId().equals(laneId)) {
-            return BarrierView.from(barrier);
+            return toLiveView(barrier);
         }
         if (barriers.existsByLaneIdAndCodeIgnoreCase(laneId, barrier.getCode())) {
             throw new BusinessException(ErrorCode.BARRIER_CODE_EXISTS);
         }
         barrier.setLane(lane);
-        return BarrierView.from(barriers.save(barrier));
+        return toLiveView(barriers.save(barrier));
     }
 
     /** 解绑设备与车道的绑定。 */
@@ -111,7 +125,7 @@ public class ParkingBarrierService {
             barrier.setLane(null);
             barriers.save(barrier);
         }
-        return BarrierView.from(barrier);
+        return toLiveView(barrier);
     }
 
     @Transactional
@@ -127,7 +141,7 @@ public class ParkingBarrierService {
         barrier.setBrand(request.brand());
         barrier.setModel(request.model());
         barrier.setConnection(request.host(), request.port());
-        return BarrierView.from(barriers.save(barrier));
+        return toLiveView(barriers.save(barrier));
     }
 
     @Transactional
@@ -139,7 +153,7 @@ public class ParkingBarrierService {
         boolean enabled = request.enabled() == null ? barrier.isEnabled() : request.enabled();
         barrier.updateDetails(request.name(), enabled);
         applyConnectionUpdate(barrier, request);
-        return BarrierView.from(barriers.save(barrier));
+        return toLiveView(barriers.save(barrier));
     }
 
     @Transactional
@@ -147,6 +161,7 @@ public class ParkingBarrierService {
         requireAdmin(requesterId);
         requireLane(laneId);
         ParkingBarrier barrier = requireBarrier(laneId, barrierId);
+        heartbeats.forget(barrier.getCode());
         barriers.delete(barrier);
     }
 

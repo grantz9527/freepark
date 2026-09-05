@@ -261,6 +261,10 @@ export interface BarrierView {
   host: string | null
   port: number | null
   enabled: boolean
+  /** 最近一次心跳时间（识别网关轮询/推送时更新，落库约 60s 一次）。 */
+  lastPollAt: string | null
+  /** 在线状态：最近心跳在阈值内为 true；长时间未轮询/推送为 false。 */
+  online: boolean
   createdAt: string
   updatedAt: string
 }
