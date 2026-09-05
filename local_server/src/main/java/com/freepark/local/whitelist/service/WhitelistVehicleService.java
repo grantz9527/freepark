@@ -82,9 +82,7 @@ public class WhitelistVehicleService {
         requireAdmin(requesterId);
         ParkingLot lot = requireLot(lotId);
         String plateNumber = request.plateNumber().trim();
-        if (vehicles.existsByLotIdAndPlateNumberIgnoreCase(lotId, plateNumber)) {
-            throw new BusinessException(ErrorCode.WHITELIST_VEHICLE_PLATE_EXISTS);
-        }
+        // 同一车牌允许多张停车卡（不同时间区间），不做重复车牌校验。
         systemSettings.ensurePlateColorAllowed(request.plateColor());
         Instant startTime = requireTimeRange(request.startTime(), request.endTime());
         boolean enabled = request.enabled() == null || request.enabled();
@@ -120,9 +118,6 @@ public class WhitelistVehicleService {
         }
         String previousPlateNumber = vehicle.getPlateNumber();
         String plateNumber = request.plateNumber().trim();
-        if (vehicles.existsByLotIdAndPlateNumberIgnoreCaseAndIdNot(lotId, plateNumber, vehicleId)) {
-            throw new BusinessException(ErrorCode.WHITELIST_VEHICLE_PLATE_EXISTS);
-        }
         systemSettings.ensurePlateColorAllowed(request.plateColor());
         Instant startTime = requireTimeRange(request.startTime(), request.endTime());
         boolean enabled = request.enabled() == null ? vehicle.isEnabled() : request.enabled();
@@ -200,10 +195,7 @@ public class WhitelistVehicleService {
                 skipped++;
                 continue;
             }
-            if (vehicles.existsByLotIdAndPlateNumberIgnoreCase(lotId, plate)) {
-                skipped++;
-                continue;
-            }
+            // 同一车牌允许多张停车卡（不同时间区间）并行存在，不做重复车牌跳过。
             WhitelistVehicle vehicle = new WhitelistVehicle(
                     lot,
                     plate,
@@ -302,7 +294,9 @@ public class WhitelistVehicleService {
             if (plate != null && !plate.isEmpty()) {
                 predicates.add(cb.like(cb.lower(root.get("plateNumber")), "%" + plate.toLowerCase() + "%"));
             }
-            query.orderBy(cb.asc(root.get("plateNumber")));
+            query.orderBy(
+                    cb.asc(root.get("plateNumber")),
+                    cb.asc(root.get("startTime")));
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }

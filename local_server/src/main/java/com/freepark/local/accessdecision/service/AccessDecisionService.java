@@ -4,6 +4,7 @@ import com.freepark.local.accessdecision.dto.AccessDecisionRequest;
 import com.freepark.local.accessdecision.dto.AccessDecisionView;
 import com.freepark.local.accessdecision.dto.AccessDirection;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -72,7 +73,8 @@ public class AccessDecisionService {
         boolean isEntry = request.direction() == AccessDirection.ENTRANCE;
 
         // 1. Access judgment rules in configured order; first match wins.
-        boolean whitelisted = whitelistVehicles.existsByLotIdAndPlateNumberIgnoreCaseAndEnabledTrue(lotId, plate);
+        // 白名单按停车卡时间区间判定：存在当前时间处于有效区间且启用的记录才算白名单车辆。
+        boolean whitelisted = whitelistVehicles.existsActiveAt(lotId, plate, Instant.now());
         boolean blacklisted = blacklistVehicles.existsByLotIdAndPlateNumberIgnoreCaseAndEnabledTrue(lotId, plate);
         boolean interceptBlacklisted = isEntry ? lot.isEntryInterceptBlacklist() : lot.isExitInterceptBlacklist();
         boolean patternMatched = matchesPattern(lotId, plate);

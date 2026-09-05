@@ -1,7 +1,11 @@
 package com.freepark.local.device.service;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
+import com.freepark.driver.api.model.VehicleType;
 import com.freepark.local.accessdecision.dto.AccessDecisionRequest;
 import com.freepark.local.accessdecision.dto.AccessDecisionView;
 import com.freepark.local.accessdecision.dto.AccessDirection;
@@ -34,6 +39,8 @@ import com.freepark.local.domain.ParkingBarrier;
 import com.freepark.local.domain.ParkingBarrierRepository;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.RecognitionRecord;
+import com.freepark.local.domain.WhitelistVehicle;
+import com.freepark.local.domain.WhitelistVehicleRepository;
 import com.freepark.local.parkingflow.service.ParkingSessionService;
 import com.freepark.local.recognition.service.RecognitionRecordService;
 import com.freepark.local.nodeconfig.service.FeeQuoteClient;
@@ -70,14 +77,19 @@ public class DeviceGatewayService {
     /** 通行判定「欠费拦截」remark：车场该方向配置了欠费拦截且算费接口返回金额 > 0。 */
     private static final String REMARK_FEE_PENDING = "fee_pending";
 
+    /** 通行判定「白名单放行」remark（AccessDecisionService 命中 WHITELIST 规则时返回）。 */
+    private static final String REMARK_WHITELIST_MATCH = "whitelist_match";
+
     private final ParkingBarrierRepository barriers;
     private final RecognitionRecordService recognitionRecordService;
     private final DeviceCommandService commandService;
     private final AutoRegisteredDeviceService autoDeviceService;
+    private final DeviceHeartbeatTracker heartbeats;
     private final AccessDecisionService accessDecisions;
     private final AioDriverService aioDrivers;
     private final ParkingSessionService parkingSessions;
     private final FeeQuoteClient feeQuoteClient;
+    private final WhitelistVehicleRepository whitelistVehicles;
     private final ZhenshiProtocol defaultProtocol;
     private final Map<String, CameraProtocol> protocolsByBrand;
 
@@ -104,20 +116,24 @@ public class DeviceGatewayService {
             RecognitionRecordService recognitionRecordService,
             DeviceCommandService commandService,
             AutoRegisteredDeviceService autoDeviceService,
+            DeviceHeartbeatTracker heartbeats,
             AccessDecisionService accessDecisions,
             AioDriverService aioDrivers,
             ParkingSessionService parkingSessions,
             FeeQuoteClient feeQuoteClient,
+            WhitelistVehicleRepository whitelistVehicles,
             ZhenshiProtocol defaultProtocol,
             List<CameraProtocol> protocols) {
         this.barriers = barriers;
         this.recognitionRecordService = recognitionRecordService;
         this.commandService = commandService;
         this.autoDeviceService = autoDeviceService;
+        this.heartbeats = heartbeats;
         this.accessDecisions = accessDecisions;
         this.aioDrivers = aioDrivers;
         this.parkingSessions = parkingSessions;
         this.feeQuoteClient = feeQuoteClient;
+        this.whitelistVehicles = whitelistVehicles;
         this.defaultProtocol = defaultProtocol;
         this.protocolsByBrand = protocols.stream()
                 .collect(Collectors.toMap(CameraProtocol::brand, Function.identity(), (a, b) -> a));
@@ -134,8 +150,12 @@ public class DeviceGatewayService {
         if (!device.isEnabled()) {
             throw new BusinessException(ErrorCode.DEVICE_DISABLED);
         }
-        // 缓存复用 detached 实体，心跳用批量 UPDATE 落库（避免 merge 产生额外 SELECT）
-        barriers.touchLastPollAt(device.getId(), Instant.now());
+        // 心跳落库节流：同一设备 60 秒内最多写一次，避免高频轮询反复 UPDATE 损耗性能；
+        // 内存最近心跳由 DeviceHeartbeatTracker 实时维护，供「在线/离线」状态判定。
+        Instant now = Instant.now();
+        if (heartbeats.record(device.getCode(), now)) {
+            barriers.touchLastPollAt(device.getId(), now);
+        }
         DeviceCommand cmd = commandService.dequeueForDevice(device.getId()).orElse(null);
         CameraProtocol protocol = resolveProtocol(device);
         // 指令（手动）开闸也按车道方向播报欢迎/欢送语：入口“欢迎光临”、出口“一路顺风”
@@ -190,7 +210,11 @@ public class DeviceGatewayService {
         if (!device.isEnabled()) {
             throw new BusinessException(ErrorCode.DEVICE_DISABLED);
         }
-        device.markPolled(Instant.now());
+        // 推送同样视为一次心跳：内存实时刷新，lastPollAt 落库按 60 秒节流。
+        Instant now = Instant.now();
+        if (heartbeats.record(device.getCode(), now)) {
+            device.markPolled(now);
+        }
 
         RecognitionRecord record = protocol.parsePush(device, pushData);
         recognitionRecordService.saveDeviceRecord(record);
@@ -282,8 +306,14 @@ public class DeviceGatewayService {
         // 车牌为变量信息可自动识别播报（显示屏通信协议 2.5 播报车牌匹配格式 P，词间 ASCII 逗号分隔）。
         // 入场/离场均下发 LED 两行“车牌 / 欢迎光临”（或“车牌 / 一路顺风”，0x6E 文字+语音一体帧）。
         String normalizedPlate = plate.trim();
-        String voiceText = normalizedPlate + "," + farewell;
-        String ledText = normalizedPlate + "\n" + farewell;
+        // 白名单放行（无缴费信息）：语音播“车牌,{类型},剩余{N}天,欢送语”，LED 第二行改为
+        // “{类型} 剩余{N}天”（欢送语只走语音）。类型词/数字是否在控制板词库需现场验证；
+        // 白名单无有效期或已过期的只播类型不带剩余时长。
+        WhitelistAnnouncement wlAnnounce = REMARK_WHITELIST_MATCH.equals(decision.remark())
+                ? whitelistAnnouncement(lotId, normalizedPlate)
+                : null;
+        String voiceText = normalizedPlate + "," + (wlAnnounce != null ? wlAnnounce.voicePart() + "," : "") + farewell;
+        String ledText = normalizedPlate + "\n" + (wlAnnounce != null ? wlAnnounce.ledLine2() : farewell);
         if (aioDrivers.openGateSystem(device, "recognition:" + device.getCode())) {
             log.info("识别放行 device={} plate={} direction={}：推送了开闸指令（平台主动下发）",
                     device.getCode(), plate, direction);
@@ -348,6 +378,119 @@ public class DeviceGatewayService {
             log.warn("欠费金额查询失败（不拦截放行）：plate={} reason={}", plate, e.getMessage());
             return null;
         }
+    }
+
+    /** 白名单放行播报片段：voicePart 用于语音（“月租车,剩余23天”），ledLine2 用于 LED 第二行（“月租车 剩余23天”）。 */
+    private record WhitelistAnnouncement(String voicePart, String ledLine2) {
+    }
+
+    /**
+     * 组装白名单放行播报：读取当前时间有效停车卡的类型与剩余天数；
+     * 查无有效卡（理论上判定后立即失效）返回 null，调用方维持普通放行播报。
+     * 剩余天数按"连续有效段"计算：同车牌多张时间无缝衔接（重叠或首尾相接）的停车卡视为续期，
+     * 终点延伸到连续段的最后一张卡；断档则只统计到断口为止。
+     */
+    private WhitelistAnnouncement whitelistAnnouncement(UUID lotId, String plate) {
+        Instant now = Instant.now();
+        return whitelistVehicles.findActiveAt(lotId, plate, now).stream()
+                .findFirst()
+                .map(v -> {
+                    String typeName = vehicleTypeName(v.getType());
+                    Integer daysLeft = remainingDays(
+                            continuousEffectiveEnd(whitelistVehicles.findAllEnabledByLotAndPlate(lotId, plate), now));
+                    if (daysLeft == null) {
+                        return new WhitelistAnnouncement(typeName, typeName);
+                    }
+                    return new WhitelistAnnouncement(
+                            typeName + ",剩余" + daysLeft + "天",
+                            typeName + " 剩余" + daysLeft + "天");
+                })
+                .orElse(null);
+    }
+
+    /**
+     * 计算停车卡"连续有效段"终点：把同一车场同一车牌的启用卡按时间区间排序并合并，
+     * 下一张卡与当前段"接续"即并入一段；接续判定按天粒度：下一张的开始日期不晚于
+     * 当前段结束日期的次日（上一张 23:59:59 到期、下一张次日 00:00:00 生效的续费场景视为连续，
+     * 提前续期重叠同理；相差超过一天的断档则不再并入）。返回覆盖 now 的连续段的结束时间。
+     * 返回 null 表示覆盖 now 的连续段无结束时间（存在长期有效卡并入，即"长期有效"）。
+     */
+    static Instant continuousEffectiveEnd(List<WhitelistVehicle> cards, Instant now) {
+        if (cards == null || cards.isEmpty()) {
+            return null;
+        }
+        List<WhitelistVehicle> sorted = new ArrayList<>(cards);
+        sorted.sort(Comparator.comparing(WhitelistVehicle::getStartTime,
+                Comparator.nullsFirst(Comparator.naturalOrder())));
+        Instant segmentStart = null; // null 视为无限早（无开始时间限制）
+        Instant segmentEnd = null;   // null 视为无限远（长期有效）
+        boolean segmentOpen = false;
+        for (WhitelistVehicle card : sorted) {
+            Instant start = card.getStartTime(); // null 视为无限早
+            Instant end = card.getEndTime();     // null 视为无限远
+            if (!segmentOpen) {
+                segmentStart = start;
+                segmentEnd = end;
+                segmentOpen = true;
+                continue;
+            }
+            boolean breaks = segmentEnd != null && start != null
+                    && start.atZone(ZoneOffset.UTC).toLocalDate()
+                            .isAfter(segmentEnd.atZone(ZoneOffset.UTC).toLocalDate().plusDays(1));
+            if (breaks) {
+                // 断档：若上一段覆盖 now，则终点即上一段结束时间（断口处截断）
+                if (covers(segmentStart, segmentEnd, now)) {
+                    return segmentEnd;
+                }
+                segmentStart = start;
+                segmentEnd = end;
+                continue;
+            }
+            // 接续（重叠、首尾同天或次日续上）：并入，终点取较晚者；无结束时间的并入后整段为长期
+            if (segmentEnd != null && (end == null || end.isAfter(segmentEnd))) {
+                segmentEnd = end;
+            }
+        }
+        return covers(segmentStart, segmentEnd, now) ? segmentEnd : null;
+    }
+
+    private static boolean covers(Instant segmentStart, Instant segmentEnd, Instant now) {
+        if (segmentStart != null && now.isBefore(segmentStart)) {
+            return false;
+        }
+        return segmentEnd == null || !now.isAfter(segmentEnd);
+    }
+
+    /**
+     * 白名单剩余有效天数：无 endTime（长期有效）返回 null；已到期/过期返回 null；
+     * 有效期内向上取整（不足 1 天按 1 天计，避免即将到期显示 0 天）。
+     */
+    private Integer remainingDays(Instant endTime) {
+        if (endTime == null) {
+            return null;
+        }
+        Instant now = Instant.now();
+        if (!endTime.isAfter(now)) {
+            return null;
+        }
+        long millis = Duration.between(now, endTime).toMillis();
+        long days = (millis + 86_400_000L - 1) / 86_400_000L;
+        return (int) Math.max(1, days);
+    }
+
+    /** 车辆类型播报文案，与前端 whitelist.type* 中文文案保持一致。 */
+    private String vehicleTypeName(VehicleType type) {
+        if (type == null) {
+            return "其它";
+        }
+        return switch (type) {
+            case TEMPORARY -> "临时车";
+            case RESERVED -> "预约车";
+            case VIP -> "贵宾车";
+            case OWNER -> "业主";
+            case MONTHLY -> "月租车";
+            case OTHER -> "其它";
+        };
     }
 
     /** 放行播报语：入场播“欢迎光临”，出场播“一路顺风”；方向不可判定不播。 */

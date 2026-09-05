@@ -12,14 +12,17 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 
 import com.freepark.driver.api.model.VehicleType;
 
+/**
+ * 白名单车辆（停车卡）记录：同一车场下同一车牌允许多条记录，
+ * 每条对应一张带时间区间（startTime~endTime）的停车卡，通过 startTime/endTime 决定当前是否生效。
+ * 注意：实体不再声明 (lot_id, plate_number) 唯一约束，历史库中由旧版本建立的唯一索引由
+ * WhitelistVehiclePlateUniqueConstraintCleanupRunner 在启动时幂等清理。
+ */
 @Entity
-@Table(
-        name = "whitelist_vehicle",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"lot_id", "plate_number"}))
+@Table(name = "whitelist_vehicle")
 public class WhitelistVehicle extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

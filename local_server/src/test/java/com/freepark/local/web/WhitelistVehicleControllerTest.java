@@ -127,12 +127,19 @@ class WhitelistVehicleControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("whitelist_vehicle_invalid_time_range"));
 
+        // 白名单承载停车卡：同一车牌允许多条记录（不同时间区间），重复创建不再报错。
         mockMvc.perform(post("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"plateNumber\":\"京B99999\",\"plateColor\":\"BLUE\",\"ownerName\":\"王五\",\"startTime\":\"2026-03-01T00:00:00Z\",\"endTime\":\"2026-08-31T23:59:59Z\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("whitelist_vehicle_plate_exists"));
+                        .content("{\"plateNumber\":\"京B99999\",\"plateColor\":\"BLUE\",\"ownerName\":\"王五\",\"type\":\"MONTHLY\",\"startTime\":\"2026-03-01T00:00:00Z\",\"endTime\":\"2026-08-31T23:59:59Z\"}"))
+                .andExpect(status().isOk());
+
+        // 同车牌两张卡同时存在于白名单列表
+        mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles")
+                        .header("Authorization", "Bearer " + token)
+                        .param("plate", "99999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.total").value(2));
 
         mockMvc.perform(delete("/api/v1/lots/" + lotId + "/whitelist-vehicles/" + vehicleId)
                         .header("Authorization", "Bearer " + token))
@@ -179,6 +186,7 @@ class WhitelistVehicleControllerTest {
                 .andExpect(header().string("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
 
         byte[] excel = buildAccessListExcel();
+        // 文件内两行同为“京A10001”：同一车牌多张停车卡应全部导入，不再按重复车牌跳过
         mockMvc.perform(multipart("/api/v1/lots/" + lotId + "/whitelist-vehicles/import")
                         .file(new MockMultipartFile(
                                 "file",
@@ -187,13 +195,13 @@ class WhitelistVehicleControllerTest {
                                 excel))
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.imported").value(1))
-                .andExpect(jsonPath("$.data.skipped").value(1));
+                .andExpect(jsonPath("$.data.imported").value(2))
+                .andExpect(jsonPath("$.data.skipped").value(0));
 
         mockMvc.perform(get("/api/v1/lots/" + lotId + "/whitelist-vehicles")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.total").value(1));
+                .andExpect(jsonPath("$.data.total").value(2));
 
         mockMvc.perform(get("/api/v1/lots/" + lotId + "/internal-vehicles")
                         .header("Authorization", "Bearer " + token))
