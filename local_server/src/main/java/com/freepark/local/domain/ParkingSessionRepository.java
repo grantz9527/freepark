@@ -25,4 +25,7 @@ public interface ParkingSessionRepository
     List<ParkingSession> findAllByOrderByEntryTimeDesc();
 
     List<ParkingSession> findAllByLotIdOrderByEntryTimeDesc(UUID lotId);
+
+    /** 待同步云端的流水：按入场时间升序取一批，避免单轮推送过多阻塞 */
+    List<ParkingSession> findTop200BySyncPendingTrueOrderByEntryTimeAsc();
 }

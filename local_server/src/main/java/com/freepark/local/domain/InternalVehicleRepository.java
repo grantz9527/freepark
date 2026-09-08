@@ -10,6 +10,10 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 public interface InternalVehicleRepository
         extends JpaRepository<InternalVehicle, UUID>, JpaSpecificationExecutor<InternalVehicle> {
 
+    Optional<InternalVehicle> findByCloudId(Long cloudId);
+
+    List<InternalVehicle> findAllByLotId(UUID lotId);
+
     boolean existsByLotIdAndPlateNumberIgnoreCase(UUID lotId, String plateNumber);
 
     boolean existsByLotIdAndPlateNumberIgnoreCaseAndEnabledTrue(UUID lotId, String plateNumber);

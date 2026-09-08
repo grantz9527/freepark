@@ -29,7 +29,8 @@ import jakarta.persistence.criteria.Predicate;
 
 /**
  * 识别记录：列表查询、手工/模拟录入、异常标记、设备/相机事件入库。
- * 设备/相机事件与手工录入统一走 {@link #applyFlowAndMarkAbnormal} 联动停车流水。
+ * 设备/相机事件放行后联动停车流水；拦截类事件（黑名单/欠费等）仅保留记录并标记拦截原因，
+ * 不产生停车流水（拦截车辆不进入在场/离场流水，也不会上报云端）。
  */
 @Service
 public class RecognitionRecordService {
@@ -86,7 +87,7 @@ public class RecognitionRecordService {
         if (preAbnormal) {
             return ParkingFlowResult.skipped();
         }
-        return applyFlowAndMarkAbnormal(record);
+        return applyRecognitionFlow(record);
     }
 
     @Transactional
@@ -107,15 +108,31 @@ public class RecognitionRecordService {
     }
 
     /**
+     * 通行判定前的记录预处理：填充车场/通道快照，并按绑定通道推断缺失方向（不落库）。
+     * 判定放行与否需要先知道行进方向，而方向推断逻辑在保存时才会执行，
+     * 因此放行/拦截判定前置时必须先调用本方法，保证判定输入与最终落库一致。
+     */
+    public void prepareForAccess(RecognitionRecord record) {
+        fillSnapshot(record);
+        inferDirectionIfMissing(record);
+    }
+
+    /**
      * 设备直连事件入库（如臻识推送）：填充车场/通道快照 + 联动流水。
      */
     @Transactional
     public RecognitionRecord saveDeviceRecord(RecognitionRecord record) {
-        fillSnapshot(record);
-        inferDirectionIfMissing(record);
-        record = records.save(record);
-        applyFlowAndMarkAbnormal(record);
-        return record;
+        return persistWithFlow(record);
+    }
+
+    /**
+     * 设备直连拦截/记录型事件入库：仅保留识别记录，不联动停车流水。
+     * 拦截类事件（黑名单/内部车场非内部车/欠费等）不应产生在场/离场流水，
+     * 也不会进入停车流水上报；interceptRemark 非空时记录一并标记拦截原因便于追溯。
+     */
+    @Transactional
+    public RecognitionRecord saveDeviceRecordOnly(RecognitionRecord record, String interceptRemark) {
+        return persistWithoutFlow(record, interceptRemark);
     }
 
     /**
@@ -133,17 +150,39 @@ public class RecognitionRecordService {
             String eventImage) {
         RecognitionRecord record = new RecognitionRecord(camera, plate, plateColor, imageRef, direction, capturedAt);
         record.setEventImage(eventImage);
+        return persistWithFlow(record);
+    }
+
+    /**
+     * Frigate 相机拦截/记录型事件入库：仅保留识别记录，不联动停车流水。
+     * 语义同 {@link #saveDeviceRecordOnly}，用于相机联动路径中拦截车辆或空车牌等不开闸场景。
+     */
+    @Transactional
+    public RecognitionRecord saveCameraRecordOnly(
+            FrigateCamera camera,
+            String plate,
+            PlateColor plateColor,
+            String direction,
+            Instant capturedAt,
+            String imageRef,
+            String eventImage,
+            String interceptRemark) {
+        RecognitionRecord record = new RecognitionRecord(camera, plate, plateColor, imageRef, direction, capturedAt);
+        record.setEventImage(eventImage);
+        return persistWithoutFlow(record, interceptRemark);
+    }
+
+    /** 保存识别记录并联动停车流水（出场未匹配时自动标记异常）。 */
+    private RecognitionRecord persistWithFlow(RecognitionRecord record) {
         fillSnapshot(record);
         inferDirectionIfMissing(record);
         record = records.save(record);
-        if (record.getLotId() != null) {
-            applyFlowAndMarkAbnormal(record);
-        }
+        applyRecognitionFlow(record);
         return record;
     }
 
-    /** 联动流水；出场未匹配时标记记录异常。 */
-    private ParkingFlowResult applyFlowAndMarkAbnormal(RecognitionRecord record) {
+    /** 联动停车流水；出场未匹配时标记记录异常。 */
+    private ParkingFlowResult applyRecognitionFlow(RecognitionRecord record) {
         ParkingFlowResult flow = parkingSessions.applyRecognition(record);
         if ("exit_unmatched".equals(flow.kind())) {
             record.setAbnormal(true);
@@ -151,6 +190,17 @@ public class RecognitionRecordService {
             records.save(record);
         }
         return flow;
+    }
+
+    /** 仅保存识别记录：拦截类事件（interceptRemark 非空）标记拦截原因；不联动停车流水。 */
+    private RecognitionRecord persistWithoutFlow(RecognitionRecord record, String interceptRemark) {
+        fillSnapshot(record);
+        inferDirectionIfMissing(record);
+        if (interceptRemark != null && !interceptRemark.isBlank()) {
+            record.setAbnormal(true);
+            record.setAbnormalReason(interceptRemark);
+        }
+        return records.save(record);
     }
 
     /** 当方向缺失或无法判定（如臻识推送无 direction 字段）时，按绑定车道的类型兜底推断。 */

@@ -11,7 +11,7 @@ import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "parking_lane")
-public class ParkingLane extends BaseEntity {
+public class ParkingLane extends CloudSyncedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lot_id", nullable = false)

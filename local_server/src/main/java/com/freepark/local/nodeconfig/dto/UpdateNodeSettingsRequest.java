@@ -17,6 +17,9 @@ public record UpdateNodeSettingsRequest(
         @Size(max = 128) String mqttUsername,
         @Size(max = 255) String mqttPassword,
         @Size(max = 255) String mqttTopicPrefix,
+        @Size(max = 255) String configSyncTopicPrefix,
+        @Size(max = 255) String reportTopicPrefix,
+        @Size(max = 64) String nodeCode,
         @Size(max = 255) String feeApiUrl,
         Boolean feeMockEnabled,
         BigDecimal feeMockAmount) {

@@ -64,6 +64,14 @@ public class ParkingSession extends BaseEntity {
     @Column(name = "exit_image", columnDefinition = "TEXT")
     private String exitImage;
 
+    /**
+     * 是否待同步云端：入场创建/出场关闭/作废等任何状态变化都会置 true；
+     * 上报成功后由上报器按“快照未变”比对后清 false。存量行可能为 NULL，
+     * 一律按 false 处理（功能上线前的历史流水不补推），查询只取 true 的行。
+     */
+    @Column(name = "sync_pending")
+    private Boolean syncPending = Boolean.TRUE;
+
     protected ParkingSession() {
     }
 
@@ -86,6 +94,7 @@ public class ParkingSession extends BaseEntity {
         this.entryLaneName = entryLaneName;
         this.entryRecognitionId = entryRecognitionId;
         this.entryImage = entryImage;
+        this.syncPending = Boolean.TRUE;
     }
 
     public UUID getLotId() {
@@ -148,6 +157,14 @@ public class ParkingSession extends BaseEntity {
         return exitImage;
     }
 
+    public Boolean getSyncPending() {
+        return syncPending;
+    }
+
+    public void setSyncPending(Boolean syncPending) {
+        this.syncPending = syncPending;
+    }
+
     /** 出场匹配成功：关闭流水。 */
     public void closeWithExit(
             Instant exitTime,
@@ -161,10 +178,12 @@ public class ParkingSession extends BaseEntity {
         this.exitLaneName = exitLaneName;
         this.exitRecognitionId = exitRecognitionId;
         this.exitImage = exitImage;
+        this.syncPending = Boolean.TRUE;
     }
 
     /** 作废流水（在场或已出场均可作废）。 */
     public void markVoided() {
         this.status = ParkingSessionStatus.VOIDED;
+        this.syncPending = Boolean.TRUE;
     }
 }

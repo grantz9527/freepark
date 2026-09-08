@@ -1,13 +1,20 @@
 package com.freepark.local.frigate.service;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.freepark.local.accessdecision.dto.AccessDecisionRequest;
+import com.freepark.local.accessdecision.dto.AccessDecisionView;
+import com.freepark.local.accessdecision.dto.AccessDirection;
+import com.freepark.local.accessdecision.service.AccessDecisionService;
+import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.device.service.DeviceCommandService;
 import com.freepark.local.domain.DeviceCommand;
 import com.freepark.local.domain.FrigateBindDirection;
@@ -16,8 +23,13 @@ import com.freepark.local.domain.FrigateCameraRepository;
 import com.freepark.local.domain.FrigateLinkStatus;
 import com.freepark.local.domain.ParkingBarrier;
 import com.freepark.local.domain.ParkingBarrierRepository;
+import com.freepark.local.domain.ParkingLane;
+import com.freepark.local.domain.ParkingLaneRepository;
+import com.freepark.local.domain.ParkingLot;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.RecognitionRecord;
+import com.freepark.local.nodeconfig.service.FeeQuoteClient;
+import com.freepark.local.parkingflow.service.ParkingSessionService;
 import com.freepark.local.recognition.service.RecognitionRecordService;
 
 @Service
@@ -27,18 +39,30 @@ public class FrigateEventHandler {
 
     private final FrigateCameraRepository cameras;
     private final ParkingBarrierRepository barriers;
+    private final ParkingLaneRepository lanes;
     private final RecognitionRecordService recognitionRecordService;
     private final DeviceCommandService deviceCommands;
+    private final AccessDecisionService accessDecisions;
+    private final ParkingSessionService parkingSessions;
+    private final FeeQuoteClient feeQuoteClient;
 
     public FrigateEventHandler(
             FrigateCameraRepository cameras,
             ParkingBarrierRepository barriers,
+            ParkingLaneRepository lanes,
             RecognitionRecordService recognitionRecordService,
-            DeviceCommandService deviceCommands) {
+            DeviceCommandService deviceCommands,
+            AccessDecisionService accessDecisions,
+            ParkingSessionService parkingSessions,
+            FeeQuoteClient feeQuoteClient) {
         this.cameras = cameras;
         this.barriers = barriers;
+        this.lanes = lanes;
         this.recognitionRecordService = recognitionRecordService;
         this.deviceCommands = deviceCommands;
+        this.accessDecisions = accessDecisions;
+        this.parkingSessions = parkingSessions;
+        this.feeQuoteClient = feeQuoteClient;
     }
 
     @Transactional
@@ -60,8 +84,57 @@ public class FrigateEventHandler {
         camera.setLinkStatus(FrigateLinkStatus.CONNECTED);
         cameras.save(camera);
 
-        // 1) 无论是否绑定通道/开启联动/有无道闸，必须写一条识别记录（关联 Frigate 相机），并联动停车流水。
+        // 1) 识别记录入库（关联 Frigate 相机）。是否联动停车流水由下方放行/拦截判定决定：
+        //    - 拦截车辆仅保留记录并标记拦截原因，不产生停车流水（拦截车辆不进入停车流水，不会上报云端）；
+        //    - 放行车辆照常入库并联动停车流水。
         String direction = toDirection(camera.getBindDirection());
+        boolean linked = camera.getLaneId() != null && camera.isLinkageEnabled();
+
+        // 2) 仅当绑定通道 + 开启联动（相机直接驱动道闸）时才做通行判定；
+        //    未联动相机仅观察/记录，维持原有“识别记录 + 具备车场时联动流水”语义。
+        if (!linked) {
+            RecognitionRecord record = recognitionRecordService.saveCameraRecord(
+                    camera, plate, plateColor, direction, now, imageRef, eventImage);
+            log.info(
+                    "Frigate event camera={} plate={} color={} recognition record saved id={} (recorded only, no linkage lane={})",
+                    camera.getCameraName(),
+                    plate,
+                    plateColor == null ? "unknown" : plateColor.name(),
+                    record.getId(),
+                    camera.getLaneId());
+            return;
+        }
+
+        ParkingLane lane = lanes.findById(camera.getLaneId()).orElse(null);
+        // 3) 空车牌：无法按车牌判定，不联动开闸、不生成流水，仅保留识别记录（与设备直连链路一致）。
+        if (plate == null || plate.isBlank()) {
+            log.info(
+                    "Frigate event camera={} plate empty: recorded only, no open (no session flow)",
+                    camera.getCameraName());
+            recognitionRecordService.saveCameraRecordOnly(
+                    camera, plate, plateColor, direction, now, imageRef, eventImage, null);
+            return;
+        }
+
+        // 4) 联动通道：先按车场通行判定规则判定放行（入口/出口配置的拦截规则、方向、车道缺失均可判定时）
+        AccessDirection accessDirection = toAccessDirection(direction);
+        if (accessDirection != null && lane != null && lane.getLot() != null) {
+            AccessDecisionView decision = decideForLane(lane, accessDirection, plate, plateColor);
+            if (decision.result() == AccessDecisionView.Result.INTERCEPTED) {
+                log.info(
+                        "Frigate event camera={} plate={} color={} lane={} intercepted remark={}: record only, no open (no session flow)",
+                        camera.getCameraName(),
+                        plate,
+                        plateColor == null ? "unknown" : plateColor.name(),
+                        camera.getLaneId(),
+                        decision.remark());
+                recognitionRecordService.saveCameraRecordOnly(
+                        camera, plate, plateColor, direction, now, imageRef, eventImage, decision.remark());
+                return;
+            }
+        }
+
+        // 5) 放行（或方向/车道信息不足无法判定时维持原联动语义）：识别记录入库并联动停车流水，再联动道闸。
         RecognitionRecord record = recognitionRecordService.saveCameraRecord(
                 camera, plate, plateColor, direction, now, imageRef, eventImage);
         log.info(
@@ -70,17 +143,6 @@ public class FrigateEventHandler {
                 plate,
                 plateColor == null ? "unknown" : plateColor.name(),
                 record.getId());
-
-        // 2) 仅当绑定通道 + 开启联动时，才尝试联动道闸。
-        if (camera.getLaneId() == null || !camera.isLinkageEnabled()) {
-            log.info(
-                    "Frigate event camera={} plate={} color={} (recorded only, no linkage lane={})",
-                    camera.getCameraName(),
-                    plate,
-                    plateColor == null ? "unknown" : plateColor.name(),
-                    camera.getLaneId());
-            return;
-        }
 
         List<ParkingBarrier> laneBarriers = barriers.findAllByLaneIdOrderByCreatedAtDesc(camera.getLaneId())
                 .stream()
@@ -121,6 +183,50 @@ public class FrigateEventHandler {
     }
 
     /**
+     * 联动通道通行判定：与设备直连链路同一套车场规则（白名单/黑名单/模式白名单/内部车辆/欠费拦截等）。
+     * 欠费拦截仅在车场该方向开启且本节点具备算费数据源时查询金额。
+     */
+    private AccessDecisionView decideForLane(ParkingLane lane, AccessDirection direction, String plate, PlateColor plateColor) {
+        ParkingLot lot = lane.getLot();
+        UUID lotId = lot.getId();
+        boolean interceptArrears = direction == AccessDirection.ENTRANCE
+                ? lot.isEntryInterceptArrears()
+                : lot.isExitInterceptArrears();
+        BigDecimal dueAmount = null;
+        if (interceptArrears) {
+            if (feeQuoteClient.hasFeeQuoteSource()) {
+                dueAmount = quoteFeeQuietly(plate, plateColor);
+            } else {
+                log.debug("车场({}) 配置了欠费拦截，但本节点未配置算费接口/模拟金额，欠费拦截不生效", lotId);
+            }
+        }
+        AccessDecisionView decision = accessDecisions.decide(lotId, new AccessDecisionRequest(
+                lane.getId(),
+                plate,
+                plateColor,
+                direction,
+                null, // 通道未配置拦截色，由调用方具备时提供
+                direction == AccessDirection.EXIT ? parkingSessions.hasOpenSession(lotId, plate) : null,
+                dueAmount));
+        log.info("Frigate linkage decision lane={} plate={} direction={} lot={} due={} result={} remark={}",
+                lane.getId(), plate, direction, lotId, dueAmount, decision.result(), decision.remark());
+        return decision;
+    }
+
+    /**
+     * 向算费接口查询欠费金额：成功返回金额（≥0），任何失败均返回 null 且不拦截，
+     * 避免外部算费服务故障阻断正常通行。
+     */
+    private BigDecimal quoteFeeQuietly(String plate, PlateColor plateColor) {
+        try {
+            return feeQuoteClient.quote(plate, plateColor == null ? null : plateColor.name());
+        } catch (BusinessException e) {
+            log.warn("欠费金额查询失败（不拦截放行）：plate={} reason={}", plate, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * 兼容调用：颜色为 null。
      */
     public void onPlateRecognized(String cameraName, String plate) {
@@ -133,6 +239,21 @@ public class FrigateEventHandler {
         }
         if (bindDirection == FrigateBindDirection.ENTRANCE) {
             return "IN";
+        }
+        return null;
+    }
+
+    /** 对齐判定层的方向解释：IN/ENTRANCE/1 → 入场，OUT/EXIT/2 → 出场，其余不可判定。 */
+    private AccessDirection toAccessDirection(String direction) {
+        if (direction == null) {
+            return null;
+        }
+        String upper = direction.trim().toUpperCase();
+        if ("IN".equals(upper) || "ENTRANCE".equals(upper) || "1".equals(upper)) {
+            return AccessDirection.ENTRANCE;
+        }
+        if ("OUT".equals(upper) || "EXIT".equals(upper) || "2".equals(upper)) {
+            return AccessDirection.EXIT;
         }
         return null;
     }

@@ -20,7 +20,7 @@ import com.freepark.driver.api.model.VehicleType;
 @Table(
         name = "internal_vehicle",
         uniqueConstraints = @UniqueConstraint(columnNames = {"lot_id", "plate_number"}))
-public class InternalVehicle extends BaseEntity {
+public class InternalVehicle extends CloudSyncedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lot_id", nullable = false)

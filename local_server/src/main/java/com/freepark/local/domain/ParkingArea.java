@@ -9,7 +9,7 @@ import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "parking_area")
-public class ParkingArea extends BaseEntity {
+public class ParkingArea extends CloudSyncedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "location_id", nullable = false)
@@ -36,5 +36,10 @@ public class ParkingArea extends BaseEntity {
 
     public void rename(String name) {
         this.name = name.trim();
+    }
+
+    /** 云端同步变更所属位置时使用：将区域挂到新位置下（保留本地 UUID 主键与引用）。 */
+    public void attachTo(ParkingLocation location) {
+        this.location = location;
     }
 }

@@ -193,9 +193,11 @@ public class DeviceGatewayService {
      * 处理设备识别结果推送（如臻识500的 AlarmInfoPlate）。
      * 1. 按品牌路由协议
      * 2. 从推送报文提取设备序列号并定位设备
-     * 3. 刷新心跳、解析识别结果并入库
-     * 4. 命中预排命令时按其开/关闸意图响应；否则按车场通行判定规则判定放行
-     * 5. 放行 → 平台主动 HTTP 下发开闸指令（无可驱动/连接时回退响应带回）
+     * 3. 刷新心跳、解析识别结果
+     * 4. 命中预排命令时按其开/关闸意图响应（手动开/关闸优先，识别记录照常联动流水）
+     * 5. 无预排命令时先按车场通行判定规则判定放行：
+     *    放行 → 识别记录入库并联动停车流水，再平台主动 HTTP 下发开闸指令；
+     *    拦截 → 仅保留识别记录并标记拦截原因，不产生停车流水（不会上报云端），不开闸
      */
     @Transactional
     public JsonNode handlePush(String brand, JsonNode pushData) {
@@ -217,7 +219,6 @@ public class DeviceGatewayService {
         }
 
         RecognitionRecord record = protocol.parsePush(device, pushData);
-        recognitionRecordService.saveDeviceRecord(record);
 
         // 1) 先消费预排命令（管理员/规则显式开/关闸优先，沿用原队列语义）
         Optional<DeviceCommand> pending = commandService.dequeueForDevice(device.getId());
@@ -227,42 +228,49 @@ public class DeviceGatewayService {
                 // 时间同步为“附加”指令，不参与识别放行决策：消费后继续常规通行判定，最终响应附带 485 同步时间帧
                 log.info("识别 device={} plate={}：消费预排指令 SYNC_TIME，继续常规通行判定并附带时间同步",
                         device.getCode(), record.getPlate());
-                return protocol.appendTimeSync(respondOpenOnAllowed(device, record, protocol));
+                return protocol.appendTimeSync(decideAndOpen(device, record, protocol));
             }
             boolean open = cmd.getAction() == DeviceCommand.Action.OPEN;
             log.info("识别 device={} plate={}：命中预排命令 {}，开闸={}", device.getCode(), record.getPlate(),
                     cmd.getAction(), open);
+            // 手动开/关闸：管理员显式意图优先于通行判定；车辆按指令通行，识别记录照常入库并联动停车流水
+            recognitionRecordService.saveDeviceRecord(record);
             // 预排开闸按行进方向附欢迎/欢送语音；CLOSE 由协议层转译为 ivs_ioctrl（落闸）等设备控制报文
             return protocol.buildPushResponse(cmd, welcomeVoice(toAccessDirection(record.getDirection())));
         }
 
-        // 2) 无预排命令：按通行判定规则决定放行，放行才向识别一体机下发开闸指令
-        return respondOpenOnAllowed(device, record, protocol);
+        // 2) 无预排命令：先按车场通行判定规则决定放行，放行才入库联动流水并向识别一体机下发开闸指令
+        return decideAndOpen(device, record, protocol);
     }
 
     /**
-     * 识别放行判定并开闸：
+     * 识别放行判定并开闸（判定前置，拦截不产生停车流水）：
      * <ol>
-     *   <li>设备需绑定通道且通道归属车场、行进方向可判定，否则只记录不开闸；</li>
+     *   <li>设备需绑定通道且通道归属车场、行进方向可判定，否则仅保留识别记录不开闸、不联动流水；</li>
      *   <li>按车场通行判定规则（白名单/黑名单/模式白名单/内部车辆等）判定放行；</li>
-     *   <li>放行：优先平台主动 HTTP 下发开闸指令；档案无驱动或连接地址时
-     *       回退为响应带回（本次推送响应 info=ok，由设备自行执行）；</li>
-     *   <li>拦截：不开闸，响应 info=no。</li>
+     *   <li>拦截：仅保留识别记录并标记拦截原因，不联动停车流水（拦截车辆不产生在场/离场流水，不会上报云端），不开闸；</li>
+     *   <li>放行：识别记录照常入库并联动停车流水，再优先平台主动 HTTP 下发开闸指令；档案无驱动或连接地址时
+     *       回退为响应带回（本次推送响应 info=ok，由设备自行执行）。</li>
      * </ol>
      */
-    private JsonNode respondOpenOnAllowed(ParkingBarrier device, RecognitionRecord record, CameraProtocol protocol) {
+    private JsonNode decideAndOpen(ParkingBarrier device, RecognitionRecord record, CameraProtocol protocol) {
+        // 判定前置：填充通道/车场快照并按绑定通道推断缺失方向（不落库），保证判定输入与最终落库一致
+        recognitionRecordService.prepareForAccess(record);
         String plate = record.getPlate();
         if (plate == null || plate.isBlank()) {
-            log.info("识别空车牌不开闸：device={}", device.getCode());
+            log.info("识别空车牌不开闸（仅记录不联动流水）：device={}", device.getCode());
+            recognitionRecordService.saveDeviceRecordOnly(record, null);
             return protocol.buildPushResponse(false);
         }
         if (device.getLane() == null || device.getLane().getLot() == null) {
             log.info("识别仅记录不开闸：device={} plate={} 未绑定通道/车场", device.getCode(), plate);
+            recognitionRecordService.saveDeviceRecordOnly(record, null);
             return protocol.buildPushResponse(false);
         }
         AccessDirection direction = toAccessDirection(record.getDirection());
         if (direction == null) {
             log.info("识别仅记录不开闸：device={} plate={} 行进方向不可判定", device.getCode(), plate);
+            recognitionRecordService.saveDeviceRecordOnly(record, null);
             return protocol.buildPushResponse(false);
         }
 
@@ -297,10 +305,13 @@ public class DeviceGatewayService {
         if (decision.result() == AccessDecisionView.Result.INTERCEPTED) {
             log.info("识别拦截不开闸：device={} plate={} direction={} remark={} due={}",
                     device.getCode(), plate, direction, decision.remark(), dueAmount);
+            // 拦截车辆：保留本地识别记录并标记拦截原因，不生成停车流水（不会出现在场/离场流水，也不会上报云端）
+            recognitionRecordService.saveDeviceRecordOnly(record, decision.remark());
             return interceptResponse(protocol, direction, decision.remark(), plate, dueAmount);
         }
 
-        // 放行：优先平台主动 HTTP 下发开闸指令
+        // 放行：识别记录入库并联动停车流水后，优先平台主动 HTTP 下发开闸指令
+        recognitionRecordService.saveDeviceRecord(record);
         String farewell = welcomeVoice(direction);
         // 识别放行语音统一拼车牌后播报（“车牌,欢迎光临”/“车牌,一路顺风”）：控制板语音按词组匹配，
         // 车牌为变量信息可自动识别播报（显示屏通信协议 2.5 播报车牌匹配格式 P，词间 ASCII 逗号分隔）。

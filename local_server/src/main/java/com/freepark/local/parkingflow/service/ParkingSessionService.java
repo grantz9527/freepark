@@ -1,5 +1,6 @@
 package com.freepark.local.parkingflow.service;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -163,6 +164,30 @@ public class ParkingSessionService {
             record.setVoided(true);
             recognitionRecords.save(record);
         });
+    }
+
+    /**
+     * 上报器发布流水快照成功后调用：仅当当前流水与“刚发布快照”完全一致（状态与
+     * 入场/出场时间均未变）时清除待同步标记。期间若流水又被入场/出场/作废改动，
+     * 标记保持 true，由下一轮上报最新快照，避免旧快照覆盖云端已更新的状态。
+     */
+    @Transactional
+    public boolean markSessionReported(
+            UUID sessionId, Instant entryTime, Instant exitTime, ParkingSessionStatus status) {
+        if (sessionId == null) {
+            return false;
+        }
+        ParkingSession current = sessions.findById(sessionId).orElse(null);
+        if (current == null
+                || !java.util.Objects.equals(current.getEntryTime(), entryTime)
+                || !java.util.Objects.equals(current.getExitTime(), exitTime)
+                || current.getStatus() != status
+                || !Boolean.TRUE.equals(current.getSyncPending())) {
+            return false;
+        }
+        current.setSyncPending(false);
+        sessions.save(current);
+        return true;
     }
 
     private Specification<ParkingSession> buildSpec(UUID lotId, String keyword, ParkingSessionStatus status) {

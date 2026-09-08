@@ -23,7 +23,7 @@ import com.freepark.driver.api.model.VehicleType;
  */
 @Entity
 @Table(name = "whitelist_vehicle")
-public class WhitelistVehicle extends BaseEntity {
+public class WhitelistVehicle extends CloudSyncedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lot_id", nullable = false)

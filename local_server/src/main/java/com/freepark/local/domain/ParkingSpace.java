@@ -12,7 +12,7 @@ import jakarta.persistence.UniqueConstraint;
 @Table(
         name = "parking_space",
         uniqueConstraints = @UniqueConstraint(columnNames = {"lot_id", "code"}))
-public class ParkingSpace extends BaseEntity {
+public class ParkingSpace extends CloudSyncedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lot_id", nullable = false)

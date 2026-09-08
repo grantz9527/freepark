@@ -19,6 +19,7 @@ const mqttUsername = ref('')
 const mqttPassword = ref('')
 const mqttPasswordSet = ref(false)
 const mqttTopicPrefix = ref('')
+const mqttNodeCode = ref('')
 const feeApiUrl = ref('')
 const feeMockEnabled = ref(false)
 const feeMockAmount = ref<number | null>(null)
@@ -30,6 +31,19 @@ const quoteMessage = ref('')
 const updatedAt = ref('')
 
 const isEdge = computed(() => mode.value === 'EDGE')
+
+/** 与后端 NodeSettings.DEFAULT_MQTT_TOPIC_PREFIX 保持一致（缺省时用于预览） */
+const DEFAULT_HEARTBEAT_PREFIX = 'parking/heartbeat'
+
+/** 心跳主题预览：本机发布主题 = 路径/节点编号，云端订阅主题 = 路径/# */
+const heartbeatPreview = computed<{ publish: string; subscribe: string } | null>(() => {
+  if (!isEdge.value) return null
+  const prefix = (mqttTopicPrefix.value.trim() || DEFAULT_HEARTBEAT_PREFIX).replace(/\/+$/, '')
+  const code = mqttNodeCode.value.trim()
+  if (!prefix || !code) return null
+  return { publish: `${prefix}/${code}`, subscribe: `${prefix}/#` }
+})
+
 const passwordPlaceholder = computed(() =>
   mqttPasswordSet.value
     ? t('nodeConfig.mqttPasswordKeepPlaceholder')
@@ -68,6 +82,7 @@ function applySettings(data: {
   mqttUsername: string
   mqttPasswordSet: boolean
   mqttTopicPrefix: string
+  nodeCode: string
   feeApiUrl: string
   feeMockEnabled: boolean
   feeMockAmount: number | null
@@ -81,6 +96,7 @@ function applySettings(data: {
   mqttPasswordSet.value = data.mqttPasswordSet
   mqttPassword.value = ''
   mqttTopicPrefix.value = data.mqttTopicPrefix || ''
+  mqttNodeCode.value = data.nodeCode || ''
   feeApiUrl.value = data.feeApiUrl || ''
   feeMockEnabled.value = data.feeMockEnabled
   feeMockAmount.value = data.feeMockAmount
@@ -92,6 +108,14 @@ async function onSubmit(): Promise<void> {
   successMessage.value = ''
   if (mode.value === 'EDGE' && !mqttHost.value.trim()) {
     errorMessage.value = t('nodeConfig.hostRequired')
+    return
+  }
+  if (mode.value === 'EDGE' && !mqttNodeCode.value.trim()) {
+    errorMessage.value = t('nodeConfig.nodeCodeRequired')
+    return
+  }
+  if (mode.value === 'EDGE' && !/^[A-Za-z0-9_-]+$/.test(mqttNodeCode.value.trim())) {
+    errorMessage.value = t('nodeConfig.nodeCodeInvalid')
     return
   }
   const port = Number(mqttPort.value)
@@ -115,6 +139,7 @@ async function onSubmit(): Promise<void> {
         mqttUsername: mqttUsername.value.trim(),
         mqttPassword: mqttPassword.value,
         mqttTopicPrefix: mqttTopicPrefix.value.trim(),
+        nodeCode: mqttNodeCode.value.trim(),
         feeApiUrl: feeApiUrl.value.trim(),
         feeMockEnabled: feeMockEnabled.value,
         feeMockAmount: feeMockEnabled.value ? mockAmount : null,
@@ -220,6 +245,26 @@ onMounted(() => {
               :placeholder="t('nodeConfig.mqttTopicPrefixPlaceholder')"
             />
           </label>
+          <label>
+            <span>{{ t('nodeConfig.nodeCode') }}</span>
+            <input
+              v-model="mqttNodeCode"
+              type="text"
+              :placeholder="t('nodeConfig.nodeCodePlaceholder')"
+            />
+          </label>
+          <p class="hint node-code-hint">{{ t('nodeConfig.nodeCodeHint') }}</p>
+          <div v-if="heartbeatPreview" class="topic-preview">
+            <p class="hint">{{ t('nodeConfig.mqttTopicPrefixHint') }}</p>
+            <div class="preview-line">
+              <span class="preview-label">{{ t('nodeConfig.heartbeatPublishLabel') }}</span>
+              <code class="preview-topic">{{ heartbeatPreview.publish }}</code>
+            </div>
+            <div class="preview-line">
+              <span class="preview-label">{{ t('nodeConfig.cloudSubscribeLabel') }}</span>
+              <code class="preview-topic">{{ heartbeatPreview.subscribe }}</code>
+            </div>
+          </div>
         </div>
       </article>
 
@@ -529,5 +574,41 @@ button:disabled {
 .quote-btn {
   justify-self: end;
   min-width: 7rem;
+}
+
+.topic-preview {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: #fafcfa;
+}
+
+.topic-preview .hint {
+  margin: 0;
+}
+
+.preview-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+.preview-label {
+  color: var(--muted);
+}
+
+.preview-topic {
+  padding: 0.15rem 0.5rem;
+  border-radius: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85rem;
 }
 </style>

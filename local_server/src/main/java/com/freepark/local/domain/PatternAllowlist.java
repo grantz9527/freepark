@@ -15,7 +15,7 @@ import jakarta.persistence.UniqueConstraint;
             @UniqueConstraint(columnNames = {"lot_id", "name"}),
             @UniqueConstraint(columnNames = {"lot_id", "pattern"})
         })
-public class PatternAllowlist extends BaseEntity {
+public class PatternAllowlist extends CloudSyncedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lot_id", nullable = false)

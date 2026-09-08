@@ -58,6 +58,22 @@ public class NodeConfigService {
             settings.setMqttTopicPrefix(trimToNull(request.mqttTopicPrefix()) != null
                     ? stripTrailingSlash(trimToNull(request.mqttTopicPrefix()))
                     : NodeSettings.DEFAULT_MQTT_TOPIC_PREFIX);
+            // 配置同步订阅前缀：可为空（空=不订阅云端配置同步）；非空时去除尾部斜杠后保存
+            settings.setConfigSyncTopicPrefix(
+                    trimToNull(request.configSyncTopicPrefix()) == null
+                            ? null
+                            : stripTrailingSlash(trimToNull(request.configSyncTopicPrefix())));
+            // 停车流水上报前缀：可为空（空=默认 parking/report）；非空时去除尾部斜杠后保存
+            settings.setReportTopicPrefix(
+                    trimToNull(request.reportTopicPrefix()) == null
+                            ? NodeSettings.DEFAULT_REPORT_TOPIC_PREFIX
+                            : stripTrailingSlash(trimToNull(request.reportTopicPrefix())));
+            // 节点编号：云端“边缘节点管理”创建的编号，作为心跳/上报主题末段，EDGE 模式必填
+            String nodeCode = trimToNull(request.nodeCode());
+            if (nodeCode == null || !isTopicSafe(nodeCode)) {
+                throw new BusinessException(ErrorCode.INVALID_NODE_CONFIG);
+            }
+            settings.setNodeCode(nodeCode);
             // 算费请求接口仅在边缘节点模式下配置并生效
             settings.setFeeApiUrl(trimToNull(request.feeApiUrl()));
             // 模拟金额开关与金额
@@ -98,6 +114,9 @@ public class NodeConfigService {
                 settings.getMqttUsername(),
                 password != null && !password.isBlank(),
                 settings.getMqttTopicPrefix(),
+                settings.getConfigSyncTopicPrefix(),
+                settings.getReportTopicPrefix(),
+                settings.getNodeCode(),
                 settings.getFeeApiUrl(),
                 settings.isFeeMockEnabled(),
                 settings.getFeeMockAmount(),
@@ -118,6 +137,20 @@ public class NodeConfigService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    /** 节点编号用作 MQTT 主题末段：仅允许字母数字与 - _，不允许 / 通配符空白等 */
+    private boolean isTopicSafe(String value) {
+        if (value.length() > NodeSettings.MAX_NODE_CODE_LENGTH) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (!(Character.isLetterOrDigit(c) || c == '-' || c == '_')) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean isBlank(String value) {

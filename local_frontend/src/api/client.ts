@@ -1558,6 +1558,7 @@ export interface NodeSettingsView {
   mqttUsername: string
   mqttPasswordSet: boolean
   mqttTopicPrefix: string
+  nodeCode: string
   feeApiUrl: string
   feeMockEnabled: boolean
   feeMockAmount: number | null
@@ -1577,6 +1578,7 @@ export function updateNodeSettings(
     mqttUsername: string
     mqttPassword: string
     mqttTopicPrefix: string
+    nodeCode: string
     feeApiUrl: string
     feeMockEnabled: boolean
     feeMockAmount: number | null

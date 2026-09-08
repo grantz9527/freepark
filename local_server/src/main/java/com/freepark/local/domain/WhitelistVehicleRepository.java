@@ -2,6 +2,7 @@ package com.freepark.local.domain;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,6 +12,10 @@ import org.springframework.data.repository.query.Param;
 
 public interface WhitelistVehicleRepository
         extends JpaRepository<WhitelistVehicle, UUID>, JpaSpecificationExecutor<WhitelistVehicle> {
+
+    Optional<WhitelistVehicle> findByCloudId(Long cloudId);
+
+    List<WhitelistVehicle> findAllByLotId(UUID lotId);
 
     /**
      * 车场下是否存在当前时间正处于有效时间区间（且启用）的白名单记录。

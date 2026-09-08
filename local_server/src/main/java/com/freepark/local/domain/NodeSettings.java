@@ -23,7 +23,19 @@ public class NodeSettings {
     public static final String DEFAULT_MQTT_HOST = "127.0.0.1";
     public static final int DEFAULT_MQTT_PORT = 1883;
     public static final String DEFAULT_MQTT_CLIENT_ID = "freepark-local-edge";
-    public static final String DEFAULT_MQTT_TOPIC_PREFIX = "freepark/edge";
+    /**
+     * 心跳主题路径前缀（缺省时使用）：心跳按 {@code {prefix}/{nodeCode}} 发布，
+     * 前缀需包含 {@code /heartbeat} 段，与云端「心跳订阅主题」{@code {prefix}/#} 匹配。
+     */
+    public static final String DEFAULT_MQTT_TOPIC_PREFIX = "parking/heartbeat";
+    /**
+     * 停车流水上报主题路径前缀（缺省时使用）：流水变化按
+     * {@code {reportTopicPrefix}/{nodeCode}} 发布（默认 {@code parking/report/{nodeCode}}），
+     * 与云端「上报数据订阅主题」{@code {reportTopicPrefix}/#} 匹配（如 {@code parking/report/#}）。
+     */
+    public static final String DEFAULT_REPORT_TOPIC_PREFIX = "parking/report";
+    /** 节点编号最大长度（与云端“边缘节点管理”创建的节点编号一致，创建后不可更改） */
+    public static final int MAX_NODE_CODE_LENGTH = 64;
 
     @Id
     @Column(length = 32, nullable = false, updatable = false)
@@ -50,6 +62,25 @@ public class NodeSettings {
 
     @Column(name = "mqtt_topic_prefix", length = 255)
     private String mqttTopicPrefix;
+
+    /**
+     * 配置同步订阅主题前缀（可为空）：为空表示本节点不订阅云端配置同步
+     * （edge.config.sync/3 全量/增量帧）；非空时订阅主题为
+     * {@code {configSyncTopicPrefix}/{nodeCode}}，nodeCode 复用下方节点编号。
+     */
+    @Column(name = "config_sync_topic_prefix", length = 255)
+    private String configSyncTopicPrefix;
+
+    /**
+     * 停车流水上报主题前缀（可为空）：为空按默认值 {@code parking/report} 处理；
+     * 非空时发布主题为 {@code {reportTopicPrefix}/{nodeCode}}，nodeCode 复用下方节点编号。
+     */
+    @Column(name = "report_topic_prefix", length = 255)
+    private String reportTopicPrefix;
+
+    /** 云端节点编号：云端“边缘节点管理”中创建的节点编号，作为心跳/上报主题末段；仅在 EDGE 模式生效。 */
+    @Column(name = "node_code", length = 64)
+    private String nodeCode;
 
     /** 算费请求接口地址：边缘节点向远程算费服务请求费用（入参车牌+车牌颜色，返回金额）。 */
     @Column(name = "fee_api_url", length = 255)
@@ -132,6 +163,30 @@ public class NodeSettings {
 
     public void setMqttTopicPrefix(String mqttTopicPrefix) {
         this.mqttTopicPrefix = mqttTopicPrefix;
+    }
+
+    public String getConfigSyncTopicPrefix() {
+        return configSyncTopicPrefix;
+    }
+
+    public void setConfigSyncTopicPrefix(String configSyncTopicPrefix) {
+        this.configSyncTopicPrefix = configSyncTopicPrefix;
+    }
+
+    public String getReportTopicPrefix() {
+        return reportTopicPrefix;
+    }
+
+    public void setReportTopicPrefix(String reportTopicPrefix) {
+        this.reportTopicPrefix = reportTopicPrefix;
+    }
+
+    public String getNodeCode() {
+        return nodeCode;
+    }
+
+    public void setNodeCode(String nodeCode) {
+        this.nodeCode = nodeCode;
     }
 
     public String getFeeApiUrl() {

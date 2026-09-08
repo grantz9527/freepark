@@ -16,7 +16,7 @@ import jakarta.persistence.UniqueConstraint;
 @Table(
         name = "blacklist_vehicle",
         uniqueConstraints = @UniqueConstraint(columnNames = {"lot_id", "plate_number"}))
-public class BlacklistVehicle extends BaseEntity {
+public class BlacklistVehicle extends CloudSyncedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "lot_id", nullable = false)
