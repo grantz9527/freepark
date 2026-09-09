@@ -1577,7 +1577,8 @@ export function updateNodeSettings(
     mqttClientId: string
     mqttUsername: string
     mqttPassword: string
-    mqttTopicPrefix: string
+    // 心跳主题前缀不再由前端提供，缺省时后端落默认值 parking/heartbeat
+    mqttTopicPrefix?: string
     nodeCode: string
     feeApiUrl: string
     feeMockEnabled: boolean

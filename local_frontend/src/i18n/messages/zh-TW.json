@@ -552,7 +552,7 @@
     "mqttPasswordEmptyPlaceholder": "未設定（可選）",
     "mqttTopicPrefix": "心跳主題路徑",
     "mqttTopicPrefixPlaceholder": "例如 parking/heartbeat",
-    "mqttTopicPrefixHint": "本機以「路徑/節點編號」發布心跳；路徑需與雲端「心跳訂閱主題」移除末尾 /# 後完全一致。",
+    "mqttTopicPrefixHint": "心跳主題路徑固定使用預設值 parking/heartbeat；本機以「parking/heartbeat/節點編號」發布，雲端「心跳訂閱主題」應填 parking/heartbeat/#。",
     "nodeCode": "節點編號",
     "nodeCodePlaceholder": "例如 FreePark20260908123456",
     "nodeCodeHint": "在雲端平台建立的節點編號，拼接為心跳主題的末段；僅限字母、數字、- 與 _。",
@@ -568,7 +568,9 @@
     "saved": "節點配置已儲存",
     "loadFailed": "載入節點配置失敗",
     "saveFailed": "儲存節點配置失敗",
-    "loading": "載入中…"
+    "loading": "載入中…",
+    "feeDocOpen": "查看介接文件",
+    "feeDocClose": "關閉"
   },
   "roles": {
     "ADMIN": "管理員",

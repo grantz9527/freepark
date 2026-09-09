@@ -74,8 +74,15 @@ public class NodeConfigService {
                 throw new BusinessException(ErrorCode.INVALID_NODE_CONFIG);
             }
             settings.setNodeCode(nodeCode);
-            // 算费请求接口仅在边缘节点模式下配置并生效
-            settings.setFeeApiUrl(trimToNull(request.feeApiUrl()));
+            // 算费请求接口仅在边缘节点模式下配置并生效：必须为 http:// 或 https:// 完整地址，
+            // 避免误填文档占位写法「http(s)://…」或非 URL 内容导致运行期算费失败
+            String feeApiUrl = trimToNull(request.feeApiUrl());
+            if (feeApiUrl != null
+                    && !feeApiUrl.startsWith("http://")
+                    && !feeApiUrl.startsWith("https://")) {
+                throw new BusinessException(ErrorCode.INVALID_NODE_CONFIG);
+            }
+            settings.setFeeApiUrl(feeApiUrl);
             // 模拟金额开关与金额
             boolean mockEnabled = Boolean.TRUE.equals(request.feeMockEnabled());
             settings.setFeeMockEnabled(mockEnabled);

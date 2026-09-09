@@ -25,8 +25,9 @@ import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * 边缘节点算费客户端：按“车牌 + 车牌颜色”请求远程算费服务并返回费用金额。
+ * 边缘节点算费客户端：按“车场编码 + 车牌 + 车牌颜色”请求远程算费服务并返回费用金额。
  * 算费接口地址在节点配置（NodeSettings.feeApiUrl）中维护，本机为调用方。
+ * {@code lotCode} 用于让云端定位“请求来自哪个车场”并按车场的欠费统计范围计算。
  */
 @Service
 public class FeeQuoteClient {
@@ -67,12 +68,13 @@ public class FeeQuoteClient {
     }
 
     /**
-     * 请求算费：POST {plateNumber, plateColor} 到节点配置的算费接口地址。
+     * 请求算费：POST {lotCode, plateNumber, plateColor} 到节点配置的算费接口地址。
+     * {@code lotCode} 为请求方车场编码（可为 null/空，此时由算费服务按全局口径统计）。
      * 响应 JSON 约定为 {"amount": 12.5}（也兼容响应体直接是金额数字）。
      *
      * @return 费用金额；响应中缺失金额时抛 FEE_API_CALL_FAILED
      */
-    public BigDecimal quote(String plateNumber, String plateColor) {
+    public BigDecimal quote(String lotCode, String plateNumber, String plateColor) {
         NodeSettings settings = settingsRepository.findById(NodeSettings.SINGLETON_ID).orElse(null);
         if (settings != null && settings.isFeeMockEnabled()) {
             // 本地调试：启用模拟金额时直接返回固定金额，不调用远程算费接口
@@ -90,12 +92,15 @@ public class FeeQuoteClient {
         String url = apiUrl.trim();
 
         ObjectNode body = JsonNodeFactory.instance.objectNode();
+        if (lotCode != null && !lotCode.isBlank()) {
+            body.put("lotCode", lotCode.trim());
+        }
         body.put("plateNumber", plateNumber.trim());
         if (plateColor != null && !plateColor.isBlank()) {
             body.put("plateColor", plateColor.trim());
         }
         String json = jsonMapper.writeValueAsString(body);
-        log.info("算费请求 {} plate={} color={}", url, plateNumber, plateColor);
+        log.info("算费请求 {} lot={} plate={} color={}", url, lotCode, plateNumber, plateColor);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))

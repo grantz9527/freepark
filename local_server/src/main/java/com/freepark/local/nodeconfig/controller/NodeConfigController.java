@@ -54,12 +54,13 @@ public class NodeConfigController {
     }
 
     /**
-     * 算费请求：向节点配置的远程算费接口传入车牌与车牌颜色，返回费用金额。
+     * 算费请求：向节点配置的远程算费接口传入车场编码（可选）、车牌与车牌颜色，返回费用金额。
      */
     @PostMapping("/fee-quote")
     public ApiResponse<FeeQuoteView> quote(@Valid @RequestBody FeeQuoteRequest request) {
         return ApiResponse.ok(
                 messages,
-                new FeeQuoteView(feeQuoteClient.quote(request.plateNumber(), request.plateColor())));
+                new FeeQuoteView(feeQuoteClient.quote(
+                        request.lotCode(), request.plateNumber(), request.plateColor())));
     }
 }

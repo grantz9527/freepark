@@ -285,7 +285,7 @@ public class DeviceGatewayService {
         BigDecimal dueAmount = null;
         if (interceptArrears) {
             if (feeQuoteClient.hasFeeQuoteSource()) {
-                dueAmount = quoteFeeQuietly(plate, record.getPlateColor());
+                dueAmount = quoteFeeQuietly(device.getLane().getLot().getCode(), plate, record.getPlateColor());
             } else {
                 log.debug("车场({}) 配置了欠费拦截，但本节点未配置算费接口/模拟金额，欠费拦截不生效", lotId);
             }
@@ -382,10 +382,10 @@ public class DeviceGatewayService {
      * 成功返回金额（≥0），任何失败（未配置接口、远程异常、模拟配置无效）均返回 null 且不拦截，
      * 避免外部算费服务故障阻断正常通行。
      */
-    private BigDecimal quoteFeeQuietly(String plate, PlateColor plateColor) {
+    private BigDecimal quoteFeeQuietly(String lotCode, String plate, PlateColor plateColor) {
         try {
-            return feeQuoteClient.quote(plate, plateColor == null ? null : plateColor.name());
-        } catch (BusinessException e) {
+            return feeQuoteClient.quote(lotCode, plate, plateColor == null ? null : plateColor.name());
+        } catch (Exception e) {
             log.warn("欠费金额查询失败（不拦截放行）：plate={} reason={}", plate, e.getMessage());
             return null;
         }
