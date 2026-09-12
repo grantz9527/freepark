@@ -1,5 +1,6 @@
 package com.freepark.local.domain;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,4 +14,7 @@ public interface RecognitionRecordRepository
     List<RecognitionRecord> findByDevice_IdOrderByCapturedAtDesc(UUID deviceId, Pageable pageable);
 
     List<RecognitionRecord> findByPlateOrderByCapturedAtDesc(String plate, Pageable pageable);
+
+    List<RecognitionRecord> findByPlateIgnoreCaseAndAbnormalReasonAndCapturedAtGreaterThanEqualOrderByCapturedAtDesc(
+            String plate, String abnormalReason, Instant capturedAt, Pageable pageable);
 }

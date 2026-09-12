@@ -72,6 +72,14 @@ public class ParkingSession extends BaseEntity {
     @Column(name = "sync_pending")
     private Boolean syncPending = Boolean.TRUE;
 
+    /** 云端流水主键：云端下发或边缘上报回填后有值。 */
+    @Column(name = "cloud_id", unique = true)
+    private Long cloudId;
+
+    /** 最近一次已应用的云端写修订号，上报时回传以免过期快照覆盖云端改动。 */
+    @Column(name = "cloud_revision")
+    private Long cloudRevision;
+
     protected ParkingSession() {
     }
 
@@ -163,6 +171,58 @@ public class ParkingSession extends BaseEntity {
 
     public void setSyncPending(Boolean syncPending) {
         this.syncPending = syncPending;
+    }
+
+    public Long getCloudId() {
+        return cloudId;
+    }
+
+    public void setCloudId(Long cloudId) {
+        this.cloudId = cloudId;
+    }
+
+    public Long getCloudRevision() {
+        return cloudRevision;
+    }
+
+    public void setCloudRevision(Long cloudRevision) {
+        this.cloudRevision = cloudRevision;
+    }
+
+    public void setLotId(UUID lotId) {
+        this.lotId = lotId;
+    }
+
+    public void setLotName(String lotName) {
+        this.lotName = lotName;
+    }
+
+    public void setPlateNumber(String plateNumber) {
+        this.plateNumber = plateNumber == null ? "" : plateNumber.trim().toUpperCase();
+    }
+
+    public void setPlateColor(PlateColor plateColor) {
+        this.plateColor = plateColor;
+    }
+
+    public void setStatus(ParkingSessionStatus status) {
+        this.status = status;
+    }
+
+    public void setEntryTime(Instant entryTime) {
+        this.entryTime = entryTime;
+    }
+
+    public void setEntryLaneName(String entryLaneName) {
+        this.entryLaneName = entryLaneName;
+    }
+
+    public void setExitTime(Instant exitTime) {
+        this.exitTime = exitTime;
+    }
+
+    public void setExitLaneName(String exitLaneName) {
+        this.exitLaneName = exitLaneName;
     }
 
     /** 出场匹配成功：关闭流水。 */

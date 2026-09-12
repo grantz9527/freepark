@@ -28,6 +28,7 @@ import com.freepark.local.domain.ParkingLaneRepository;
 import com.freepark.local.domain.ParkingLot;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.RecognitionRecord;
+import com.freepark.local.edge.service.PendingGateOpenService;
 import com.freepark.local.nodeconfig.service.FeeQuoteClient;
 import com.freepark.local.parkingflow.service.ParkingSessionService;
 import com.freepark.local.recognition.service.RecognitionRecordService;
@@ -45,6 +46,7 @@ public class FrigateEventHandler {
     private final AccessDecisionService accessDecisions;
     private final ParkingSessionService parkingSessions;
     private final FeeQuoteClient feeQuoteClient;
+    private final PendingGateOpenService pendingGateOpens;
 
     public FrigateEventHandler(
             FrigateCameraRepository cameras,
@@ -54,7 +56,8 @@ public class FrigateEventHandler {
             DeviceCommandService deviceCommands,
             AccessDecisionService accessDecisions,
             ParkingSessionService parkingSessions,
-            FeeQuoteClient feeQuoteClient) {
+            FeeQuoteClient feeQuoteClient,
+            PendingGateOpenService pendingGateOpens) {
         this.cameras = cameras;
         this.barriers = barriers;
         this.lanes = lanes;
@@ -63,6 +66,7 @@ public class FrigateEventHandler {
         this.accessDecisions = accessDecisions;
         this.parkingSessions = parkingSessions;
         this.feeQuoteClient = feeQuoteClient;
+        this.pendingGateOpens = pendingGateOpens;
     }
 
     @Transactional
@@ -130,6 +134,9 @@ public class FrigateEventHandler {
                         decision.remark());
                 recognitionRecordService.saveCameraRecordOnly(
                         camera, plate, plateColor, direction, now, imageRef, eventImage, decision.remark());
+                if (PendingGateOpenService.FEE_PENDING.equals(decision.remark())) {
+                    rememberFeePendingBarriers(lane, plate, plateColor);
+                }
                 return;
             }
         }
@@ -211,6 +218,18 @@ public class FrigateEventHandler {
         log.info("Frigate linkage decision lane={} plate={} direction={} lot={} due={} result={} remark={}",
                 lane.getId(), plate, direction, lotId, dueAmount, decision.result(), decision.remark());
         return decision;
+    }
+
+    private void rememberFeePendingBarriers(ParkingLane lane, String plate, PlateColor plateColor) {
+        if (lane == null || lane.getLot() == null) {
+            return;
+        }
+        String lotCode = lane.getLot().getCode();
+        for (ParkingBarrier barrier : barriers.findAllByLaneIdOrderByCreatedAtDesc(lane.getId())) {
+            if (barrier.isEnabled()) {
+                pendingGateOpens.remember(barrier.getId(), lotCode, plate, plateColor);
+            }
+        }
     }
 
     /**

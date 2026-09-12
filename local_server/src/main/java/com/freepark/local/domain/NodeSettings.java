@@ -34,6 +34,12 @@ public class NodeSettings {
      * 与云端「上报数据订阅主题」{@code {reportTopicPrefix}/#} 匹配（如 {@code parking/report/#}）。
      */
     public static final String DEFAULT_REPORT_TOPIC_PREFIX = "parking/report";
+    /**
+     * 云端指令订阅主题前缀（缺省时使用）：订阅
+     * {@code {commandTopicPrefix}/{nodeCode}}（默认 {@code parking/command/{nodeCode}}），
+     * 同时接收开闸指令与云端停车流水快照。
+     */
+    public static final String DEFAULT_COMMAND_TOPIC_PREFIX = "parking/command";
     /** 节点编号最大长度（与云端“边缘节点管理”创建的节点编号一致，创建后不可更改） */
     public static final int MAX_NODE_CODE_LENGTH = 64;
 
@@ -77,6 +83,13 @@ public class NodeSettings {
      */
     @Column(name = "report_topic_prefix", length = 255)
     private String reportTopicPrefix;
+
+    /**
+     * 指令订阅主题前缀（可为空）：为空按默认值 {@code parking/command} 处理；
+     * 非空时订阅主题为 {@code {commandTopicPrefix}/{nodeCode}}（开闸 + 云端流水下发共用）。
+     */
+    @Column(name = "command_topic_prefix", length = 255)
+    private String commandTopicPrefix;
 
     /** 云端节点编号：云端“边缘节点管理”中创建的节点编号，作为心跳/上报主题末段；仅在 EDGE 模式生效。 */
     @Column(name = "node_code", length = 64)
@@ -179,6 +192,14 @@ public class NodeSettings {
 
     public void setReportTopicPrefix(String reportTopicPrefix) {
         this.reportTopicPrefix = reportTopicPrefix;
+    }
+
+    public String getCommandTopicPrefix() {
+        return commandTopicPrefix;
+    }
+
+    public void setCommandTopicPrefix(String commandTopicPrefix) {
+        this.commandTopicPrefix = commandTopicPrefix;
     }
 
     public String getNodeCode() {

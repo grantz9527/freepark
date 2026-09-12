@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,7 @@ import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
 import com.freepark.local.domain.NodeSettings;
 import com.freepark.local.domain.NodeSettingsRepository;
+import com.freepark.local.nodeconfig.dto.FeeQuoteView;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -75,6 +77,26 @@ public class FeeQuoteClient {
      * @return 费用金额；响应中缺失金额时抛 FEE_API_CALL_FAILED
      */
     public BigDecimal quote(String lotCode, String plateNumber, String plateColor) {
+        return quoteTimed(lotCode, plateNumber, plateColor).amount();
+    }
+
+    /**
+     * 与 {@link #quote} 相同，并带上本机完成本次请求的耗时（毫秒），供节点配置页试算展示。
+     */
+    public FeeQuoteView quoteTimed(String lotCode, String plateNumber, String plateColor) {
+        long started = System.nanoTime();
+        try {
+            BigDecimal amount = doQuote(lotCode, plateNumber, plateColor);
+            long elapsedMs = elapsedMs(started);
+            log.info("算费结果 plate={} amount={} elapsedMs={}", plateNumber, amount, elapsedMs);
+            return new FeeQuoteView(amount, elapsedMs);
+        } catch (RuntimeException ex) {
+            log.warn("算费失败 plate={} elapsedMs={} : {}", plateNumber, elapsedMs(started), ex.getMessage());
+            throw ex;
+        }
+    }
+
+    private BigDecimal doQuote(String lotCode, String plateNumber, String plateColor) {
         NodeSettings settings = settingsRepository.findById(NodeSettings.SINGLETON_ID).orElse(null);
         if (settings != null && settings.isFeeMockEnabled()) {
             // 本地调试：启用模拟金额时直接返回固定金额，不调用远程算费接口
@@ -114,21 +136,17 @@ public class FeeQuoteClient {
             response = httpClient.send(request, BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.warn("算费接口调用失败: {}", e.getMessage());
             throw new BusinessException(ErrorCode.FEE_API_CALL_FAILED, e.getMessage());
         }
 
         String responseBody = response.body() == null ? "" : response.body().trim();
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             String hint = responseBody.length() > 400 ? responseBody.substring(0, 400) : responseBody;
-            log.warn("算费接口 HTTP {}: {}", response.statusCode(), hint);
             throw new BusinessException(ErrorCode.FEE_API_CALL_FAILED,
                     "HTTP " + response.statusCode() + (hint.isBlank() ? "" : (" :: " + hint)));
         }
         try {
-            BigDecimal amount = parseAmount(responseBody);
-            log.info("算费结果 plate={} amount={}", plateNumber, amount);
-            return amount;
+            return parseAmount(responseBody);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -136,6 +154,10 @@ public class FeeQuoteClient {
             throw new BusinessException(ErrorCode.FEE_API_CALL_FAILED,
                     "bad amount response: " + (hint.isBlank() ? e.getMessage() : hint));
         }
+    }
+
+    private static long elapsedMs(long startedNanos) {
+        return Math.max(0L, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos));
     }
 
     /**

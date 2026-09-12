@@ -41,6 +41,7 @@ import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.RecognitionRecord;
 import com.freepark.local.domain.WhitelistVehicle;
 import com.freepark.local.domain.WhitelistVehicleRepository;
+import com.freepark.local.edge.service.PendingGateOpenService;
 import com.freepark.local.parkingflow.service.ParkingSessionService;
 import com.freepark.local.recognition.service.RecognitionRecordService;
 import com.freepark.local.nodeconfig.service.FeeQuoteClient;
@@ -90,6 +91,7 @@ public class DeviceGatewayService {
     private final ParkingSessionService parkingSessions;
     private final FeeQuoteClient feeQuoteClient;
     private final WhitelistVehicleRepository whitelistVehicles;
+    private final PendingGateOpenService pendingGateOpens;
     private final ZhenshiProtocol defaultProtocol;
     private final Map<String, CameraProtocol> protocolsByBrand;
 
@@ -122,6 +124,7 @@ public class DeviceGatewayService {
             ParkingSessionService parkingSessions,
             FeeQuoteClient feeQuoteClient,
             WhitelistVehicleRepository whitelistVehicles,
+            PendingGateOpenService pendingGateOpens,
             ZhenshiProtocol defaultProtocol,
             List<CameraProtocol> protocols) {
         this.barriers = barriers;
@@ -134,6 +137,7 @@ public class DeviceGatewayService {
         this.parkingSessions = parkingSessions;
         this.feeQuoteClient = feeQuoteClient;
         this.whitelistVehicles = whitelistVehicles;
+        this.pendingGateOpens = pendingGateOpens;
         this.defaultProtocol = defaultProtocol;
         this.protocolsByBrand = protocols.stream()
                 .collect(Collectors.toMap(CameraProtocol::brand, Function.identity(), (a, b) -> a));
@@ -307,6 +311,14 @@ public class DeviceGatewayService {
                     device.getCode(), plate, direction, decision.remark(), dueAmount);
             // 拦截车辆：保留本地识别记录并标记拦截原因，不生成停车流水（不会出现在场/离场流水，也不会上报云端）
             recognitionRecordService.saveDeviceRecordOnly(record, decision.remark());
+            if (REMARK_FEE_PENDING.equals(decision.remark()) && device.getLane() != null
+                    && device.getLane().getLot() != null) {
+                pendingGateOpens.remember(
+                        device.getId(),
+                        device.getLane().getLot().getCode(),
+                        plate,
+                        record.getPlateColor());
+            }
             return interceptResponse(protocol, direction, decision.remark(), plate, dueAmount);
         }
 
@@ -321,7 +333,7 @@ public class DeviceGatewayService {
         // “{类型} 剩余{N}天”（欢送语只走语音）。类型词/数字是否在控制板词库需现场验证；
         // 白名单无有效期或已过期的只播类型不带剩余时长。
         WhitelistAnnouncement wlAnnounce = REMARK_WHITELIST_MATCH.equals(decision.remark())
-                ? whitelistAnnouncement(lotId, normalizedPlate)
+                ? whitelistAnnouncement(lotId, normalizedPlate, record.getPlateColor())
                 : null;
         String voiceText = normalizedPlate + "," + (wlAnnounce != null ? wlAnnounce.voicePart() + "," : "") + farewell;
         String ledText = normalizedPlate + "\n" + (wlAnnounce != null ? wlAnnounce.ledLine2() : farewell);
@@ -401,14 +413,15 @@ public class DeviceGatewayService {
      * 剩余天数按"连续有效段"计算：同车牌多张时间无缝衔接（重叠或首尾相接）的停车卡视为续期，
      * 终点延伸到连续段的最后一张卡；断档则只统计到断口为止。
      */
-    private WhitelistAnnouncement whitelistAnnouncement(UUID lotId, String plate) {
+    private WhitelistAnnouncement whitelistAnnouncement(UUID lotId, String plate, PlateColor plateColor) {
         Instant now = Instant.now();
-        return whitelistVehicles.findActiveAt(lotId, plate, now).stream()
+        return whitelistVehicles.findActiveAt(lotId, plate, plateColor, now).stream()
                 .findFirst()
                 .map(v -> {
                     String typeName = vehicleTypeName(v.getType());
                     Integer daysLeft = remainingDays(
-                            continuousEffectiveEnd(whitelistVehicles.findAllEnabledByLotAndPlate(lotId, plate), now));
+                            continuousEffectiveEnd(
+                                    whitelistVehicles.findAllEnabledByLotAndPlate(lotId, plate, plateColor), now));
                     if (daysLeft == null) {
                         return new WhitelistAnnouncement(typeName, typeName);
                     }

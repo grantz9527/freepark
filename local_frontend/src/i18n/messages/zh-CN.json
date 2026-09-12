@@ -649,7 +649,7 @@
     "feeQuoteColorPlaceholder": "可空，如 蓝 或 BLUE",
     "feeQuote": "算费",
     "feeQuoting": "算费中…",
-    "feeQuoteResult": "费用：{amount} 元",
+    "feeQuoteResult": "费用：{amount} 元，耗时 {elapsedMs} ms",
     "feeQuoteFailed": "算费请求失败",
     "hostRequired": "边缘节点模式需要填写 MQTT 服务器地址",
     "portInvalid": "请输入 1–65535 的端口",

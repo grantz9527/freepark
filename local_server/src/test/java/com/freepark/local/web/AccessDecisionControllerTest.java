@@ -183,6 +183,26 @@ class AccessDecisionControllerTest {
     }
 
     @Test
+    void whitelistDoesNotMatchWhenPlateColorDiffers() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token, "PUBLIC");
+        String laneId = createLane(token, lotId);
+        addVehicle(token, lotId, "whitelist-vehicles", "鲁Q3614学");
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"鲁Q3614学\",\"plateColor\":\"YELLOW\",\"direction\":\"ENTRANCE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"))
+                .andExpect(jsonPath("$.data.remark").value(""));
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"鲁Q3614学\",\"plateColor\":\"BLUE\",\"direction\":\"ENTRANCE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"))
+                .andExpect(jsonPath("$.data.remark").value("whitelist_match"));
+    }
+
+    @Test
     void internalLotEntryRequiresRegisteredVehicle() throws Exception {
         String token = adminToken();
         String lotId = createLot(token, "INTERNAL");
@@ -199,6 +219,12 @@ class AccessDecisionControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"ownerName\":\"张三\"}"))
                 .andExpect(status().isOk());
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"YELLOW\",\"direction\":\"ENTRANCE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("INTERCEPTED"))
+                .andExpect(jsonPath("$.data.remark").value("not_internal_vehicle"));
 
         decide(token, lotId, laneId,
                 "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"direction\":\"ENTRANCE\"}")

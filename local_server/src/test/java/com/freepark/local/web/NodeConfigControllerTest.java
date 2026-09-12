@@ -57,6 +57,7 @@ class NodeConfigControllerTest {
                         .content("{\"mode\":\"EDGE\",\"mqttHost\":\"192.168.1.50\",\"mqttPort\":1883,"
                                 + "\"mqttClientId\":\"edge-01\",\"mqttUsername\":\"parking\","
                                 + "\"mqttPassword\":\"secret\",\"mqttTopicPrefix\":\"freepark/edge/\","
+                                + "\"nodeCode\":\"node-001\","
                                 + "\"feeApiUrl\":\"https://billing.example.com/api/v1/fee/quote\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.mode").value("EDGE"))
@@ -92,7 +93,7 @@ class NodeConfigControllerTest {
         mockMvc.perform(put("/api/v1/node-settings")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mode\":\"EDGE\",\"mqttHost\":\"192.168.1.50\","
+                        .content("{\"mode\":\"EDGE\",\"mqttHost\":\"192.168.1.50\",\"nodeCode\":\"node-001\","
                                 + "\"feeMockEnabled\":true,\"feeMockAmount\":12.5}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.feeMockEnabled").value(true))
@@ -104,7 +105,8 @@ class NodeConfigControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"plateNumber\":\"粤R888G8\",\"plateColor\":\"BLUE\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.amount").value(12.5));
+                .andExpect(jsonPath("$.data.amount").value(12.5))
+                .andExpect(jsonPath("$.data.elapsedMs").exists());
     }
 
     @Test

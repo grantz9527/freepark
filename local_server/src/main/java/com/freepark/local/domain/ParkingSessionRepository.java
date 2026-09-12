@@ -28,4 +28,6 @@ public interface ParkingSessionRepository
 
     /** 待同步云端的流水：按入场时间升序取一批，避免单轮推送过多阻塞 */
     List<ParkingSession> findTop200BySyncPendingTrueOrderByEntryTimeAsc();
+
+    Optional<ParkingSession> findByCloudId(Long cloudId);
 }

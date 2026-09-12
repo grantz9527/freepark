@@ -68,6 +68,12 @@ public class NodeConfigService {
                     trimToNull(request.reportTopicPrefix()) == null
                             ? NodeSettings.DEFAULT_REPORT_TOPIC_PREFIX
                             : stripTrailingSlash(trimToNull(request.reportTopicPrefix())));
+            if (trimToNull(request.commandTopicPrefix()) != null) {
+                settings.setCommandTopicPrefix(
+                        stripTrailingSlash(trimToNull(request.commandTopicPrefix())));
+            } else if (settings.getCommandTopicPrefix() == null || settings.getCommandTopicPrefix().isBlank()) {
+                settings.setCommandTopicPrefix(NodeSettings.DEFAULT_COMMAND_TOPIC_PREFIX);
+            }
             // 节点编号：云端“边缘节点管理”创建的编号，作为心跳/上报主题末段，EDGE 模式必填
             String nodeCode = trimToNull(request.nodeCode());
             if (nodeCode == null || !isTopicSafe(nodeCode)) {
@@ -123,6 +129,7 @@ public class NodeConfigService {
                 settings.getMqttTopicPrefix(),
                 settings.getConfigSyncTopicPrefix(),
                 settings.getReportTopicPrefix(),
+                settings.getCommandTopicPrefix(),
                 settings.getNodeCode(),
                 settings.getFeeApiUrl(),
                 settings.isFeeMockEnabled(),

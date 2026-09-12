@@ -612,7 +612,7 @@
     "feeQuoteColorPlaceholder": "optional, e.g. blue or BLUE",
     "feeQuote": "Quote",
     "feeQuoting": "Quoting…",
-    "feeQuoteResult": "Fee: {amount}",
+    "feeQuoteResult": "Fee: {amount} ({elapsedMs} ms)",
     "feeQuoteFailed": "Fee request failed",
     "hostRequired": "Edge node mode requires an MQTT broker address",
     "portInvalid": "Enter a port between 1 and 65535",

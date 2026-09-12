@@ -219,6 +219,12 @@ public class ParkingSessionSyncReporter {
         payload.put("schema", SCHEMA);
         payload.put("edgeCode", nodeCode);
         payload.put("sessionId", session.getId().toString());
+        if (session.getCloudId() != null) {
+            payload.put("cloudId", session.getCloudId());
+        }
+        if (session.getCloudRevision() != null) {
+            payload.put("cloudRevision", session.getCloudRevision());
+        }
         payload.put("lotCode", lotCode);
         if (isNotBlank(session.getLotName())) {
             payload.put("lotName", session.getLotName());

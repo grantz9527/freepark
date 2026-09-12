@@ -18,6 +18,9 @@ public interface InternalVehicleRepository
 
     boolean existsByLotIdAndPlateNumberIgnoreCaseAndEnabledTrue(UUID lotId, String plateNumber);
 
+    boolean existsByLotIdAndPlateNumberIgnoreCaseAndPlateColorAndEnabledTrue(
+            UUID lotId, String plateNumber, PlateColor plateColor);
+
     boolean existsByLotIdAndPlateNumberIgnoreCaseAndIdNot(UUID lotId, String plateNumber, UUID id);
 
     Optional<InternalVehicle> findByLotIdAndPlateNumberIgnoreCase(UUID lotId, String plateNumber);

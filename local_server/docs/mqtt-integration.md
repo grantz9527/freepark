@@ -4,18 +4,19 @@
 > 面向人群：需要把 local_server 接入自有云端 Broker、或用模拟端（含 AI Agent）驱动/测试该链路的开发人员。
 > 所有主题、负载字段、时序与限制均直接来源于代码实现，字段名与枚举值请以文档为准（JSON 中未列出的字段会被忽略）。
 >
-> **范围**：本文档仅描述 local_server（边缘节点）与云端之间的 MQTT 对接（心跳上报 `edge.heartbeat/1`、配置同步下发 `edge.config.sync/3`、停车流水上报 `edge.parking.session/1`）；本地 AI 识别事件、设备/道闸 HTTP 对接等本地内部链路不属于本文档范围。
+> **范围**：本文档仅描述 local_server（边缘节点）与云端之间的 MQTT 对接（心跳上报 `edge.heartbeat/1`、配置同步下发 `edge.config.sync/3`、停车流水上报/下发 `edge.parking.session/1`、缴费开闸指令 `edge.gate.command/1`）；本地 AI 识别事件、设备/道闸 HTTP 对接等本地内部链路不属于本文档范围。
 
 ---
 
 ## 1. 一句话结论（TL;DR）
 
-- local_server 在 **EDGE 模式**下会以 **三个独立 MQTT 客户端** 连到“云端 Broker”：
+- local_server 在 **EDGE 模式**下会以 **四个独立 MQTT 客户端** 连到“云端 Broker”：
   - **心跳上报**：clientId = `{mqttClientId}`（默认 `freepark-local-edge`），每 10 秒向 `{mqttTopicPrefix}/{nodeCode}` 发布 `edge.heartbeat/1`（默认主题 `parking/heartbeat/{nodeCode}`），QoS 1、不 retain。
   - **配置同步订阅**：clientId = `{mqttClientId}-cfg`（默认 `freepark-local-edge-cfg`），订阅 `{configSyncTopicPrefix}/{nodeCode}`，接收云端下发的 `edge.config.sync/3` 全量/增量分帧，QoS 1。
   - **停车流水上报**：clientId = `{mqttClientId}-rec`（默认 `freepark-local-edge-rec`），每 10 秒把待同步的停车流水向 `{reportTopicPrefix}/{nodeCode}` 发布完整快照 `edge.parking.session/1`（默认主题 `parking/report/{nodeCode}`），QoS 1、不 retain，见 §10 协议三。
-- **本文档只描述“边缘节点 ↔ 云端”的 MQTT 对接**（心跳上报 + 配置同步下发 + 停车流水上报）；本地 AI 识别事件、设备/道闸 HTTP 对接等本地内部链路不在本文档范围。
-- 三个客户端统一使用 Eclipse Paho v1.2.5，连接参数：`cleanSession=true`、`automaticReconnect=true`、`connectionTimeout=8s`、`keepAliveInterval=30s`。
+  - **指令订阅**：clientId = `{mqttClientId}-cmd`（默认 `freepark-local-edge-cmd`），订阅 `{commandTopicPrefix}/{nodeCode}`（默认 `parking/command/{nodeCode}`），接收缴费开闸 `edge.gate.command/1`（§11）以及云端改流水后的下行快照 `edge.parking.session/1` origin=`CLOUD`（§10.1），QoS 1。
+- **本文档只描述“边缘节点 ↔ 云端”的 MQTT 对接**（心跳上报 + 配置同步下发 + 停车流水上报/下发 + 缴费开闸）；本地 AI 识别事件、设备/道闸 HTTP 对接等本地内部链路不在本文档范围。
+- 四个客户端统一使用 Eclipse Paho v1.2.5，连接参数：`cleanSession=true`、`automaticReconnect=true`、`connectionTimeout=8s`、`keepAliveInterval=30s`。
 - 所有 MQTT 配置都**没有环境变量**，只能通过 local_server 的 REST 接口运行时写入 MySQL（`node_settings` 单行 `id='default'`）。
 
 ---
@@ -38,31 +39,39 @@
              ┌────────────────────┐          MQTT（同一条云端 Broker；联调环境即容器 freepark-mosquitto）
              │      云端后端        │
              │ （心跳监控 + 配置下发 │
-             │   + 停车流水接收）    │
+             │   + 停车流水上下行   │
+             │   + 缴费开闸下发）    │
              └─────────▲──────────┘
                        │
                        │ ① 心跳 edge.heartbeat/1（QoS 1，edge 每 10s 发布）
                        │    主题 parking/heartbeat/{nodeCode}
                        │ ② 配置同步 edge.config.sync/3（QoS 1，云端发布、edge 订阅）
                        │    主题 {configSyncTopicPrefix}/{nodeCode}（full/delta 分帧）
-                       │ ③ 停车流水 edge.parking.session/1（QoS 1，edge 周期补推）
+                       │ ③ 停车流水上报 edge.parking.session/1（QoS 1，edge 周期补推）
                        │    主题 parking/report/{nodeCode}（每 10s 清一批待同步）
+                       │ ④ 开闸指令 edge.gate.command/1（QoS 1，云端缴费成功后发布）
+                       │    主题 parking/command/{nodeCode}
+                       │ ⑤ 云端流水下发 edge.parking.session/1 origin=CLOUD（QoS 1）
+                       │    主题 parking/command/{nodeCode}（与 ④ 共用订阅）
                        │
              ┌─────────┴──────────┐
              │  local_server（EDGE）│
              │  ├ EdgeHeartbeatReporter（发 ①）
              │  ├ CloudConfigSyncSubscriber（收 ②）
-             │  └ ParkingSessionSyncReporter（发 ③）
+             │  ├ ParkingSessionSyncReporter（发 ③）
+             │  └ CloudGateCommandSubscriber（收 ④⑤）
              └────────────────────┘
 ```
 
-三条 MQTT 数据流（注意方向，都是相对 local_server）：
+四条 MQTT 数据流（注意方向，都是相对 local_server）：
 
 1. **edge → cloud（心跳）**：证明节点在线，云端据此判定节点及其管辖车场在线/离线。
 2. **cloud → edge（配置同步）**：车场配置（车场、通道、黑白名单、放行规则、内部车、车位）由云端下发生效。
 3. **edge → cloud（停车流水上报）**：入场/出场/作废等流水状态变化在本地事务内打上“待同步”标记，上报器周期补推完整快照，云端幂等 upsert 到 `parking_session`。
+4. **cloud → edge（缴费开闸）**：道闸欠费拦截后用户在云端缴清，云端向该车场绑定节点下发 `OPEN`，边缘匹配闸前拦截记录并主动开闸。
+5. **cloud → edge（停车流水下发）**：管理端新增/编辑/作废/算费/收退款写入云端流水后，向该车场绑定节点下发完整快照；边缘按 `sessionId` 或 `cloudId` upsert，并清待同步标记，避免过期上报把云端改动盖回去。
 
-心跳、配置同步与停车流水上报三条链路连**同一条云端 Broker**：local_server 只保存一个"云端 Broker 地址"，三个客户端用不同 clientId（见 §6），避免互踢。
+心跳、配置同步、停车流水上报与指令订阅（开闸 + 流水下发）连**同一条云端 Broker**：local_server 只保存一个"云端 Broker 地址"，四个客户端用不同 clientId（见 §6），避免互踢。
 
 ---
 
@@ -104,6 +113,7 @@ local_server 对接的 MQTT 服务器即“云端 Broker”。开发/联调环�
 | `mqttTopicPrefix` | string | 否 | 心跳主题前缀，默认 `parking/heartbeat`（保存时会去掉尾部 `/`）。心跳主题=`{前缀}/{nodeCode}`，故前缀应含 `heartbeat` 段以匹配云端订阅 `{前缀}/#` |
 | `configSyncTopicPrefix` | string | 否 | 配置同步订阅前缀；**为空 = 不订阅云端配置同步**。非空时订阅主题=`{前缀}/{nodeCode}` |
 | `reportTopicPrefix` | string | 否 | 停车流水上报主题前缀，默认 `parking/report`（保存时会去掉尾部 `/`）。上报主题=`{前缀}/{nodeCode}`，故前缀应含 `report` 段以匹配云端订阅 `{前缀}/#`；**为空 = 不上报流水** |
+| `commandTopicPrefix` | string | 否 | 指令订阅前缀（开闸 + 云端流水下发共用），默认 `parking/command`。订阅主题=`{前缀}/{nodeCode}`；请求体省略时保留已有值，从未配置则落默认值 |
 | `nodeCode` | string | EDGE 必填 | 云端节点编号；仅 `[A-Za-z0-9_-]`，≤64 |
 | `feeApiUrl` / `feeMockEnabled` / `feeMockAmount` | - | 否 | 算费相关，与 MQTT 无关 |
 
@@ -127,19 +137,20 @@ curl -X PUT http://localhost:8081/api/v1/node-settings \
   "mqttTopicPrefix": "parking/heartbeat",
   "configSyncTopicPrefix": "parking/config-sync",
   "reportTopicPrefix": "parking/report",
+  "commandTopicPrefix": "parking/command",
   "nodeCode": "node-001"
 }
 ```
 
 > 典型成功响应外壳（本项目统一响应包）：`{ "success": true, "code": "ok", "message": "...", "data": { …NodeSettingsView } }`。`data` 中 `mqttPassword` 以 `mqttPasswordSet: true` 代替。
 
-改动生效方式：`EdgeHeartbeatReporter` / `CloudConfigSyncSubscriber` / `ParkingSessionSyncReporter` 各自每 10 秒自检一次期望参数（host/port/clientId/username/topic），参数变化会自动断旧连新；切回 `OFFLINE` 或清空必填项会自动断开。**无需重启进程。**
+改动生效方式：`EdgeHeartbeatReporter` / `CloudConfigSyncSubscriber` / `ParkingSessionSyncReporter` / `CloudGateCommandSubscriber` 各自每 10 秒自检一次期望参数（host/port/clientId/username/topic），参数变化会自动断旧连新；切回 `OFFLINE` 或清空必填项会自动断开。**无需重启进程。**
 
 ---
 
 ## 6. 客户端连接约定（本地实现必读）
 
-三个客户端共用同一套 Paho 行为，模拟/自研对端时必须理解：
+四个客户端共用同一套 Paho 行为，模拟/自研对端时必须理解：
 
 | 连接项 | 值 | 影响 |
 |---|---|---|
@@ -156,6 +167,7 @@ clientId 使用规则（同 Broker 下不得冲突，否则互踢）：
 | 心跳 | `{mqttClientId}`（默认 `freepark-local-edge`） | 只 PUBLISH，无回调 |
 | 配置同步 | `{mqttClientId}-cfg`（默认 `freepark-local-edge-cfg`） | 只 SUBSCRIBE |
 | 停车流水上报 | `{mqttClientId}-rec`（默认 `freepark-local-edge-rec`） | 只 PUBLISH，无回调 |
+| 指令订阅（开闸 + 流水下发） | `{mqttClientId}-cmd`（默认 `freepark-local-edge-cmd`） | 只 SUBSCRIBE |
 
 ---
 
@@ -166,6 +178,7 @@ clientId 使用规则（同 Broker 下不得冲突，否则互踢）：
 | `{mqttTopicPrefix}/{nodeCode}`（默认 `parking/heartbeat/{nodeCode}`） | 发（edge→cloud） | `edge.heartbeat/1` | 1 | 否 | 每 10s 一条心跳 |
 | `{reportTopicPrefix}/{nodeCode}`（默认 `parking/report/{nodeCode}`） | 发（edge→cloud） | `edge.parking.session/1` | 1 | 否 | 停车流水变化后周期补推完整快照，见 §10 |
 | `{configSyncTopicPrefix}/{nodeCode}`（如 `parking/config-sync/{nodeCode}`） | 收（cloud→edge） | `edge.config.sync/3`（full/delta 分帧） | 1 | 帧不 retain | 云端每次下发前会先发一条零字节 retain 清理消息 |
+| `{commandTopicPrefix}/{nodeCode}`（默认 `parking/command/{nodeCode}`） | 收（cloud→edge） | `edge.gate.command/1` 或 `edge.parking.session/1`（origin=`CLOUD`） | 1 | 否 | 缴费开闸见 §11；云端改流水下发见 §10.1 |
 
 帧内 `edgeCode` 必须与订阅主题末段 `nodeCode` 一致，否则丢弃。
 
@@ -443,6 +456,8 @@ delta 增量示例（新增一条白名单）：
 | `schema` | string | 是 | 恒为 `edge.parking.session/1` |
 | `edgeCode` | string | 是 | 节点编号，**必须等于发布主题末段 nodeCode**，否则云端丢弃 |
 | `sessionId` | string | 是 | 边缘本地流水 UUID 文本；与 `edgeCode` 组成云端幂等键 |
+| `cloudId` | number | 否 | 已绑定云端主键时回传，供云端按云端 ID 命中同一行 |
+| `cloudRevision` | number | 否 | 最近一次已应用的云端写修订号；云端本地修订更大则丢弃本快照 |
 | `lotCode` | string | 是 | 车场编码（本地流水关联车场的 `code`） |
 | `lotName` | string | 否 | 车场名称（可为空省略） |
 | `plateNumber` | string | 是 | 车牌号 |
@@ -462,13 +477,79 @@ delta 增量示例（新增一条白名单）：
 **对端（云端）对接约定**：
 1. 用 `{reportTopicPrefix}/#` 订阅（默认 `parking/report/#`），收到报文校验：`schema=edge.parking.session/1`、负载 `edgeCode` 等于主题末段节点编号，否则忽略。
 2. 按 `lotCode` 定位云端车场，且该车场必须已绑定在该节点名下，否则丢弃（防止张冠李戴）。
-3. 以 `edgeCode + sessionId` 为幂等键 upsert：无则新增、有则整体覆盖为快照最新状态（`CLOSED` 且无支付登记时默认置 `UNPAID`；`VOIDED` 清空支付状态/时间）。
+3. 先按 `cloudId` 命中云端行，否则以 `edgeCode + sessionId` 为幂等键 upsert：无则新增、有则整体覆盖为快照最新状态（`CLOSED` 且无支付登记时默认置 `UNPAID`；`VOIDED` 清空支付状态/时间）。若云端已有 `cloudRevision` 且大于上报值：过期的在场快照丢弃；若边缘生命周期已前进（在场→出场/作废）则仍合并出场信息，保留云端已改的车牌/入场。
 4. 边缘时间统一为 ISO-8601 UTC（带 `Z`），云端按 UTC 落库；v1 负载**不含图片**与通道/识别内部 ID（云端无可对应主键，仅落名称快照）。
 5. 可靠性边界：边缘在 Broker PUBACK 后即清除待同步标记，云端落库失败只能靠日志/运维补数据，无端到端重试。
 
+### 10.1 云端下发停车流水 `edge.parking.session/1`（cloud → edge，origin=`CLOUD`）
+
+实现类：云端 `EdgeSessionPushPublisher`；边缘 `CloudGateCommandSubscriber` + `CloudSessionApplyService`。
+
+- 用途：云端管理端新增/编辑（含关场）/作废/重新算费/收款入账/退款回冲停车流水后，把完整快照下发到该流水所属车场绑定的边缘节点，使本地 OPEN/CLOSED/VOIDED 与车牌、时间与云端一致。
+- 主题：与开闸指令相同，`{commandTopicPrefix}/{nodeCode}`（默认 `parking/command/{nodeCode}`），QoS 1、不 retain。
+- 触发：云端写流水时 `cloudRevision` +1，事务提交后发布。车场未绑定 `edgeNodeCode` 或 MQTT 未连接则跳过。
+- 边缘匹配：先按负载 `sessionId`（本地 UUID）找行，找不到再按 `cloudId`；都没有则新建本地流水。应用后置 `sync_pending=false`，避免立刻回推把云端改动盖掉。若本地已经出场/作废而云端快照仍是在场，保留本地关场并保持待同步，用新修订号把出场补报上去。若本地 `cloudRevision` 已大于本次下发值则忽略。
+- 作废：状态变为 `VOIDED` 时联动把关联入场/出场识别记录标为 voided（与本地作废一致）。本地流水无费用字段，负载中的金额可忽略。
+- `cleanSession=true`：节点离线期间的下发会丢；连上后靠下一次云端改写再推，或边缘本地再变更后带 `cloudId`/`cloudRevision` 上报。
+
+负载在协议三字段基础上增加：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `origin` | string | 是 | 恒为 `CLOUD`；缺省或其它值边缘丢弃 |
+| `cloudId` | number | 是 | 云端 `parking_session` 主键 |
+| `cloudRevision` | number | 是 | 本次云端写修订号 |
+| `sessionId` | string | 否 | 已知边缘 UUID 时带上；云端自建流水可能暂无 |
+| `issuedAt` | string | 否 | ISO-8601 UTC |
+| `reportedAt` | - | 否 | 下行不使用 |
+
+示例：
+
+```json
+{"schema":"edge.parking.session/1","origin":"CLOUD","edgeCode":"node-001","cloudId":1001,"cloudRevision":3,"sessionId":"c9a0f7a1-…","lotCode":"P001","lotName":"示范车场","plateNumber":"浙B12345","plateColor":"BLUE","status":"VOIDED","entryTime":"2026-09-08T01:00:00Z","issuedAt":"2026-09-12T13:00:00Z"}
+```
+
 ---
 
-## 11. 联调验证手册（AI/测试端可直接照做）
+## 11. 协议四：开闸指令 `edge.gate.command/1`（cloud → edge）
+
+实现类：`CloudGateCommandSubscriber`、`CloudGateCommandHandler`、`PendingGateOpenService`（`src/main/java/com/freepark/local/edge/service/`）。
+
+- 用途：车辆在道闸口因欠费被拦截并提示缴费后，用户在云端用户端完成支付；云端入账事务提交后向该车场绑定的边缘节点发布开闸指令，边缘匹配闸前拦截记录并向识别一体机主动 HTTP 下发开闸（无驱动/地址时入队 `OPEN` 供轮询设备取走）。
+- 空闲条件（满足任一则不订、并断开已有连接）：非 EDGE 模式、`mqttHost`/`mqttPort` 非法、`nodeCode` 为空或含非法字符。
+- 主题：`stripTrailingSlash(commandTopicPrefix 或默认 parking/command) + "/" + nodeCode`。
+- QoS=1，retained=false。
+- 闸前登记：欠费拦截（remark=`fee_pending`）时把设备 ID + 车牌 + 车场编码记入内存，有效期 20 分钟；进程重启后回落到同期 `fee_pending` 识别记录。
+
+负载（UTF-8 JSON）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `schema` | string | 是 | 恒为 `edge.gate.command/1` |
+| `edgeCode` | string | 是 | 目标节点编号，**必须等于订阅主题末段 nodeCode**，否则丢弃 |
+| `commandId` | string | 否 | UUID；边缘 10 分钟内去重 |
+| `command` | string | 是 | 目前仅 `OPEN` |
+| `reason` | string | 否 | 目前仅处理 `PAYMENT`（缺省也按缴费开闸）；其它原因丢弃 |
+| `plate` | string | 是 | 车牌（云端已大写） |
+| `plateColor` | string | 否 | 车牌颜色枚举名，如 `BLUE` |
+| `lotCode` | string | 否 | 车场编码，用于匹配闸前拦截 |
+| `payNo` | string | 否 | 云端缴款单号，仅日志追溯 |
+| `issuedAt` | string | 否 | ISO-8601 UTC |
+
+示例：
+
+```json
+{"schema":"edge.gate.command/1","edgeCode":"node-001","commandId":"7c2e…","command":"OPEN","reason":"PAYMENT","plate":"浙B12345","plateColor":"BLUE","lotCode":"P001","payNo":"PY202609121200000011234","issuedAt":"2026-09-12T12:00:01.000Z"}
+```
+
+**对端（云端）对接约定**：
+1. 发布主题 `{commandPublishPrefix}/{nodeCode}`，默认前缀 `parking/command`，与边缘订阅前缀必须一致。
+2. 仅在 C 端缴款单入账成功且事务提交后发布；按停车订单关联车场的 `edgeNodeCode` 定位节点，未绑定节点的车场跳过。
+3. 边缘收到后按车牌（及可选颜色/车场）匹配闸前欠费拦截设备并开闸；找不到拦截记录则只打日志，不开闸。车辆可倒车再次识别：此时欠费已清零，会按正常放行开闸。
+
+---
+
+## 12. 联调验证手册（AI/测试端可直接照做）
 
 前置：Broker 已启动；`freepark/freepark` 可登录。
 
@@ -490,33 +571,50 @@ docker exec freepark-mosquitto mosquitto_sub -t "parking/report/#" -u freepark -
 ```
 验证：日志出现 `已上报停车流水并清除待同步标记`；云端侧应能在 `parking_session` 查到该流水（`edge_node_code`/`edge_session_id` 有值）。
 
-4) **链路不生效的常规排查**：确认 `mode=EDGE`、`mqttHost/mqttPort`、`nodeCode`、`configSyncTopicPrefix`/`reportTopicPrefix` 已保存（GET node-settings）；Broker 日志看客户端是否成功登录（`allow_anonymous false` 下凭据错误会连接失败）；确认心跳/订阅/上报的 clientId 未与其它客户端冲突。
+4) **模拟云端缴费开闸**（节点 `node-001`、前缀 `parking/command`；先在该节点对某车牌做一次欠费拦截，再发）：
+```
+docker exec freepark-mosquitto mosquitto_pub -t "parking/command/node-001" -u freepark -P freepark \
+  -m '{"schema":"edge.gate.command/1","edgeCode":"node-001","commandId":"test-open-1","command":"OPEN","reason":"PAYMENT","plate":"浙B12345","plateColor":"BLUE","lotCode":"P001","issuedAt":"2026-09-12T12:00:00Z"}'
+```
+验证：local_server 日志出现 `缴费开闸完成` 或 `已下发`/`推送了开闸指令`；道闸应抬杆。若日志为 `未找到闸前拦截记录`，说明该车牌 20 分钟内没有 `fee_pending` 拦截。
+
+5) **模拟云端下发停车流水**（节点 `node-001`、车场 `P001` 须已存在于本地）：
+```
+docker exec freepark-mosquitto mosquitto_pub -t "parking/command/node-001" -u freepark -P freepark \
+  -m '{"schema":"edge.parking.session/1","origin":"CLOUD","edgeCode":"node-001","cloudId":1001,"cloudRevision":1,"lotCode":"P001","plateNumber":"浙B12345","plateColor":"BLUE","status":"OPEN","entryTime":"2026-09-12T01:00:00Z","issuedAt":"2026-09-12T13:00:00Z"}'
+```
+验证：local_server 日志出现 `已应用云端停车流水`；本地 `parking_session` 出现对应车牌且 `sync_pending` 为 false。
+
+6) **链路不生效的常规排查**：确认 `mode=EDGE`、`mqttHost/mqttPort`、`nodeCode`、`configSyncTopicPrefix`/`reportTopicPrefix`/`commandTopicPrefix` 已保存（GET node-settings）；Broker 日志看客户端是否成功登录（`allow_anonymous false` 下凭据错误会连接失败）；确认心跳/订阅/上报/开闸的 clientId 未与其它客户端冲突。
 
 ---
 
-## 12. 关键约束清单（实现/模拟对端前必读）
+## 13. 关键约束清单（实现/模拟对端前必读）
 
-1. **方向别搞反**：local_server 心跳是"发"，配置同步是"收"，停车流水上报也是"发"；云端只做反方向（心跳收、配置发、流水收）。
+1. **方向别搞反**：local_server 心跳是"发"，配置同步是"收"，停车流水上报是"发"、云端改流水是"收"，开闸指令是"收"；云端做反方向（心跳收、配置发、流水收+下发、开闸发）。
 2. **配置同步帧必须按批次整批到达**：seq 1..total、同一 snapshotId；边缘收到不完整批次会静默等下一轮，10 分钟后丢弃。想单独验证一条 delta：`total=1`。
 3. **`edgeCode` 必须等于订阅主题末段的 nodeCode**，否则丢弃。
 4. **零字节 retained 清理消息要忽略**（订阅/重连时会回放）。
-5. **cleanSession=true**：断线重连后边缘会重新 SUBSCRIBE（无需云端重发 retain），但任何"离线期间发给订阅端"的消息都会丢——云端模型里配置靠"恢复后补全量"来兜底，而非 QoS1 离线队列。
-6. **同 Broker 下 heartbeat / config-sync / parking-report 是三个不同 clientId**，模拟对端时别复用 `freepark-local-edge` / `freepark-local-edge-cfg` / `freepark-local-edge-rec`。
+5. **cleanSession=true**：断线重连后边缘会重新 SUBSCRIBE（无需云端重发 retain），但任何"离线期间发给订阅端"的消息都会丢——云端模型里配置靠"恢复后补全量"来兜底，开闸指令离线会丢，车辆再次识别时若已缴清会按正常放行开闸。
+6. **同 Broker 下 heartbeat / config-sync / parking-report / gate-command 是四个不同 clientId**，模拟对端时别复用 `freepark-local-edge` / `freepark-local-edge-cfg` / `freepark-local-edge-rec` / `freepark-local-edge-cmd`。
 7. **业务时间字段无时区后缀**（协议二），按边缘本地时区解释；`generatedAt`/`reportedAt` 与协议三流水时间是带 `Z` 的 ISO-8601（UTC）。
 8. **`nodeCode` 字符集** `[A-Za-z0-9_-]`、≤64；含 `/`、通配符、空白的配置会被拒绝（REST 返回校验错误）。
 9. 心跳 topic 前缀默认 `parking/heartbeat`（含 `heartbeat` 段），云端订阅面是 `parking/heartbeat/#`；改动前缀需云端订阅面同步改。
 10. `configSyncTopicPrefix` 留空 = 完全不订阅配置同步（用于纯心跳节点）。
-11. `reportTopicPrefix` 留空 = 不上报停车流水；上报链路是"本地事务置待同步 + 周期补推 + QoS 1"，边缘在 PUBACK 后即清待同步标记，**云端必须按 `edgeCode+sessionId` 幂等 upsert**，并接受重复/乱序快照覆盖。
+11. `reportTopicPrefix` 留空 = 不上报停车流水；上报链路是"本地事务置待同步 + 周期补推 + QoS 1"，边缘在 PUBACK 后即清待同步标记，**云端必须按 `cloudId` 优先、否则 `edgeCode+sessionId` 幂等 upsert**，并接受重复/乱序快照覆盖；过期 `cloudRevision` 必须丢弃。
+12. 指令前缀默认 `parking/command`，须与云端「开闸指令发布主题前缀」一致（开闸与流水下发共用）；闸前拦截登记有效期 20 分钟。云端下发流水须带 `origin=CLOUD`。
 
 ---
 
-## 13. 相关代码位置（便于溯源）
+## 14. 相关代码位置（便于溯源）
 
 | 关注点 | 文件 |
 |---|---|
 | 心跳发布（edge→cloud） | `local_server/…/edge/service/EdgeHeartbeatReporter.java` |
 | 停车流水上报（edge→cloud） | `local_server/…/edge/service/ParkingSessionSyncReporter.java`；云端接收 `freepark-cloud-simple-backend/…/parking/edge/EdgeParkingSessionReceiver.java` |
+| 停车流水下发（cloud→edge） | 云端 `…/parking/edge/EdgeSessionPushPublisher.java`；边缘 `CloudGateCommandSubscriber.java`、`CloudSessionApplyService.java` |
 | 配置同步订阅/帧聚合（cloud→edge） | `local_server/…/configsync/CloudConfigSyncSubscriber.java` |
+| 缴费开闸订阅/执行（cloud→edge） | `local_server/…/edge/service/CloudGateCommandSubscriber.java`、`CloudGateCommandHandler.java`；云端发布 `freepark-cloud-simple-backend/…/parking/edge/EdgeGateCommandPublisher.java` |
 | 配置同步应用（full/delta → 各域落库） | `local_server/…/configsync/ConfigSyncApplyService.java` |
 | 节点设置实体/默认值 | `local_server/…/domain/NodeSettings.java` |
 | 节点设置 REST/服务 | `local_server/…/nodeconfig/controller/NodeConfigController.java`、`…/service/NodeConfigService.java` |

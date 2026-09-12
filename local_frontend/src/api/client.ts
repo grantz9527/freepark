@@ -1558,6 +1558,9 @@ export interface NodeSettingsView {
   mqttUsername: string
   mqttPasswordSet: boolean
   mqttTopicPrefix: string
+  configSyncTopicPrefix?: string | null
+  reportTopicPrefix?: string | null
+  commandTopicPrefix?: string | null
   nodeCode: string
   feeApiUrl: string
   feeMockEnabled: boolean
@@ -1599,6 +1602,7 @@ export function updateNodeSettings(
 
 export interface FeeQuoteView {
   amount: number
+  elapsedMs: number
 }
 
 export function quoteFee(

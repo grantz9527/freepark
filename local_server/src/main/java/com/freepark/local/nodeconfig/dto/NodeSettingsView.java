@@ -15,6 +15,7 @@ public record NodeSettingsView(
         String mqttTopicPrefix,
         String configSyncTopicPrefix,
         String reportTopicPrefix,
+        String commandTopicPrefix,
         String nodeCode,
         String feeApiUrl,
         boolean feeMockEnabled,

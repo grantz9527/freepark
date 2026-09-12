@@ -105,7 +105,7 @@ const feeDocZh: FeeDoc = {
     '响应格式：顶层 amount 为标准格式；也兼容响应体直接为金额数字，例如 12.5。',
     '超时：连接超时 5 秒、请求超时 10 秒，超时按算费失败处理。',
     '失败：非 2xx 状态码、缺少 amount 或金额无法解析，均提示「算费请求失败」。',
-    '页面「算费」试算会先经本机 /api/v1/node-settings/fee-quote 转发到该地址，契约与上述一致。',
+    '页面「算费」试算走本机 /api/v1/node-settings/fee-quote，成功时额外返回 elapsedMs（毫秒），表示本机调用该接口的耗时。',
     '启用「模拟金额」后不再请求该地址，直接返回设置的固定金额。',
   ],
 }
@@ -161,7 +161,7 @@ const feeDocEn: FeeDoc = {
     'Response format: top-level amount is the standard shape; a bare number body such as 12.5 is also accepted.',
     'Timeouts: connect 5s, request 10s. A timeout is treated as a failed quote.',
     'Failures: non-2xx status, missing amount, or an unparsable amount all report “Fee request failed”.',
-    'The “Quote” tester goes through the local proxy /api/v1/node-settings/fee-quote first, with the same contract.',
+    'The “Quote” tester goes through the local proxy /api/v1/node-settings/fee-quote and also returns elapsedMs (milliseconds) for the local call.',
     'When “Mock amount” is enabled, no request is sent and the configured fixed amount is returned.',
   ],
 }
@@ -187,16 +187,16 @@ const mqttDocZh: MqttDocBlock[] = [
   {
     type: 'overview',
     title: '对接说明',
-    text: '模式为「云端直连(EDGE)」时，本机以三个独立 MQTT 客户端连接上方配置的云端 Broker：心跳上报、配置同步订阅、停车流水上报。保存后每 10 秒自动自检一次，连接参数变化会自动断旧连新，无需重启进程。',
+    text: '模式为「云端直连(EDGE)」时，本机以四个独立 MQTT 客户端连接上方配置的云端 Broker：心跳上报、配置同步订阅、停车流水上报、指令订阅（缴费开闸 + 云端改流水下发）。保存后每 10 秒自动自检一次，连接参数变化会自动断旧连新，无需重启进程。',
   },
   {
     type: 'table',
     title: '连接参数（页面字段 → MQTT 客户端）',
     header: ['页面字段', '作用'],
     rows: [
-      [{ code: 'mqttHost' }, { code: 'mqttPort' }, '云端 Broker 主机与端口（端口默认 1883），三条链路共用。'],
+      [{ code: 'mqttHost' }, { code: 'mqttPort' }, '云端 Broker 主机与端口（端口默认 1883），四条链路共用。'],
       [{ code: 'mqttUsername' }, { code: 'mqttPassword' }, 'Broker 登录账号；留空则按 Broker 的匿名/访问策略。'],
-      [{ code: 'mqttClientId' }, '心跳客户端 clientId（默认 freepark-local-edge）；配置同步 / 停车流水上报分别追加后缀 -cfg / -rec。'],
+      [{ code: 'mqttClientId' }, '心跳客户端 clientId（默认 freepark-local-edge）；配置同步 / 停车流水上报 / 开闸指令分别追加后缀 -cfg / -rec / -cmd。'],
       [{ code: 'nodeCode' }, '节点编号，用作心跳主题末段；仅允许字母、数字、_ 与 -，长度 ≤ 64。'],
     ],
   },
@@ -223,6 +223,12 @@ const mqttDocZh: MqttDocBlock[] = [
         { code: 'parking/report/{nodeCode}' },
         'edge.parking.session/1 · QoS 1 · 有变更后每 10 秒补推（每轮最多 200 条）',
       ],
+      [
+        '指令订阅',
+        'cloud → edge',
+        { code: 'parking/command/{nodeCode}' },
+        'edge.gate.command/1 开闸；edge.parking.session/1（origin=CLOUD）同步云端流水',
+      ],
     ],
   },
   {
@@ -241,9 +247,9 @@ const mqttDocZh: MqttDocBlock[] = [
     items: [
       '主题与订阅：心跳固定发布到 parking/heartbeat/{nodeCode}，云端用 parking/heartbeat/# 订阅即可收到全部节点；停车流水默认上报到 parking/report/{nodeCode}（云端订阅 parking/report/#）；报文内 edgeCode 必须与主题末段 nodeCode 一致，否则云端丢弃。',
       '连接约定：cleanSession=true、自动重连，断线重连后会自动重新订阅；Broker 不保留离线消息，云端以“恢复后补全量”兜底。',
-      '停车流水按 edgeCode + sessionId 幂等 upsert，云端可容忍重复/乱序快照覆盖；本地在 Broker PUBACK 后即清除待同步标记。',
+      '停车流水按 cloudId 优先、否则 edgeCode + sessionId 幂等 upsert；云端改流水后会向同一指令主题下发 origin=CLOUD 快照，本地应用后清待同步标记。过期 cloudRevision 会被丢弃。',
       '注意：本页保存为整表覆盖，config-sync 前缀不在本页表单中，未提供即按“不订阅云端配置同步”保存；如需要请通过 REST /api/v1/node-settings 传入 configSyncTopicPrefix。',
-      '三个客户端使用不同 clientId（{mqttClientId}、{mqttClientId}-cfg、{mqttClientId}-rec），请勿与同 Broker 下其它客户端冲突，否则会互踢。',
+      '四个客户端使用不同 clientId（{mqttClientId}、{mqttClientId}-cfg、{mqttClientId}-rec、{mqttClientId}-cmd），请勿与同 Broker 下其它客户端冲突，否则会互踢。',
       '完整协议字段与 full / delta 帧格式详见本机源码仓库 docs/mqtt-integration.md。',
     ],
   },
@@ -253,7 +259,7 @@ const mqttDocEn: MqttDocBlock[] = [
   {
     type: 'overview',
     title: 'Overview',
-    text: 'In “Cloud direct (EDGE)” mode this node connects to the configured cloud MQTT broker with three independent MQTT clients: heartbeat reporting, config-sync subscription, and parking-session reporting. Settings are self-checked every 10 s; changed parameters reconnect automatically without a restart.',
+    text: 'In “Cloud direct (EDGE)” mode this node connects to the configured cloud MQTT broker with four independent MQTT clients: heartbeat reporting, config-sync subscription, parking-session reporting, and command subscription (payment gate-open plus cloud session snapshots). Settings are self-checked every 10 s; changed parameters reconnect automatically without a restart.',
   },
   {
     type: 'table',
@@ -263,7 +269,7 @@ const mqttDocEn: MqttDocBlock[] = [
       [
         { code: 'mqttHost' },
         { code: 'mqttPort' },
-        'Cloud broker host and port (port defaults to 1883), shared by all three links.',
+        'Cloud broker host and port (port defaults to 1883), shared by all four links.',
       ],
       [
         { code: 'mqttUsername' },
@@ -272,7 +278,7 @@ const mqttDocEn: MqttDocBlock[] = [
       ],
       [
         { code: 'mqttClientId' },
-        'clientId of the heartbeat client (default freepark-local-edge); the config-sync / report clients append -cfg / -rec.',
+        'clientId of the heartbeat client (default freepark-local-edge); the config-sync / report / gate-command clients append -cfg / -rec / -cmd.',
       ],
       [
         { code: 'nodeCode' },
@@ -303,6 +309,12 @@ const mqttDocEn: MqttDocBlock[] = [
         { code: 'parking/report/{nodeCode}' },
         'edge.parking.session/1 · QoS 1 · retries pending sessions every 10 s (max 200 per round)',
       ],
+      [
+        'Commands',
+        'cloud → edge',
+        { code: 'parking/command/{nodeCode}' },
+        'edge.gate.command/1 gate-open; edge.parking.session/1 (origin=CLOUD) cloud session snapshot',
+      ],
     ],
   },
   {
@@ -321,9 +333,9 @@ const mqttDocEn: MqttDocBlock[] = [
     items: [
       'Topics & subscriptions: heartbeats are published to parking/heartbeat/{nodeCode} — subscribe with parking/heartbeat/# to receive all nodes; parking sessions go to parking/report/{nodeCode} by default (subscribe parking/report/#). edgeCode inside a payload must equal the last topic segment or the message is dropped.',
       'Connection: cleanSession=true with auto-reconnect; subscriptions are restored after reconnect. The broker keeps no offline queue — the cloud compensates with a full resync after a node comes back online.',
-      'Parking sessions are upserted idempotently by edgeCode + sessionId; repeated/out-of-order snapshots are tolerated. The edge clears the pending flag only after broker PUBACK.',
+      'Parking sessions are upserted by cloudId first, otherwise edgeCode + sessionId. Cloud writes are pushed on the same command topic with origin=CLOUD; the edge clears the pending flag after applying. Stale cloudRevision snapshots are dropped.',
       'Note: saving this page overwrites the whole settings row. The config-sync prefix is not on this form, so an omitted value disables cloud config sync; pass configSyncTopicPrefix via REST /api/v1/node-settings to enable it.',
-      'Three clients use distinct clientIds ({mqttClientId}, {mqttClientId}-cfg, {mqttClientId}-rec); never reuse them elsewhere on the same broker to avoid kicking each other off.',
+      'Four clients use distinct clientIds ({mqttClientId}, {mqttClientId}-cfg, {mqttClientId}-rec, {mqttClientId}-cmd); never reuse them elsewhere on the same broker to avoid kicking each other off.',
       'Full protocol fields and full/delta frame format: see docs/mqtt-integration.md in the local_server source repo.',
     ],
   },
@@ -463,7 +475,10 @@ async function onQuote(): Promise<void> {
       { plateNumber: quotePlate.value.trim(), plateColor: quoteColor.value.trim() },
       locale.value,
     )
-    quoteMessage.value = t('nodeConfig.feeQuoteResult', { amount: response.data.amount })
+    quoteMessage.value = t('nodeConfig.feeQuoteResult', {
+      amount: response.data.amount,
+      elapsedMs: response.data.elapsedMs ?? 0,
+    })
   } catch (error) {
     quoteError.value = true
     quoteMessage.value = error instanceof ApiError ? error.message : t('nodeConfig.feeQuoteFailed')

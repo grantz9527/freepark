@@ -4,18 +4,19 @@
 > Audience: developers who want to connect `local_server` to their own cloud MQTT broker, or who want to drive / test the chain with a simulated peer (including an AI agent).
 > Every topic, payload field, timing rule and limitation below is taken directly from the implementation. Treat this document as the source of truth for field names and enum values (JSON fields not listed here are ignored by the edge).
 >
-> **Scope**: this document only covers the MQTT integration between `local_server` (the edge node) and the cloud (heartbeat reporting `edge.heartbeat/1`, config-sync dispatch `edge.config.sync/3`, and parking-session reporting `edge.parking.session/1`). Local internal links — AI recognition events, device/barrier HTTP, etc. — are out of scope.
+> **Scope**: this document only covers the MQTT integration between `local_server` (the edge node) and the cloud (heartbeat reporting `edge.heartbeat/1`, config-sync dispatch `edge.config.sync/3`, parking-session report/dispatch `edge.parking.session/1`, and gate-open command `edge.gate.command/1`). Local internal links — AI recognition events, device/barrier HTTP, etc. — are out of scope.
 
 ---
 
 ## 1. TL;DR
 
-- In **EDGE mode**, `local_server` connects to the "cloud broker" with **three independent MQTT clients**:
+- In **EDGE mode**, `local_server` connects to the "cloud broker" with **four independent MQTT clients**:
   - **Heartbeat (publisher)**: clientId = `{mqttClientId}` (default `freepark-local-edge`). Every 10 seconds it publishes `edge.heartbeat/1` to `{mqttTopicPrefix}/{nodeCode}` (default topic `parking/heartbeat/{nodeCode}`), QoS 1, not retained.
   - **Config-sync (subscriber)**: clientId = `{mqttClientId}-cfg` (default `freepark-local-edge-cfg`). It subscribes to `{configSyncTopicPrefix}/{nodeCode}` to receive `edge.config.sync/3` full/delta framed snapshots, QoS 1.
   - **Parking-session (publisher)**: clientId = `{mqttClientId}-rec` (default `freepark-local-edge-rec`). Every 10 seconds it publishes full snapshots of pending parking sessions `edge.parking.session/1` to `{reportTopicPrefix}/{nodeCode}` (default topic `parking/report/{nodeCode}`), QoS 1, not retained, see §10 Protocol 3.
-- **This document only describes the MQTT integration between the edge node (`local_server`) and the cloud** (heartbeat reporting + config-sync dispatch + parking-session reporting). Local internal links (AI recognition events, device/barrier HTTP, etc.) are out of scope.
-- All three clients use Eclipse Paho v1.2.5 with: `cleanSession=true`, `automaticReconnect=true`, `connectionTimeout=8s`, `keepAliveInterval=30s`.
+  - **Command (subscriber)**: clientId = `{mqttClientId}-cmd` (default `freepark-local-edge-cmd`). It subscribes to `{commandTopicPrefix}/{nodeCode}` (default `parking/command/{nodeCode}`) to receive payment gate-open `edge.gate.command/1` (§11) and cloud session snapshots `edge.parking.session/1` with origin=`CLOUD` (§10.1), QoS 1.
+- **This document only describes the MQTT integration between the edge node (`local_server`) and the cloud** (heartbeat reporting + config-sync dispatch + parking-session reporting + payment gate-open). Local internal links (AI recognition events, device/barrier HTTP, etc.) are out of scope.
+- All four clients use Eclipse Paho v1.2.5 with: `cleanSession=true`, `automaticReconnect=true`, `connectionTimeout=8s`, `keepAliveInterval=30s`.
 - All MQTT settings are persisted at runtime into the MySQL singleton row (`node_settings`, `id='default'`). **There are no environment variables for MQTT.**
 
 ---
@@ -39,31 +40,39 @@
              │   Cloud backend    │
              │ (heartbeat monitor │
              │  + config dispatch │
-             │  + session ingest) │
+             │  + session ingest/push │
+             │  + payment gate-open) │
              └─────────▲──────────┘
                        │
                        │ ① heartbeat edge.heartbeat/1 (QoS 1, edge publishes every 10s)
                        │    topic parking/heartbeat/{nodeCode}
                        │ ② config sync edge.config.sync/3 (QoS 1, cloud publishes, edge subscribes)
                        │    topic {configSyncTopicPrefix}/{nodeCode} (full/delta frames)
-                       │ ③ parking session edge.parking.session/1 (QoS 1, edge periodic backfill)
+                       │ ③ parking session report edge.parking.session/1 (QoS 1, edge periodic backfill)
                        │    topic parking/report/{nodeCode} (drains pending rows every 10s)
+                       │ ④ gate command edge.gate.command/1 (QoS 1, cloud publishes after payment)
+                       │    topic parking/command/{nodeCode}
+                       │ ⑤ cloud session push edge.parking.session/1 origin=CLOUD (QoS 1)
+                       │    topic parking/command/{nodeCode} (same subscribe as ④)
                        │
              ┌─────────┴──────────┐
              │  local_server (EDGE)│
              │  ├ EdgeHeartbeatReporter (sends ①)
              │  ├ CloudConfigSyncSubscriber (receives ②)
-             │  └ ParkingSessionSyncReporter (sends ③)
+             │  ├ ParkingSessionSyncReporter (sends ③)
+             │  └ CloudGateCommandSubscriber (receives ④⑤)
              └────────────────────┘
 ```
 
-Three MQTT data flows (directions are relative to `local_server`):
+Four MQTT data flows (directions are relative to `local_server`):
 
 1. **edge → cloud (heartbeat)**: proves the node is online; the cloud uses it to decide whether the node (and the lots it manages) is online/offline.
 2. **cloud → edge (config sync)**: lot configuration (lot, lanes, blacklist, whitelist, plate patterns, internal vehicles, spaces) is pushed by the cloud and applied locally.
 3. **edge → cloud (parking-session report)**: entry/exit/void session changes are flagged "pending" in the local transaction; the reporter periodically backfills a full snapshot and the cloud idempotently upserts it into `parking_session`.
+4. **cloud → edge (payment gate-open)**: after an arrears intercept at the barrier, a successful cloud payment publishes `OPEN` to the lot's bound node; the edge matches the waiting intercept and opens the gate.
+5. **cloud → edge (parking-session dispatch)**: after the admin creates/updates/voids/recalculates a session or a payment/refund is applied, the cloud pushes a full snapshot to the lot's bound node; the edge upserts by `sessionId` or `cloudId` and clears the pending flag so a stale uplink cannot overwrite the cloud write.
 
-All three links use **the same cloud broker**: `local_server` stores a single "cloud broker" address; the three clients use different clientIds (see §6) so they do not kick each other.
+All four clients use **the same cloud broker**: `local_server` stores a single "cloud broker" address; the four clients use different clientIds (see §6) so they do not kick each other.
 
 ---
 
@@ -105,6 +114,7 @@ Request body fields (`mode` required; in EDGE mode `mqttHost` and `nodeCode` are
 | `mqttTopicPrefix` | string | no | Heartbeat topic prefix, default `parking/heartbeat` (trailing `/` stripped on save). Heartbeat topic = `{prefix}/{nodeCode}`, so the prefix must contain a `heartbeat` segment to match the cloud subscription `{prefix}/#` |
 | `configSyncTopicPrefix` | string | no | Config-sync subscription prefix; **empty = do not subscribe to config sync**. When non-empty the subscribed topic is `{prefix}/{nodeCode}` |
 | `reportTopicPrefix` | string | no | Parking-session report topic prefix, default `parking/report` (trailing `/` stripped on save). Report topic = `{prefix}/{nodeCode}`, so the prefix must contain a `report` segment to match the cloud subscription `{prefix}/#`; **empty = do not report sessions** |
+| `commandTopicPrefix` | string | no | Command subscribe prefix (gate-open + cloud session push share it), default `parking/command`. Subscribe topic = `{prefix}/{nodeCode}`; omitted on save keeps the existing value (falls back to the default if never set) |
 | `nodeCode` | string | required in EDGE | Cloud node code; only `[A-Za-z0-9_-]`, ≤64 |
 | `feeApiUrl` / `feeMockEnabled` / `feeMockAmount` | - | no | Fee-quote feature, unrelated to MQTT |
 
@@ -128,6 +138,7 @@ curl -X PUT http://localhost:8081/api/v1/node-settings \
   "mqttTopicPrefix": "parking/heartbeat",
   "configSyncTopicPrefix": "parking/config-sync",
   "reportTopicPrefix": "parking/report",
+  "commandTopicPrefix": "parking/command",
   "nodeCode": "node-001"
 }
 ```
@@ -140,7 +151,7 @@ Changes take effect without restart: `EdgeHeartbeatReporter` / `CloudConfigSyncS
 
 ## 6. Client Connection Contract (must-read for implementers)
 
-All three clients share the same Paho behaviour. A simulating/self-built peer must understand:
+All four clients share the same Paho behaviour. A simulating/self-built peer must understand:
 
 | Item | Value | Impact |
 |---|---|---|
@@ -157,6 +168,7 @@ ClientId rules (must not collide on the same broker, otherwise clients kick each
 | Heartbeat | `{mqttClientId}` (default `freepark-local-edge`) | PUBLISH only, no callback |
 | Config sync | `{mqttClientId}-cfg` (default `freepark-local-edge-cfg`) | SUBSCRIBE only |
 | Parking-session report | `{mqttClientId}-rec` (default `freepark-local-edge-rec`) | PUBLISH only, no callback |
+| Commands (gate-open + session push) | `{mqttClientId}-cmd` (default `freepark-local-edge-cmd`) | SUBSCRIBE only |
 
 ---
 
@@ -167,6 +179,7 @@ ClientId rules (must not collide on the same broker, otherwise clients kick each
 | `{mqttTopicPrefix}/{nodeCode}` (default `parking/heartbeat/{nodeCode}`) | out (edge→cloud) | `edge.heartbeat/1` | 1 | no | one heartbeat every 10s |
 | `{reportTopicPrefix}/{nodeCode}` (default `parking/report/{nodeCode}`) | out (edge→cloud) | `edge.parking.session/1` | 1 | no | full snapshot backfill after session changes, see §10 |
 | `{configSyncTopicPrefix}/{nodeCode}` (e.g. `parking/config-sync/{nodeCode}`) | in (cloud→edge) | `edge.config.sync/3` (full/delta frames) | 1 | frames not retained | before every full push the cloud first sends a zero-byte retained clear message |
+| `{commandTopicPrefix}/{nodeCode}` (default `parking/command/{nodeCode}`) | in (cloud→edge) | `edge.gate.command/1` or `edge.parking.session/1` (origin=`CLOUD`) | 1 | no | payment gate-open §11; cloud session push §10.1 |
 
 Within frames, `edgeCode` must equal the `nodeCode` in the last topic segment, otherwise the frame is dropped.
 
@@ -444,6 +457,8 @@ Implementation: `ParkingSessionSyncReporter` (`src/main/java/com/freepark/local/
 | `schema` | string | yes | always `edge.parking.session/1` |
 | `edgeCode` | string | yes | node code; **must equal the last topic segment**, otherwise the cloud drops it |
 | `sessionId` | string | yes | edge-local session UUID text; with `edgeCode` it forms the cloud idempotency key |
+| `cloudId` | number | no | echo the bound cloud PK so the cloud can hit the same row |
+| `cloudRevision` | number | no | last applied cloud write revision; the cloud drops the snapshot if its stored revision is higher |
 | `lotCode` | string | yes | lot code (the local session's linked lot `code`) |
 | `lotName` | string | no | lot name (omitted when empty) |
 | `plateNumber` | string | yes | plate number |
@@ -463,13 +478,56 @@ Example (a closed full snapshot):
 **Peer (cloud-side) contract**:
 1. Subscribe to `{reportTopicPrefix}/#` (default `parking/report/#`); on arrival verify `schema=edge.parking.session/1` and that the payload `edgeCode` equals the node code in the last topic segment, otherwise ignore.
 2. Locate the cloud lot by `lotCode`; the lot must be bound to that node, otherwise drop (prevents cross-node contamination).
-3. Upsert by the idempotency key `edgeCode + sessionId`: insert if missing, otherwise overwrite entirely with the snapshot's latest state (`CLOSED` without a payment record defaults to `UNPAID`; `VOIDED` clears pay status/time).
+3. Match by `cloudId` first, otherwise upsert by `edgeCode + sessionId`: insert if missing, otherwise overwrite entirely with the snapshot's latest state (`CLOSED` without a payment record defaults to `UNPAID`; `VOIDED` clears pay status/time). If the cloud already stores a higher `cloudRevision`: drop a stale still-open snapshot; if the edge lifecycle has moved forward (open → closed/voided), still merge the exit/void and keep cloud-edited plate/entry fields.
 4. Edge times are ISO-8601 UTC (with `Z`) and stored as UTC on the cloud. The v1 payload carries **no images** and no lane/recognition internal IDs (the cloud has no matching PKs; only name snapshots are stored).
 5. Reliability boundary: the edge clears its pending flag as soon as the broker PUBACKs; a cloud DB failure is only recovered via logs/ops — there is no end-to-end retry.
 
+### 10.1 Cloud parking-session dispatch `edge.parking.session/1` (cloud → edge, origin=`CLOUD`)
+
+Implementation: cloud `EdgeSessionPushPublisher`; edge `CloudGateCommandSubscriber` + `CloudSessionApplyService`.
+
+- Purpose: after the cloud admin creates/updates (including close)/voids/recalculates a session, or a payment/refund is applied, push a full snapshot to the lot's bound edge node so local OPEN/CLOSED/VOIDED, plate and times stay aligned.
+- Topic: same as the gate command, `{commandTopicPrefix}/{nodeCode}` (default `parking/command/{nodeCode}`), QoS 1, not retained.
+- Trigger: each cloud write increments `cloudRevision` and publishes after commit. Lots without `edgeNodeCode`, or MQTT not connected, are skipped.
+- Edge match: look up by payload `sessionId` (local UUID), else by `cloudId`; create a local row if neither hits. Applied rows set `sync_pending=false` so they are not immediately bounced back. If the local row is already closed/voided while the cloud snapshot is still open, keep the local close, leave pending, and backfill the exit with the new revision. Ignore if the local `cloudRevision` is already higher.
+- Voiding: when status becomes `VOIDED`, linked entry/exit recognition records are marked voided (same as a local void). Local sessions have no fee fields; amount fields in the JSON may be ignored.
+- `cleanSession=true`: a push while the node is offline is lost; the next cloud write, or a later local change that uplinks `cloudId`/`cloudRevision`, recovers.
+
+Extra fields on top of Protocol 3:
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `origin` | string | yes | always `CLOUD`; missing/other values are dropped |
+| `cloudId` | number | yes | cloud `parking_session` PK |
+| `cloudRevision` | number | yes | this cloud write revision |
+| `sessionId` | string | no | included when the edge UUID is known; cloud-created sessions may omit it |
+| `issuedAt` | string | no | ISO-8601 UTC |
+
+Example:
+
+```json
+{"schema":"edge.parking.session/1","origin":"CLOUD","edgeCode":"node-001","cloudId":1001,"cloudRevision":3,"sessionId":"c9a0f7a1-…","lotCode":"P001","lotName":"Demo Lot","plateNumber":"浙B12345","plateColor":"BLUE","status":"VOIDED","entryTime":"2026-09-08T01:00:00Z","issuedAt":"2026-09-12T13:00:00Z"}
+```
+
 ---
 
-## 11. Integration Verification Handbook (executable by AI / testers)
+## 11. Protocol 4: Gate command `edge.gate.command/1` (cloud → edge)
+
+Implementation: `CloudGateCommandSubscriber`, `CloudGateCommandHandler`, `PendingGateOpenService` (`src/main/java/com/freepark/local/edge/service/`).
+
+After an arrears intercept at the barrier, a successful cloud payment (after commit) publishes `OPEN` to `{commandTopicPrefix}/{nodeCode}` (default `parking/command/{nodeCode}`), QoS 1, not retained. The edge matches the 20-minute in-memory intercept (or a recent `fee_pending` recognition record) and opens the barrier via HTTP, falling back to an `OPEN` poll queue.
+
+Example:
+
+```json
+{"schema":"edge.gate.command/1","edgeCode":"node-001","commandId":"7c2e…","command":"OPEN","reason":"PAYMENT","plate":"浙B12345","plateColor":"BLUE","lotCode":"P001","payNo":"PY202609121200000011234","issuedAt":"2026-09-12T12:00:01.000Z"}
+```
+
+`edgeCode` must equal the last topic segment. Unknown `command` / non-`PAYMENT` `reason` are dropped. If no intercept is found, the edge logs and does not open; a second recognition after payment will pass because arrears are cleared.
+
+---
+
+## 12. Integration Verification Handbook (executable by AI / testers)
 
 Prerequisites: broker up; login `freepark` / `freepark`.
 
@@ -491,13 +549,20 @@ docker exec freepark-mosquitto mosquitto_sub -t "parking/report/#" -u freepark -
 ```
 Verify: the log shows `reported parking session and cleared pending flag`; the cloud `parking_session` table should contain that session (with `edge_node_code`/`edge_session_id` filled).
 
-4) **Common checks when the link does not work**: confirm `mode=EDGE`, `mqttHost/mqttPort`, `nodeCode`, `configSyncTopicPrefix`/`reportTopicPrefix` are saved (GET node-settings); check the broker log to see whether the client authenticated (`allow_anonymous false` rejects wrong credentials); confirm heartbeat/config-sync/report clientIds do not collide with other clients.
+4) **Emulate a cloud session push** (node `node-001`, lot `P001` must already exist locally):
+```
+docker exec freepark-mosquitto mosquitto_pub -t "parking/command/node-001" -u freepark -P freepark \
+  -m '{"schema":"edge.parking.session/1","origin":"CLOUD","edgeCode":"node-001","cloudId":1001,"cloudRevision":1,"lotCode":"P001","plateNumber":"浙B12345","plateColor":"BLUE","status":"OPEN","entryTime":"2026-09-12T01:00:00Z","issuedAt":"2026-09-12T13:00:00Z"}'
+```
+Verify: local_server logs `applied cloud parking session`; the local `parking_session` row exists for that plate with `sync_pending=false`.
+
+5) **Common checks when the link does not work**: confirm `mode=EDGE`, `mqttHost/mqttPort`, `nodeCode`, `configSyncTopicPrefix`/`reportTopicPrefix`/`commandTopicPrefix` are saved (GET node-settings); check the broker log to see whether the client authenticated (`allow_anonymous false` rejects wrong credentials); confirm heartbeat/config-sync/report/command clientIds do not collide with other clients.
 
 ---
 
 ## 12. Critical Constraints Checklist (read before implementing/simulating)
 
-1. **Do not invert the directions**: heartbeats are *published* by local_server; config sync is *subscribed* by local_server; parking sessions are *published* by local_server. The cloud does the opposite (receive heartbeats, send config, receive sessions).
+1. **Do not invert the directions**: heartbeats are *published* by local_server; config sync is *subscribed*; parking sessions are *published* by the edge and *subscribed* when origin=`CLOUD`; gate-open is *subscribed*. The cloud does the opposite (receive heartbeats, send config, receive and dispatch sessions, send gate-open).
 2. **Config-sync batches must arrive whole**: seq 1..total with one snapshotId; the edge silently waits for the next round on incomplete batches and discards them after 10 minutes. To test a single delta use `total=1`.
 3. **`edgeCode` must equal the nodeCode in the last topic segment**, otherwise the frame is dropped.
 4. **Ignore zero-byte retained clear messages** (replayed on subscribe/reconnect).
@@ -507,7 +572,8 @@ Verify: the log shows `reported parking session and cleared pending flag`; the c
 8. **`nodeCode` charset** `[A-Za-z0-9_-]`, ≤64; configs containing `/`, wildcards or whitespace are rejected by REST validation.
 9. Heartbeat topic prefix defaults to `parking/heartbeat` (contains the `heartbeat` segment); the cloud subscription surface is `parking/heartbeat/#`. Changing the prefix requires updating the cloud subscription accordingly.
 10. Leaving `configSyncTopicPrefix` empty = the node never subscribes to config sync (for heartbeat-only nodes).
-11. Leaving `reportTopicPrefix` empty = no parking sessions are reported. The report chain is "flag pending in the local transaction + periodic backfill + QoS 1"; the edge clears the pending flag right after PUBACK, so **the cloud must upsert idempotently by `edgeCode + sessionId`** and tolerate duplicate / out-of-order snapshot overwrites.
+11. Leaving `reportTopicPrefix` empty = no parking sessions are reported. The report chain is "flag pending in the local transaction + periodic backfill + QoS 1"; the edge clears the pending flag right after PUBACK, so **the cloud must upsert by `cloudId` first, otherwise `edgeCode + sessionId`**, and drop snapshots whose `cloudRevision` is stale.
+12. The command prefix defaults to `parking/command` and must match the cloud “gate command publish topic prefix” (gate-open and session push share it). Cloud session pushes must include `origin=CLOUD`.
 
 ---
 
@@ -517,6 +583,7 @@ Verify: the log shows `reported parking session and cleared pending flag`; the c
 |---|---|
 | Heartbeat publisher (edge→cloud) | `local_server/…/edge/service/EdgeHeartbeatReporter.java` |
 | Parking-session publisher (edge→cloud) | `local_server/…/edge/service/ParkingSessionSyncReporter.java`; cloud receiver `freepark-cloud-simple-backend/…/parking/edge/EdgeParkingSessionReceiver.java` |
+| Parking-session dispatch (cloud→edge) | cloud `…/parking/edge/EdgeSessionPushPublisher.java`; edge `CloudGateCommandSubscriber.java`, `CloudSessionApplyService.java` |
 | Config-sync subscriber / frame aggregation (cloud→edge) | `local_server/…/configsync/CloudConfigSyncSubscriber.java` |
 | Config-sync apply (full/delta → all domains) | `local_server/…/configsync/ConfigSyncApplyService.java` |
 | Node-settings entity / defaults | `local_server/…/domain/NodeSettings.java` |
