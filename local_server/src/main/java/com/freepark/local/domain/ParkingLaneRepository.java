@@ -12,6 +12,8 @@ public interface ParkingLaneRepository extends JpaRepository<ParkingLane, UUID> 
 
     boolean existsByCodeIgnoreCase(String code);
 
+    Optional<ParkingLane> findByCodeIgnoreCase(String code);
+
     List<ParkingLane> findAllByOrderByCreatedAtDesc();
 
     List<ParkingLane> findAllByLot_IdOrLinkedLot_IdOrderByCreatedAtDesc(UUID lotId, UUID linkedLotId);

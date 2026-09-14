@@ -123,6 +123,7 @@ public class FrigateEventHandler {
         // 4) 联动通道：先按车场通行判定规则判定放行（入口/出口配置的拦截规则、方向、车道缺失均可判定时）
         AccessDirection accessDirection = toAccessDirection(direction);
         if (accessDirection != null && lane != null && lane.getLot() != null) {
+            clearLanePending(lane);
             AccessDecisionView decision = decideForLane(lane, accessDirection, plate, plateColor);
             if (decision.result() == AccessDecisionView.Result.INTERCEPTED) {
                 log.info(
@@ -201,7 +202,7 @@ public class FrigateEventHandler {
                 : lot.isExitInterceptArrears();
         BigDecimal dueAmount = interceptArrears
                 ? feeQuoteClient.quoteForAccess(
-                        lot.getCode(), plate, plateColor == null ? null : plateColor.name()).orElse(null)
+                        lot.getCode(), plate, plateColor == null ? null : plateColor.name(), lane.getCode()).orElse(null)
                 : null;
         AccessDecisionView decision = accessDecisions.decide(lotId, new AccessDecisionRequest(
                 lane.getId(),
@@ -225,6 +226,16 @@ public class FrigateEventHandler {
             if (barrier.isEnabled()) {
                 pendingGateOpens.remember(barrier.getId(), lotCode, plate, plateColor);
             }
+        }
+    }
+
+    /** 该通道出现新识别：清掉闸前旧等待，避免缴费后误开后车。 */
+    private void clearLanePending(ParkingLane lane) {
+        if (lane == null || lane.getId() == null) {
+            return;
+        }
+        for (ParkingBarrier barrier : barriers.findAllByLaneIdOrderByCreatedAtDesc(lane.getId())) {
+            pendingGateOpens.clear(barrier.getId());
         }
     }
 

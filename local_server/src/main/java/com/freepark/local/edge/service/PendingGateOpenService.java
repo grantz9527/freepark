@@ -27,7 +27,7 @@ public class PendingGateOpenService {
     public static final String FEE_PENDING = "fee_pending";
 
     /** 闸前缴费等待窗口：超时后 MQTT 开闸不再匹配该次拦截。 */
-    static final Duration TTL = Duration.ofMinutes(20);
+    public static final Duration TTL = Duration.ofMinutes(15);
 
     private final ConcurrentMap<UUID, Pending> byDevice = new ConcurrentHashMap<>();
 
@@ -45,6 +45,13 @@ public class PendingGateOpenService {
                 normalizedPlate,
                 plateColor,
                 Instant.now()));
+    }
+
+    /** 该设备出现新识别：清空旧等待，避免误开后车。 */
+    public void clear(UUID deviceId) {
+        if (deviceId != null) {
+            byDevice.remove(deviceId);
+        }
     }
 
     /**

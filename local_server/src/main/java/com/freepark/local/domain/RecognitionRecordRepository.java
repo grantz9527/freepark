@@ -15,6 +15,8 @@ public interface RecognitionRecordRepository
 
     List<RecognitionRecord> findByPlateOrderByCapturedAtDesc(String plate, Pageable pageable);
 
+    List<RecognitionRecord> findByLaneIdOrderByCapturedAtDesc(UUID laneId, Pageable pageable);
+
     List<RecognitionRecord> findByPlateIgnoreCaseAndAbnormalReasonAndCapturedAtGreaterThanEqualOrderByCapturedAtDesc(
             String plate, String abnormalReason, Instant capturedAt, Pageable pageable);
 }

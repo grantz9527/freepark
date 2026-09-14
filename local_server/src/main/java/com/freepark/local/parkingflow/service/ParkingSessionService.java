@@ -6,12 +6,16 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
+import com.freepark.local.domain.LaneType;
+import com.freepark.local.domain.ParkingLane;
 import com.freepark.local.domain.ParkingSession;
 import com.freepark.local.domain.ParkingSessionRepository;
 import com.freepark.local.domain.ParkingSessionStatus;
@@ -27,6 +31,8 @@ import jakarta.persistence.criteria.Predicate;
  */
 @Service
 public class ParkingSessionService {
+
+    private static final Logger log = LoggerFactory.getLogger(ParkingSessionService.class);
 
     private static final int MAX_QUERY_LIMIT = 500;
 
@@ -119,6 +125,41 @@ public class ParkingSessionService {
                 record.getId(),
                 record.getEventImage());
         return ParkingFlowResult.exitMatched(ParkingSessionView.from(sessions.save(session)));
+    }
+
+    /**
+     * 缴费开闸放行后补离场：拦截当时未联动流水，把该通道车场的在场记录关成已出场。
+     * 入口欠费放行不关场。已出场则只补通道信息（幂等）。
+     */
+    @Transactional
+    public void closeOpenOnPaidExit(ParkingLane lane, String plate, RecognitionRecord intercept) {
+        if (lane == null || lane.getLot() == null || plate == null || plate.isBlank()) {
+            return;
+        }
+        if (lane.getLaneType() == LaneType.ENTRANCE) {
+            return;
+        }
+        UUID lotId = lane.getLot().getId();
+        String normalized = plate.trim().toUpperCase();
+        Instant exitTime = Instant.now();
+        List<ParkingSession> opens = sessions.findAllByLotIdAndPlateNumberIgnoreCaseAndStatus(
+                lotId, normalized, ParkingSessionStatus.OPEN);
+        if (opens.isEmpty()) {
+            log.info("缴费离场无需补出场（无在场流水） lot={} plate={} lane={}", lotId, normalized, lane.getCode());
+            return;
+        }
+        UUID recId = intercept == null ? null : intercept.getId();
+        String image = intercept == null ? null : intercept.getEventImage();
+        for (ParkingSession session : opens) {
+            Instant at = exitTime;
+            if (session.getEntryTime() != null && !session.getEntryTime().isBefore(at)) {
+                at = session.getEntryTime().plusSeconds(60);
+            }
+            session.closeWithExit(at, lane.getId(), lane.getName(), recId, image);
+            sessions.save(session);
+            log.info("缴费离场已补出场 localId={} plate={} lot={} lane={}",
+                    session.getId(), normalized, lotId, lane.getCode());
+        }
     }
 
     /**

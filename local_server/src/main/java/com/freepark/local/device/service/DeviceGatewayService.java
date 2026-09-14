@@ -279,6 +279,7 @@ public class DeviceGatewayService {
         }
 
         UUID lotId = device.getLane().getLot().getId();
+        pendingGateOpens.clear(device.getId());
         // 欠费拦截：仅当车场该方向配置了「欠费拦截」才询问算费。
         // 云端离线/超时时 quoteForAccess 立即返回空，欠费拦截不生效，本机其它规则照常放行。
         boolean interceptArrears = direction == AccessDirection.ENTRANCE
@@ -288,7 +289,8 @@ public class DeviceGatewayService {
                 ? feeQuoteClient.quoteForAccess(
                         device.getLane().getLot().getCode(),
                         plate,
-                        record.getPlateColor() == null ? null : record.getPlateColor().name()).orElse(null)
+                        record.getPlateColor() == null ? null : record.getPlateColor().name(),
+                        device.getLane().getCode()).orElse(null)
                 : null;
         AccessDecisionView decision = accessDecisions.decide(lotId, new AccessDecisionRequest(
                 device.getLane().getId(),

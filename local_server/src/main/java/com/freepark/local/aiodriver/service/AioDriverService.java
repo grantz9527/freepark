@@ -151,6 +151,14 @@ public class AioDriverService {
      * @return true 表示已成功向设备下发开闸指令
      */
     public boolean openGateSystem(ParkingBarrier barrier, String source) {
+        return openGateSystem(barrier, source, null, null);
+    }
+
+    /**
+     * 系统内部开闸，并可顺带下发语音/屏显（缴费离场：车牌 + 一路顺风/欢迎光临）。
+     * 开闸成功后播报失败只记日志，不影响开闸结果。
+     */
+    public boolean openGateSystem(ParkingBarrier barrier, String source, String voiceText, String ledText) {
         if (barrier == null || !barrier.isEnabled()) {
             return false;
         }
@@ -169,6 +177,7 @@ public class AioDriverService {
         try {
             ParkingAIODevice device = registry.deviceFor(config);
             device.openGate();
+            announceQuietly(device, voiceText, ledText);
             log.info("推送了开闸指令：code={} brand={} host={}:{}（source={}）",
                     barrier.getCode(), brand, barrier.getHost(), barrier.getPort(), source);
             return true;
@@ -176,6 +185,19 @@ public class AioDriverService {
             log.warn("推送开闸指令失败：code={} brand={} host={}:{}：{}（source={}）",
                     barrier.getCode(), brand, barrier.getHost(), barrier.getPort(), e.getMessage(), source);
             return false;
+        }
+    }
+
+    private void announceQuietly(ParkingAIODevice device, String voiceText, String ledText) {
+        try {
+            if (ledText != null && !ledText.isBlank()) {
+                device.show(DisplayMessage.of(DisplayKind.WELCOME, splitLines(ledText), 0));
+            }
+            if (voiceText != null && !voiceText.isBlank()) {
+                device.speak(VoiceMessage.of(VoiceKind.WELCOME_OUT, VehicleType.TEMPORARY, voiceText));
+            }
+        } catch (RuntimeException ex) {
+            log.warn("开闸后播报失败 device={}：{}", device.deviceKey(), ex.getMessage());
         }
     }
 

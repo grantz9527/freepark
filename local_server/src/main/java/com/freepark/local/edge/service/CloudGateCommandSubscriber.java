@@ -233,7 +233,8 @@ public class CloudGateCommandSubscriber {
             String plate = textOrNull(root.path("plate"));
             String plateColor = textOrNull(root.path("plateColor"));
             String lotCode = textOrNull(root.path("lotCode"));
-            handler.openAfterPayment(plate, plateColor, lotCode, commandId);
+            String laneCode = textOrNull(root.path("laneCode"));
+            handler.openAfterPayment(plate, plateColor, lotCode, laneCode, commandId);
         } catch (Exception ex) {
             throttleError("云端指令负载解析失败：{}", ex.getMessage());
         }

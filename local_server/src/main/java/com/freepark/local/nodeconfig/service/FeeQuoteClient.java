@@ -107,6 +107,14 @@ public class FeeQuoteClient {
      * </ul>
      */
     public Optional<BigDecimal> quoteForAccess(String lotCode, String plateNumber, String plateColor) {
+        return quoteForAccess(lotCode, plateNumber, plateColor, null);
+    }
+
+    /**
+     * 识别放行算费。{@code laneCode} 有值时随请求带给云端，用于记下该通道欠费拦截等待；
+     * 探活/试算不传通道。
+     */
+    public Optional<BigDecimal> quoteForAccess(String lotCode, String plateNumber, String plateColor, String laneCode) {
         NodeSettings settings = settingsRepository.findById(NodeSettings.SINGLETON_ID).orElse(null);
         if (settings != null && settings.isFeeMockEnabled()) {
             BigDecimal mock = settings.getFeeMockAmount();
@@ -126,7 +134,7 @@ public class FeeQuoteClient {
             return Optional.empty();
         }
         try {
-            BigDecimal amount = requestRemote(settings, lotCode, plateNumber, plateColor,
+            BigDecimal amount = requestRemote(settings, lotCode, plateNumber, plateColor, laneCode,
                     accessHttpClient, accessRequestTimeout);
             closeCircuit();
             return Optional.of(amount);
@@ -157,7 +165,7 @@ public class FeeQuoteClient {
         }
         noteRemoteUrl(apiUrl.trim());
         try {
-            BigDecimal amount = requestRemote(settings, lotCode, plateNumber, plateColor, probeHttpClient, timeout);
+            BigDecimal amount = requestRemote(settings, lotCode, plateNumber, plateColor, null, probeHttpClient, timeout);
             closeCircuit();
             log.info("算费探活成功 lot={} plate={} amount={}", lotCode, plateNumber, amount);
         } catch (RuntimeException ex) {
@@ -216,7 +224,7 @@ public class FeeQuoteClient {
             throw new BusinessException(ErrorCode.FEE_API_NOT_CONFIGURED);
         }
         noteRemoteUrl(settings.getFeeApiUrl().trim());
-        return requestRemote(settings, lotCode, plateNumber, plateColor, adminHttpClient, ADMIN_REQUEST_TIMEOUT);
+        return requestRemote(settings, lotCode, plateNumber, plateColor, null, adminHttpClient, ADMIN_REQUEST_TIMEOUT);
     }
 
     private BigDecimal requestRemote(
@@ -224,6 +232,7 @@ public class FeeQuoteClient {
             String lotCode,
             String plateNumber,
             String plateColor,
+            String laneCode,
             HttpClient httpClient,
             Duration requestTimeout) {
         String url = settings.getFeeApiUrl().trim();
@@ -236,8 +245,15 @@ public class FeeQuoteClient {
         if (plateColor != null && !plateColor.isBlank()) {
             body.put("plateColor", plateColor.trim());
         }
+        if (laneCode != null && !laneCode.isBlank()) {
+            body.put("laneCode", laneCode.trim());
+        }
+        String nodeCode = settings.getNodeCode();
+        if (nodeCode != null && !nodeCode.isBlank()) {
+            body.put("edgeCode", nodeCode.trim());
+        }
         String json = jsonMapper.writeValueAsString(body);
-        log.info("算费请求 {} lot={} plate={} color={}", url, lotCode, plateNumber, plateColor);
+        log.info("算费请求 {} lot={} plate={} color={} lane={}", url, lotCode, plateNumber, plateColor, laneCode);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
