@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
@@ -7,9 +7,11 @@ import {
   getSystemSettings,
   testSoftwarePlateRecognize,
   updateSystemSettings,
+  type CloudStorageProvider,
   type PlateColor,
   type SoftwarePlateProvider,
   type SoftwarePlateRecognitionResult,
+  type SystemSettingsView,
   type Yolo26DetectedPlate,
 } from '@/api/client'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
@@ -29,6 +31,68 @@ const timezone = ref('Asia/Shanghai')
 const defaultPlateColor = ref<PlateColor>('BLUE')
 const allowedPlateColors = ref<PlateColor[]>([])
 const imageStoragePath = ref('./data/images')
+const imageStorageEnabled = ref(true)
+
+const cloudProvider = ref<CloudStorageProvider>('ALIYUN_OSS')
+const cloudEnabled = ref(false)
+const cloudOptions: Array<{
+  value: CloudStorageProvider
+  labelKey: string
+  hintKey: string
+}> = [
+  {
+    value: 'ALIYUN_OSS',
+    labelKey: 'systemSettings.cloud.aliyun',
+    hintKey: 'systemSettings.cloud.aliyunHint',
+  },
+  {
+    value: 'HUAWEI_OBS',
+    labelKey: 'systemSettings.cloud.huawei',
+    hintKey: 'systemSettings.cloud.huaweiHint',
+  },
+  {
+    value: 'TENCENT_COS',
+    labelKey: 'systemSettings.cloud.tencent',
+    hintKey: 'systemSettings.cloud.tencentHint',
+  },
+]
+const aliyunOss = ref({
+  endpoint: '',
+  accessKeyId: '',
+  accessKeySecret: '',
+  bucket: '',
+  pathPrefix: '',
+  customDomain: '',
+})
+const huaweiObs = ref({
+  endpoint: '',
+  accessKey: '',
+  secretKey: '',
+  bucket: '',
+  pathPrefix: '',
+  customDomain: '',
+})
+const tencentCos = ref({
+  region: '',
+  secretId: '',
+  secretKey: '',
+  bucket: '',
+  pathPrefix: '',
+  customDomain: '',
+})
+
+const cloudConfigKey = computed(() => {
+  if (cloudProvider.value === 'HUAWEI_OBS') return 'huawei'
+  if (cloudProvider.value === 'TENCENT_COS') return 'tencent'
+  return 'aliyun'
+})
+
+const aliyunSecretSet = ref(false)
+const huaweiSecretSet = ref(false)
+const tencentSecretSet = ref(false)
+
+const cloudFormError = ref('')
+
 const supportedLocales = ref<string[]>([])
 const supportedTimezones = ref<string[]>([])
 const supportedPlateColors = ref<PlateColor[]>([])
@@ -36,9 +100,23 @@ const updatedAt = ref('')
 
 // 软件车牌识别：引擎选择 + 两套独立配置
 const softwarePlateProvider = ref<SoftwarePlateProvider>('YOLO26_PLATE')
-const providerOptions: Array<{ value: SoftwarePlateProvider; labelKey: string }> = [
-  { value: 'YOLO26_PLATE', labelKey: 'systemSettings.softwarePlate.providerYolo26' },
-  { value: 'HYPER_LPR3', labelKey: 'systemSettings.softwarePlate.providerHyperLpr3' },
+const providerOptions: Array<{
+  value: SoftwarePlateProvider
+  labelKey: string
+  hintKey: string
+  recommended?: boolean
+}> = [
+  {
+    value: 'HYPER_LPR3',
+    labelKey: 'systemSettings.softwarePlate.providerHyperLpr3',
+    hintKey: 'systemSettings.softwarePlate.providerHyperLpr3Hint',
+    recommended: true,
+  },
+  {
+    value: 'YOLO26_PLATE',
+    labelKey: 'systemSettings.softwarePlate.providerYolo26',
+    hintKey: 'systemSettings.softwarePlate.providerYolo26Hint',
+  },
 ]
 
 const yolo26Enabled = ref(false)
@@ -71,6 +149,60 @@ const debugVisiblePlates = computed(() => {
 const isCurrentProviderEnabled = computed(() =>
   softwarePlateProvider.value === 'YOLO26_PLATE' ? yolo26Enabled.value : hyperLpr3Enabled.value,
 )
+
+const currentEngineI18nKey = computed(() =>
+  softwarePlateProvider.value === 'HYPER_LPR3'
+    ? 'systemSettings.hyperLpr3'
+    : 'systemSettings.yolo26',
+)
+
+const currentEnabled = computed({
+  get: () => isCurrentProviderEnabled.value,
+  set: (value: boolean) => {
+    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3Enabled.value = value
+    else yolo26Enabled.value = value
+  },
+})
+
+const currentBaseUrl = computed({
+  get: () =>
+    softwarePlateProvider.value === 'HYPER_LPR3' ? hyperLpr3BaseUrl.value : yolo26BaseUrl.value,
+  set: (value: string) => {
+    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3BaseUrl.value = value
+    else yolo26BaseUrl.value = value
+  },
+})
+
+const currentMinConf = computed({
+  get: () =>
+    softwarePlateProvider.value === 'HYPER_LPR3' ? hyperLpr3MinConf.value : yolo26MinConf.value,
+  set: (value: number) => {
+    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3MinConf.value = value
+    else yolo26MinConf.value = value
+  },
+})
+
+const currentConnectMs = computed({
+  get: () =>
+    softwarePlateProvider.value === 'HYPER_LPR3' ? hyperLpr3ConnectMs.value : yolo26ConnectMs.value,
+  set: (value: number) => {
+    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3ConnectMs.value = value
+    else yolo26ConnectMs.value = value
+  },
+})
+
+const currentReadMs = computed({
+  get: () =>
+    softwarePlateProvider.value === 'HYPER_LPR3' ? hyperLpr3ReadMs.value : yolo26ReadMs.value,
+  set: (value: number) => {
+    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3ReadMs.value = value
+    else yolo26ReadMs.value = value
+  },
+})
+
+function engineEnabled(provider: SoftwarePlateProvider): boolean {
+  return provider === 'HYPER_LPR3' ? hyperLpr3Enabled.value : yolo26Enabled.value
+}
 
 const localeOptions = computed(() =>
   supportedLocales.value.map((code) => ({
@@ -144,6 +276,69 @@ function isPlateColorChecked(color: PlateColor): boolean {
   return allowedPlateColors.value.includes(color)
 }
 
+function parseCloudProvider(value: string | null | undefined): CloudStorageProvider {
+  if (value === 'HUAWEI_OBS' || value === 'TENCENT_COS') return value
+  return 'ALIYUN_OSS'
+}
+
+function applyCloudFromView(data: SystemSettingsView): void {
+  const cloud = data.cloudStorage
+  if (!cloud) return
+  cloudProvider.value = parseCloudProvider(cloud.provider)
+  cloudEnabled.value = !!cloud.enabled
+  if (cloud.aliyun) {
+    aliyunOss.value = {
+      endpoint: cloud.aliyun.endpoint || '',
+      accessKeyId: cloud.aliyun.accessKeyId || '',
+      accessKeySecret: '',
+      bucket: cloud.aliyun.bucket || '',
+      pathPrefix: cloud.aliyun.pathPrefix || '',
+      customDomain: cloud.aliyun.customDomain || '',
+    }
+    aliyunSecretSet.value = !!cloud.aliyun.accessKeySecretSet
+  }
+  if (cloud.huawei) {
+    huaweiObs.value = {
+      endpoint: cloud.huawei.endpoint || '',
+      accessKey: cloud.huawei.accessKey || '',
+      secretKey: '',
+      bucket: cloud.huawei.bucket || '',
+      pathPrefix: cloud.huawei.pathPrefix || '',
+      customDomain: cloud.huawei.customDomain || '',
+    }
+    huaweiSecretSet.value = !!cloud.huawei.secretKeySet
+  }
+  if (cloud.tencent) {
+    tencentCos.value = {
+      region: cloud.tencent.region || '',
+      secretId: cloud.tencent.secretId || '',
+      secretKey: '',
+      bucket: cloud.tencent.bucket || '',
+      pathPrefix: cloud.tencent.pathPrefix || '',
+      customDomain: cloud.tencent.customDomain || '',
+    }
+    tencentSecretSet.value = !!cloud.tencent.secretKeySet
+  }
+}
+
+function applyLocalStorageFromView(data: SystemSettingsView, fallbackPath = './data/images'): void {
+  imageStoragePath.value = data.imageStoragePath || fallbackPath
+  imageStorageEnabled.value = data.imageStorageEnabled !== false
+}
+
+function scrollToCloudError(): void {
+  void nextTick(() => {
+    document.querySelector('.card-cloud-storage')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
+function failCloud(i18nKey: string): false {
+  errorMessage.value = t(i18nKey)
+  cloudFormError.value = errorMessage.value
+  scrollToCloudError()
+  return false
+}
+
 async function loadSettings(): Promise<void> {
   loading.value = true
   errorMessage.value = ''
@@ -154,7 +349,8 @@ async function loadSettings(): Promise<void> {
     timezone.value = data.timezone
     defaultPlateColor.value = data.defaultPlateColor
     allowedPlateColors.value = [...data.allowedPlateColors]
-    imageStoragePath.value = data.imageStoragePath || './data/images'
+    applyLocalStorageFromView(data)
+    applyCloudFromView(data)
     softwarePlateProvider.value =
       data.softwarePlateProvider === 'HYPER_LPR3' ? 'HYPER_LPR3' : 'YOLO26_PLATE'
     yolo26Enabled.value = !!data.yolo26Plate?.enabled
@@ -180,6 +376,39 @@ async function loadSettings(): Promise<void> {
   }
 }
 
+function validateCloudStorage(): boolean {
+  cloudFormError.value = ''
+  if (!cloudEnabled.value) return true
+  if (cloudProvider.value === 'ALIYUN_OSS') {
+    const c = aliyunOss.value
+    if (!c.endpoint.trim()) return failCloud('systemSettings.cloud.endpointRequired')
+    if (!c.accessKeyId.trim()) return failCloud('systemSettings.cloud.accessKeyIdRequired')
+    if (!c.accessKeySecret.trim() && !aliyunSecretSet.value) {
+      return failCloud('systemSettings.cloud.accessKeySecretRequired')
+    }
+    if (!c.bucket.trim()) return failCloud('systemSettings.cloud.bucketRequired')
+    return true
+  }
+  if (cloudProvider.value === 'HUAWEI_OBS') {
+    const c = huaweiObs.value
+    if (!c.endpoint.trim()) return failCloud('systemSettings.cloud.endpointRequired')
+    if (!c.accessKey.trim()) return failCloud('systemSettings.cloud.accessKeyRequired')
+    if (!c.secretKey.trim() && !huaweiSecretSet.value) {
+      return failCloud('systemSettings.cloud.secretKeyRequired')
+    }
+    if (!c.bucket.trim()) return failCloud('systemSettings.cloud.bucketRequired')
+    return true
+  }
+  const c = tencentCos.value
+  if (!c.region.trim()) return failCloud('systemSettings.cloud.regionRequired')
+  if (!c.secretId.trim()) return failCloud('systemSettings.cloud.secretIdRequired')
+  if (!c.secretKey.trim() && !tencentSecretSet.value) {
+    return failCloud('systemSettings.cloud.secretKeyRequired')
+  }
+  if (!c.bucket.trim()) return failCloud('systemSettings.cloud.bucketRequired')
+  return true
+}
+
 function validateBaseUrl(url: string, requiredI18nKey: string, invalidI18nKey: string): string | null {
   const u = url.trim()
   if (!u) return t(requiredI18nKey)
@@ -190,13 +419,17 @@ function validateBaseUrl(url: string, requiredI18nKey: string, invalidI18nKey: s
 async function onSubmit(): Promise<void> {
   errorMessage.value = ''
   successMessage.value = ''
+  cloudFormError.value = ''
   if (allowedPlateColors.value.length === 0) {
     errorMessage.value = t('systemSettings.plateColorRequired')
     return
   }
   const storagePath = imageStoragePath.value.trim()
-  if (!storagePath) {
+  if (imageStorageEnabled.value && !storagePath) {
     errorMessage.value = t('systemSettings.imageStoragePathRequired')
+    return
+  }
+  if (!validateCloudStorage()) {
     return
   }
   // 互斥：同时只能启用当前选中 provider 的那一套，另一个强制关
@@ -236,7 +469,8 @@ async function onSubmit(): Promise<void> {
         timezone: timezone.value,
         defaultPlateColor: defaultPlateColor.value,
         allowedPlateColors: allowedPlateColors.value,
-        imageStoragePath: storagePath,
+        imageStoragePath: storagePath || './data/images',
+        imageStorageEnabled: imageStorageEnabled.value,
         softwarePlateProvider: softwarePlateProvider.value,
         yolo26Plate: {
           enabled: yolo26Enabled.value,
@@ -252,6 +486,34 @@ async function onSubmit(): Promise<void> {
           connectTimeoutMs: hyperLpr3ConnectMs.value,
           readTimeoutMs: hyperLpr3ReadMs.value,
         },
+        cloudStorage: {
+          enabled: cloudEnabled.value,
+          provider: cloudProvider.value,
+          aliyun: {
+            endpoint: aliyunOss.value.endpoint,
+            accessKeyId: aliyunOss.value.accessKeyId,
+            accessKeySecret: aliyunOss.value.accessKeySecret.trim() || null,
+            bucket: aliyunOss.value.bucket,
+            pathPrefix: aliyunOss.value.pathPrefix,
+            customDomain: aliyunOss.value.customDomain,
+          },
+          huawei: {
+            endpoint: huaweiObs.value.endpoint,
+            accessKey: huaweiObs.value.accessKey,
+            secretKey: huaweiObs.value.secretKey.trim() || null,
+            bucket: huaweiObs.value.bucket,
+            pathPrefix: huaweiObs.value.pathPrefix,
+            customDomain: huaweiObs.value.customDomain,
+          },
+          tencent: {
+            region: tencentCos.value.region,
+            secretId: tencentCos.value.secretId,
+            secretKey: tencentCos.value.secretKey.trim() || null,
+            bucket: tencentCos.value.bucket,
+            pathPrefix: tencentCos.value.pathPrefix,
+            customDomain: tencentCos.value.customDomain,
+          },
+        },
       },
       locale.value,
     )
@@ -260,7 +522,8 @@ async function onSubmit(): Promise<void> {
     timezone.value = data.timezone
     defaultPlateColor.value = data.defaultPlateColor
     allowedPlateColors.value = [...data.allowedPlateColors]
-    imageStoragePath.value = data.imageStoragePath || storagePath
+    applyLocalStorageFromView(data, storagePath)
+    applyCloudFromView(data)
     softwarePlateProvider.value =
       data.softwarePlateProvider === 'HYPER_LPR3' ? 'HYPER_LPR3' : 'YOLO26_PLATE'
     yolo26Enabled.value = !!data.yolo26Plate?.enabled
@@ -283,13 +546,13 @@ async function onSubmit(): Promise<void> {
   }
 }
 
-function onDebugTestFileSelected(e: Event): void {
-  const target = e.target as HTMLInputElement | null
-  const f = target?.files?.[0] ?? null
-  debugTestFile.value = f
+const debugDragOver = ref(false)
+
+function applyDebugFile(file: File | null): void {
+  debugTestFile.value = file
   debugTestResult.value = null
   debugTestError.value = ''
-  if (!f) {
+  if (!file) {
     debugTestPreview.value = ''
     return
   }
@@ -297,7 +560,33 @@ function onDebugTestFileSelected(e: Event): void {
   reader.onload = () => {
     debugTestPreview.value = typeof reader.result === 'string' ? reader.result : ''
   }
-  reader.readAsDataURL(f)
+  reader.readAsDataURL(file)
+}
+
+function onDebugTestFileSelected(e: Event): void {
+  const target = e.target as HTMLInputElement | null
+  applyDebugFile(target?.files?.[0] ?? null)
+}
+
+function onDebugDragOver(e: DragEvent): void {
+  e.preventDefault()
+  debugDragOver.value = true
+}
+
+function onDebugDragLeave(e: DragEvent): void {
+  const current = e.currentTarget as HTMLElement
+  const related = e.relatedTarget as Node | null
+  if (related && current.contains(related)) return
+  debugDragOver.value = false
+}
+
+function onDebugDrop(e: DragEvent): void {
+  e.preventDefault()
+  debugDragOver.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (file && file.type.startsWith('image/')) {
+    applyDebugFile(file)
+  }
 }
 
 async function runDebugTest(forceProvider?: SoftwarePlateProvider): Promise<void> {
@@ -384,9 +673,22 @@ onMounted(() => {
       </article>
 
       <article class="card card-storage">
-        <h3>{{ t('systemSettings.storage') }}</h3>
-        <p class="hint">{{ t('systemSettings.storageHint') }}</p>
-        <div class="form">
+        <div class="engine-enable">
+          <div class="engine-enable-copy">
+            <h3>{{ t('systemSettings.localStorage') }}</h3>
+            <p class="hint">{{ t('systemSettings.localStorageHint') }}</p>
+          </div>
+          <label class="toggle">
+            <input
+              v-model="imageStorageEnabled"
+              type="checkbox"
+              :aria-label="t('systemSettings.localStorageEnable')"
+            />
+            <span class="toggle-track" aria-hidden="true" />
+            <span class="toggle-text">{{ imageStorageEnabled ? t('common.on') : t('common.off') }}</span>
+          </label>
+        </div>
+        <div v-if="imageStorageEnabled" class="form">
           <label>
             <span>{{ t('systemSettings.imageStoragePath') }}</span>
             <input
@@ -396,6 +698,271 @@ onMounted(() => {
               :placeholder="t('systemSettings.imageStoragePathPlaceholder')"
             />
           </label>
+        </div>
+        <p v-else class="engine-off-hint">{{ t('systemSettings.localStorageDisabledHint') }}</p>
+      </article>
+
+      <article class="card card-cloud-storage">
+        <h3>{{ t('systemSettings.cloud.title') }}</h3>
+        <p class="hint">{{ t('systemSettings.cloud.hint') }}</p>
+        <p v-if="cloudFormError" class="message error">{{ cloudFormError }}</p>
+
+        <span class="field-label">{{ t('systemSettings.cloud.provider') }}</span>
+        <div class="engine-grid cloud-grid">
+          <label
+            v-for="opt in cloudOptions"
+            :key="opt.value"
+            class="engine-option"
+            :class="{ active: cloudProvider === opt.value }"
+          >
+            <input v-model="cloudProvider" type="radio" :value="opt.value" />
+            <span class="engine-mark" aria-hidden="true" />
+            <div class="engine-option-copy">
+              <div class="engine-option-top">
+                <strong>{{ t(opt.labelKey) }}</strong>
+                <span
+                  class="engine-pill"
+                  :class="{ off: !(cloudEnabled && cloudProvider === opt.value) }"
+                >
+                  {{
+                    cloudEnabled && cloudProvider === opt.value
+                      ? t('systemSettings.softwarePlate.currentlyActive')
+                      : t('systemSettings.softwarePlate.currentlyDisabled')
+                  }}
+                </span>
+              </div>
+              <span class="engine-option-hint">{{ t(opt.hintKey) }}</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="engine-body">
+          <div class="engine-enable">
+            <div class="engine-enable-copy">
+              <h4>{{ t(`systemSettings.cloud.${cloudConfigKey}`) }}</h4>
+              <p class="hint">{{ t('systemSettings.cloud.enableHint') }}</p>
+            </div>
+            <label class="toggle">
+              <input
+                v-model="cloudEnabled"
+                type="checkbox"
+                :aria-label="t('systemSettings.cloud.enable')"
+              />
+              <span class="toggle-track" aria-hidden="true" />
+              <span class="toggle-text">{{ cloudEnabled ? t('common.on') : t('common.off') }}</span>
+            </label>
+          </div>
+
+          <div v-if="cloudEnabled && cloudProvider === 'ALIYUN_OSS'" class="form engine-form">
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.endpoint') }}</span>
+                <input
+                  v-model="aliyunOss.endpoint"
+                  type="text"
+                  maxlength="256"
+                  :placeholder="t('systemSettings.cloud.aliyunEndpointPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.bucket') }}</span>
+                <input
+                  v-model="aliyunOss.bucket"
+                  type="text"
+                  maxlength="128"
+                  :placeholder="t('systemSettings.cloud.bucketPlaceholder')"
+                />
+              </label>
+            </div>
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.accessKeyId') }}</span>
+                <input
+                  v-model="aliyunOss.accessKeyId"
+                  type="text"
+                  maxlength="128"
+                  autocomplete="off"
+                  :placeholder="t('systemSettings.cloud.accessKeyIdPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.accessKeySecret') }}</span>
+                <input
+                  v-model="aliyunOss.accessKeySecret"
+                  type="password"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  :placeholder="
+                    aliyunSecretSet
+                      ? t('systemSettings.cloud.secretKeepPlaceholder')
+                      : t('systemSettings.cloud.secretPlaceholder')
+                  "
+                />
+              </label>
+            </div>
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.pathPrefix') }}</span>
+                <input
+                  v-model="aliyunOss.pathPrefix"
+                  type="text"
+                  maxlength="256"
+                  :placeholder="t('systemSettings.cloud.pathPrefixPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.customDomain') }}</span>
+                <input
+                  v-model="aliyunOss.customDomain"
+                  type="text"
+                  maxlength="256"
+                  :placeholder="t('systemSettings.cloud.customDomainPlaceholder')"
+                />
+              </label>
+            </div>
+            <p class="hint cloud-field-hint">{{ t('systemSettings.cloud.optionalHint') }}</p>
+          </div>
+
+          <div v-else-if="cloudEnabled && cloudProvider === 'HUAWEI_OBS'" class="form engine-form">
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.endpoint') }}</span>
+                <input
+                  v-model="huaweiObs.endpoint"
+                  type="text"
+                  maxlength="256"
+                  :placeholder="t('systemSettings.cloud.huaweiEndpointPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.bucket') }}</span>
+                <input
+                  v-model="huaweiObs.bucket"
+                  type="text"
+                  maxlength="128"
+                  :placeholder="t('systemSettings.cloud.bucketPlaceholder')"
+                />
+              </label>
+            </div>
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.accessKey') }}</span>
+                <input
+                  v-model="huaweiObs.accessKey"
+                  type="text"
+                  maxlength="128"
+                  autocomplete="off"
+                  :placeholder="t('systemSettings.cloud.accessKeyPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.secretKey') }}</span>
+                <input
+                  v-model="huaweiObs.secretKey"
+                  type="password"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  :placeholder="
+                    huaweiSecretSet
+                      ? t('systemSettings.cloud.secretKeepPlaceholder')
+                      : t('systemSettings.cloud.secretPlaceholder')
+                  "
+                />
+              </label>
+            </div>
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.pathPrefix') }}</span>
+                <input
+                  v-model="huaweiObs.pathPrefix"
+                  type="text"
+                  maxlength="256"
+                  :placeholder="t('systemSettings.cloud.pathPrefixPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.customDomain') }}</span>
+                <input
+                  v-model="huaweiObs.customDomain"
+                  type="text"
+                  maxlength="256"
+                  :placeholder="t('systemSettings.cloud.customDomainPlaceholder')"
+                />
+              </label>
+            </div>
+            <p class="hint cloud-field-hint">{{ t('systemSettings.cloud.optionalHint') }}</p>
+          </div>
+
+          <div v-else-if="cloudEnabled && cloudProvider === 'TENCENT_COS'" class="form engine-form">
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.region') }}</span>
+                <input
+                  v-model="tencentCos.region"
+                  type="text"
+                  maxlength="64"
+                  :placeholder="t('systemSettings.cloud.tencentRegionPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.bucket') }}</span>
+                <input
+                  v-model="tencentCos.bucket"
+                  type="text"
+                  maxlength="128"
+                  :placeholder="t('systemSettings.cloud.tencentBucketPlaceholder')"
+                />
+              </label>
+            </div>
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.secretId') }}</span>
+                <input
+                  v-model="tencentCos.secretId"
+                  type="text"
+                  maxlength="128"
+                  autocomplete="off"
+                  :placeholder="t('systemSettings.cloud.secretIdPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.secretKey') }}</span>
+                <input
+                  v-model="tencentCos.secretKey"
+                  type="password"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  :placeholder="
+                    tencentSecretSet
+                      ? t('systemSettings.cloud.secretKeepPlaceholder')
+                      : t('systemSettings.cloud.secretPlaceholder')
+                  "
+                />
+              </label>
+            </div>
+            <div class="form-row">
+              <label>
+                <span>{{ t('systemSettings.cloud.pathPrefix') }}</span>
+                <input
+                  v-model="tencentCos.pathPrefix"
+                  type="text"
+                  maxlength="256"
+                  :placeholder="t('systemSettings.cloud.pathPrefixPlaceholder')"
+                />
+              </label>
+              <label>
+                <span>{{ t('systemSettings.cloud.customDomain') }}</span>
+                <input
+                  v-model="tencentCos.customDomain"
+                  type="text"
+                  maxlength="256"
+                  :placeholder="t('systemSettings.cloud.customDomainPlaceholder')"
+                />
+              </label>
+            </div>
+            <p class="hint cloud-field-hint">{{ t('systemSettings.cloud.optionalHint') }}</p>
+          </div>
+          <p v-else class="engine-off-hint">{{ t('systemSettings.cloud.disabledHint') }}</p>
         </div>
       </article>
 
@@ -436,59 +1003,72 @@ onMounted(() => {
       </article>
 
       <article class="card card-software-plate">
-        <header class="card-header">
-          <h3>{{ t('systemSettings.softwarePlate.title') }}</h3>
-        </header>
+        <h3>{{ t('systemSettings.softwarePlate.title') }}</h3>
         <p class="hint">{{ t('systemSettings.softwarePlate.hint') }}</p>
-        <div class="form provider-form">
-          <label>
-            <span>{{ t('systemSettings.softwarePlate.provider') }}</span>
-            <select v-model="softwarePlateProvider">
-              <option
-                v-for="opt in providerOptions"
-                :key="opt.value"
-                :value="opt.value"
-              >
-                {{ t(opt.labelKey) }}
-              </option>
-            </select>
+
+        <span class="field-label">{{ t('systemSettings.softwarePlate.provider') }}</span>
+        <div class="engine-grid">
+          <label
+            v-for="opt in providerOptions"
+            :key="opt.value"
+            class="engine-option"
+            :class="{ active: softwarePlateProvider === opt.value }"
+          >
+            <input v-model="softwarePlateProvider" type="radio" :value="opt.value" />
+            <span class="engine-mark" aria-hidden="true" />
+            <div class="engine-option-copy">
+              <div class="engine-option-top">
+                <span class="engine-option-name">
+                  <strong>{{ t(opt.labelKey) }}</strong>
+                  <span v-if="opt.recommended" class="engine-recommend">
+                    {{ t('systemSettings.softwarePlate.recommended') }}
+                  </span>
+                </span>
+                <span class="engine-pill" :class="{ off: !engineEnabled(opt.value) }">
+                  {{
+                    engineEnabled(opt.value)
+                      ? t('systemSettings.softwarePlate.currentlyActive')
+                      : t('systemSettings.softwarePlate.currentlyDisabled')
+                  }}
+                </span>
+              </div>
+              <span class="engine-option-hint">{{ t(opt.hintKey) }}</span>
+            </div>
           </label>
-          <div class="provider-meta">
-            <span class="tag" :class="{ off: !isCurrentProviderEnabled }">
-              {{
-                isCurrentProviderEnabled
-                  ? t('systemSettings.softwarePlate.currentlyActive')
-                  : t('systemSettings.softwarePlate.currentlyDisabled')
-              }}
-            </span>
-          </div>
         </div>
 
-        <!-- YOLO26-Plate 配置 -->
-        <div v-if="softwarePlateProvider === 'YOLO26_PLATE'" class="engine-body">
-          <div class="engine-head">
-            <h4>{{ t('systemSettings.yolo26.title') }}</h4>
-            <label class="switch">
-              <input type="checkbox" v-model="yolo26Enabled" />
-              <span>{{ yolo26Enabled ? t('common.on') : t('common.off') }}</span>
+        <div class="engine-body">
+          <div class="engine-enable">
+            <div class="engine-enable-copy">
+              <h4>{{ t(`${currentEngineI18nKey}.title`) }}</h4>
+              <p class="hint">{{ t(`${currentEngineI18nKey}.hint`) }}</p>
+            </div>
+            <label class="toggle">
+              <input
+                v-model="currentEnabled"
+                type="checkbox"
+                :aria-label="t(`${currentEngineI18nKey}.title`)"
+              />
+              <span class="toggle-track" aria-hidden="true" />
+              <span class="toggle-text">{{ currentEnabled ? t('common.on') : t('common.off') }}</span>
             </label>
           </div>
-          <p class="hint">{{ t('systemSettings.yolo26.hint') }}</p>
-          <div v-if="yolo26Enabled" class="form engine-form">
+
+          <div v-if="currentEnabled" class="form engine-form">
             <label>
-              <span>{{ t('systemSettings.yolo26.baseUrl') }}</span>
+              <span>{{ t(`${currentEngineI18nKey}.baseUrl`) }}</span>
               <input
-                v-model="yolo26BaseUrl"
+                v-model="currentBaseUrl"
                 type="text"
                 maxlength="512"
-                :placeholder="t('systemSettings.yolo26.baseUrlPlaceholder')"
+                :placeholder="t(`${currentEngineI18nKey}.baseUrlPlaceholder`)"
               />
             </label>
             <div class="engine-row">
               <label>
-                <span>{{ t('systemSettings.yolo26.minConfidence') }}</span>
+                <span>{{ t(`${currentEngineI18nKey}.minConfidence`) }}</span>
                 <input
-                  v-model.number="yolo26MinConf"
+                  v-model.number="currentMinConf"
                   type="number"
                   step="0.01"
                   min="0"
@@ -496,9 +1076,9 @@ onMounted(() => {
                 />
               </label>
               <label>
-                <span>{{ t('systemSettings.yolo26.connectTimeoutMs') }}</span>
+                <span>{{ t(`${currentEngineI18nKey}.connectTimeoutMs`) }}</span>
                 <input
-                  v-model.number="yolo26ConnectMs"
+                  v-model.number="currentConnectMs"
                   type="number"
                   step="500"
                   min="1000"
@@ -506,9 +1086,9 @@ onMounted(() => {
                 />
               </label>
               <label>
-                <span>{{ t('systemSettings.yolo26.readTimeoutMs') }}</span>
+                <span>{{ t(`${currentEngineI18nKey}.readTimeoutMs`) }}</span>
                 <input
-                  v-model.number="yolo26ReadMs"
+                  v-model.number="currentReadMs"
                   type="number"
                   step="1000"
                   min="1000"
@@ -517,83 +1097,57 @@ onMounted(() => {
               </label>
             </div>
           </div>
-        </div>
-
-        <!-- HyperLPR3 配置 -->
-        <div v-else-if="softwarePlateProvider === 'HYPER_LPR3'" class="engine-body">
-          <div class="engine-head">
-            <h4>{{ t('systemSettings.hyperLpr3.title') }}</h4>
-            <label class="switch">
-              <input type="checkbox" v-model="hyperLpr3Enabled" />
-              <span>{{ hyperLpr3Enabled ? t('common.on') : t('common.off') }}</span>
-            </label>
-          </div>
-          <p class="hint">{{ t('systemSettings.hyperLpr3.hint') }}</p>
-          <div v-if="hyperLpr3Enabled" class="form engine-form">
-            <label>
-              <span>{{ t('systemSettings.hyperLpr3.baseUrl') }}</span>
-              <input
-                v-model="hyperLpr3BaseUrl"
-                type="text"
-                maxlength="512"
-                :placeholder="t('systemSettings.hyperLpr3.baseUrlPlaceholder')"
-              />
-            </label>
-            <div class="engine-row">
-              <label>
-                <span>{{ t('systemSettings.hyperLpr3.minConfidence') }}</span>
-                <input
-                  v-model.number="hyperLpr3MinConf"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                />
-              </label>
-              <label>
-                <span>{{ t('systemSettings.hyperLpr3.connectTimeoutMs') }}</span>
-                <input
-                  v-model.number="hyperLpr3ConnectMs"
-                  type="number"
-                  step="500"
-                  min="1000"
-                  max="600000"
-                />
-              </label>
-              <label>
-                <span>{{ t('systemSettings.hyperLpr3.readTimeoutMs') }}</span>
-                <input
-                  v-model.number="hyperLpr3ReadMs"
-                  type="number"
-                  step="1000"
-                  min="1000"
-                  max="600000"
-                />
-              </label>
-            </div>
-          </div>
+          <p v-else class="engine-off-hint">{{ t('systemSettings.softwarePlate.disabledHint') }}</p>
         </div>
       </article>
 
       <article class="card card-software-plate-debug">
-        <h3>{{ t('systemSettings.softwarePlate.debugTitle') }}</h3>
-        <p class="hint">
-          {{ t('systemSettings.softwarePlate.debugHint') }}
-          <template v-if="debugTestResult?.provider">
-            ({{ t('systemSettings.softwarePlate.currentProvider') }}:
-            <b>{{ debugProviderLabel(debugTestResult.provider) }}</b>)
-          </template>
-        </p>
+        <div class="debug-head">
+          <h3>{{ t('systemSettings.softwarePlate.debugTitle') }}</h3>
+          <span v-if="debugTestResult?.provider" class="engine-pill neutral">
+            {{ t('systemSettings.softwarePlate.currentProvider') }}
+            {{ debugProviderLabel(debugTestResult.provider) }}
+          </span>
+        </div>
+        <p class="hint">{{ t('systemSettings.softwarePlate.debugHint') }}</p>
         <div class="debug-row">
-          <label class="file-picker">
+          <label
+            class="dropzone"
+            :class="{ active: debugDragOver, filled: !!debugTestFile }"
+            @dragover="onDebugDragOver"
+            @dragleave="onDebugDragLeave"
+            @drop="onDebugDrop"
+          >
             <input type="file" accept="image/*" @change="onDebugTestFileSelected" />
-            <span v-if="!debugTestFile">{{ t('systemSettings.softwarePlate.pickImage') }}</span>
-            <span v-else>{{ debugTestFile.name }}</span>
+            <span class="dropzone-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 16V4m0 0 4 4m-4-4L8 8"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </span>
+            <span class="dropzone-copy">
+              <strong>{{
+                debugTestFile
+                  ? debugTestFile.name
+                  : t('systemSettings.softwarePlate.pickImage')
+              }}</strong>
+              <em>{{ t('systemSettings.softwarePlate.dropHint') }}</em>
+            </span>
           </label>
           <div class="debug-actions">
             <button
               type="button"
-              class="secondary"
               :disabled="debugTestLoading || !debugTestFile"
               @click="runDebugTest()"
             >
@@ -605,47 +1159,50 @@ onMounted(() => {
             </button>
             <button
               type="button"
-              class="secondary"
-              :disabled="debugTestLoading || !debugTestFile || !yolo26Enabled"
-              :title="yolo26Enabled ? '' : t('systemSettings.yolo26.enableFirst')"
-              @click="runDebugTest('YOLO26_PLATE')"
-            >
-              {{ t('systemSettings.softwarePlate.testYolo26') }}
-            </button>
-            <button
-              type="button"
-              class="secondary"
+              class="ghost"
               :disabled="debugTestLoading || !debugTestFile || !hyperLpr3Enabled"
               :title="hyperLpr3Enabled ? '' : t('systemSettings.hyperLpr3.enableFirst')"
               @click="runDebugTest('HYPER_LPR3')"
             >
               {{ t('systemSettings.softwarePlate.testHyperLpr3') }}
             </button>
+            <button
+              type="button"
+              class="ghost"
+              :disabled="debugTestLoading || !debugTestFile || !yolo26Enabled"
+              :title="yolo26Enabled ? '' : t('systemSettings.yolo26.enableFirst')"
+              @click="runDebugTest('YOLO26_PLATE')"
+            >
+              {{ t('systemSettings.softwarePlate.testYolo26') }}
+            </button>
           </div>
         </div>
         <div class="debug-area">
-          <div v-if="debugTestPreview" class="debug-preview">
-            <img :src="debugTestPreview" alt="preview" />
+          <div class="debug-preview" :class="{ empty: !debugTestPreview }">
+            <img v-if="debugTestPreview" :src="debugTestPreview" alt="" />
+            <span v-else>{{ t('systemSettings.softwarePlate.debugEmpty') }}</span>
           </div>
           <div class="debug-result">
             <p v-if="debugTestError" class="message error">{{ debugTestError }}</p>
             <div v-else-if="debugTestResult" class="debug-meta">
-              <p class="meta-row">
-                <span>{{ t('systemSettings.yolo26.resultCount') }}:</span>
-                <b>{{ debugTestResult.count }}</b>
-              </p>
-              <p class="meta-row">
-                <span>{{ t('systemSettings.yolo26.resultElapsed') }}:</span>
-                <b>{{ debugTestResult.elapsedMs }} ms</b>
-              </p>
-              <p class="meta-row">
-                <span>{{ t('systemSettings.yolo26.resultDevice') }}:</span>
-                <b>{{ debugTestResult.device }}</b>
-              </p>
-              <p class="meta-row">
-                <span>{{ t('systemSettings.yolo26.resultUpstream') }}:</span>
-                <code>{{ debugTestResult.upstreamBaseUrl }}</code>
-              </p>
+              <div class="debug-stats">
+                <div>
+                  <span>{{ t('systemSettings.yolo26.resultCount') }}</span>
+                  <b>{{ debugTestResult.count }}</b>
+                </div>
+                <div>
+                  <span>{{ t('systemSettings.yolo26.resultElapsed') }}</span>
+                  <b>{{ debugTestResult.elapsedMs }} ms</b>
+                </div>
+                <div>
+                  <span>{{ t('systemSettings.yolo26.resultDevice') }}</span>
+                  <b>{{ debugTestResult.device }}</b>
+                </div>
+                <div class="stat-wide">
+                  <span>{{ t('systemSettings.yolo26.resultUpstream') }}</span>
+                  <code>{{ debugTestResult.upstreamBaseUrl }}</code>
+                </div>
+              </div>
 
               <section v-if="debugTestResult.best" class="best-plate">
                 <div class="best-head">
@@ -708,7 +1265,7 @@ onMounted(() => {
               <p v-else-if="!debugTestError" class="hint">{{ t('systemSettings.yolo26.noPlate') }}</p>
             </div>
             <div v-else class="debug-empty">
-              <span>{{ t('systemSettings.yolo26.debugEmpty') }}</span>
+              <span>{{ t('systemSettings.softwarePlate.debugEmpty') }}</span>
             </div>
           </div>
         </div>
@@ -776,6 +1333,14 @@ onMounted(() => {
   margin: 0 0 0.75rem;
 }
 
+.card-storage .engine-enable {
+  margin-bottom: 0.75rem;
+}
+
+.card-storage .engine-enable h3 {
+  margin: 0 0 0.2rem;
+}
+
 .hint {
   margin: -0.35rem 0 0.75rem;
   color: var(--muted);
@@ -804,7 +1369,9 @@ onMounted(() => {
 }
 
 .form-row {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 .plates-layout {
@@ -845,7 +1412,9 @@ label {
 }
 
 select,
-input[type='text'] {
+input[type='text'],
+input[type='number'],
+input[type='password'] {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -909,7 +1478,8 @@ button:disabled {
 }
 
 .card-software-plate,
-.card-software-plate-debug {
+.card-software-plate-debug,
+.card-cloud-storage {
   grid-column: 1 / -1;
 }
 
@@ -917,147 +1487,357 @@ button:disabled {
   grid-column: 1 / -1;
 }
 
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+.engine-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 0.35rem 0 1rem;
 }
 
-.card-header h3 {
+.cloud-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cloud-field-hint {
   margin: 0;
 }
 
-.switch {
+.engine-option {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.engine-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.engine-mark {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.12rem;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 3px #fff;
+}
+
+.engine-option-copy {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.engine-option-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.engine-option strong {
+  font-size: 0.98rem;
+}
+
+.engine-option-name {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  font-size: 0.9rem;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.switch input {
-  width: auto;
-  accent-color: var(--accent);
-}
-
-.provider-form {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  background: #f7f8fc;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
-}
-
-.provider-meta {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.provider-meta .tag {
-  padding: 0.2rem 0.65rem;
+.engine-recommend {
+  flex: none;
+  padding: 0.08rem 0.45rem;
   border-radius: 999px;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #8a5a00;
+  background: #fff4d6;
+  border: 1px solid #efd48b;
+}
+
+.engine-option-hint {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.engine-option.active {
+  border-color: var(--accent);
+  background: #f2faf6;
+  box-shadow: 0 0 0 3px rgb(15 118 110 / 10%);
+}
+
+.engine-option.active .engine-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.engine-option:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.engine-pill {
+  flex: none;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
   background: #e8f5ef;
-  color: #1d7a4b;
+  color: var(--ok);
   border: 1px solid #b7e1cb;
 }
 
-.provider-meta .tag.off {
-  background: #fff3cd;
-  color: #8a5a00;
-  border-color: #f2dc9a;
+.engine-pill.off {
+  background: #f4f6f5;
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+.engine-pill.neutral {
+  background: #fff;
+  color: var(--accent);
+  border-color: #b7d8d1;
 }
 
 .engine-body {
   display: grid;
-  gap: 0.8rem;
-  margin-top: 0.3rem;
+  gap: 0.85rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f7faf8;
 }
 
-.engine-head {
+.engine-enable {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding-top: 0.25rem;
+  gap: 1rem;
 }
 
-.engine-head h4 {
-  margin: 0;
+.engine-enable-copy {
+  min-width: 0;
+}
+
+.engine-enable h4 {
+  margin: 0 0 0.2rem;
   font-size: 1rem;
 }
 
+.engine-enable .hint {
+  margin: 0;
+}
+
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.toggle-track {
+  width: 2.45rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: #d5ddd9;
+  position: relative;
+  transition: background 0.18s ease;
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(16 33 29 / 20%);
+  transition: transform 0.18s ease;
+}
+
+.toggle input:checked + .toggle-track {
+  background: var(--accent);
+}
+
+.toggle input:checked + .toggle-track::after {
+  transform: translateX(1.1rem);
+}
+
+.toggle input:focus-visible + .toggle-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toggle-text {
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .engine-form {
-  background: #fafbfc;
-  border: 1px dashed var(--border);
+  background: #fff;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.9rem 1rem;
 }
 
-.engine-row,
-.yolo26-row {
+.engine-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
-/* 调试卡片：沿用 yolo26-debug 视觉风格，类名更通用 */
-.card-software-plate-debug {
-  display: grid;
-  gap: 0.6rem;
-  background: #f6f8ff;
-  border: 1px solid #e0e5fa;
-  border-radius: 12px;
+.engine-off-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
-.card-software-plate-debug > p {
-  color: var(--muted);
+.card-software-plate-debug {
+  display: grid;
+  gap: 0.65rem;
+  background: #f4f8f6;
+  border: 1px solid #d5e6df;
+}
+
+.debug-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.debug-head h3 {
+  margin: 0;
 }
 
 .debug-row {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  align-items: stretch;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
 .debug-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.45rem;
   margin-left: auto;
 }
 
-.file-picker {
+.dropzone {
   position: relative;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  padding: 0.55rem 0.9rem;
-  border-radius: 8px;
+  gap: 0.7rem;
+  min-width: min(100%, 18rem);
+  flex: 1;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
   border: 1px dashed var(--border);
   background: #fff;
   cursor: pointer;
-  font-size: 0.9rem;
-  color: var(--muted);
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  max-width: 18rem;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
-.file-picker input[type='file'] {
+.dropzone.active,
+.dropzone.filled {
+  border-color: var(--accent);
+  background: #f2faf6;
+}
+
+.dropzone input[type='file'] {
   position: absolute;
   inset: 0;
   opacity: 0;
   cursor: pointer;
 }
 
-button.secondary {
-  background: #4b6bff;
+.dropzone-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  color: var(--accent);
+  background: #e6f1f0;
+  border-radius: 8px;
+}
+
+.dropzone-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.dropzone-copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.dropzone-copy strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropzone-copy em {
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+button.ghost {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .debug-area {
@@ -1067,20 +1847,27 @@ button.secondary {
   align-items: stretch;
 }
 
-.debug-preview,
-.yolo26-preview {
+.debug-preview {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
-  background: #f2f3f5;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 8rem;
+  min-height: 9rem;
 }
 
-.debug-preview img,
-.yolo26-preview img {
+.debug-preview.empty {
+  color: var(--muted);
+  font-size: 0.86rem;
+  text-align: center;
+  padding: 1rem;
+  border-style: dashed;
+  background: #fafcfb;
+}
+
+.debug-preview img {
   display: block;
   width: 100%;
   height: auto;
@@ -1088,46 +1875,60 @@ button.secondary {
   max-height: 18rem;
 }
 
-.debug-result,
-.yolo26-result {
+.debug-result {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.45rem;
   align-content: start;
 }
 
-.debug-empty,
-.yolo26-empty {
+.debug-empty {
   display: grid;
   place-items: center;
-  min-height: 8rem;
+  min-height: 9rem;
   color: var(--muted);
   font-size: 0.9rem;
   border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.debug-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.debug-stats > div {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
 }
 
-.debug-meta .meta-row,
-.yolo26-meta .meta-row {
-  margin: 0;
-  display: flex;
-  gap: 0.4rem;
-  align-items: baseline;
-  font-size: 0.9rem;
+.debug-stats span {
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
-.debug-meta .meta-row span:first-child,
-.yolo26-meta .meta-row span:first-child {
-  min-width: 5rem;
+.debug-stats b,
+.debug-stats code {
+  font-size: 0.92rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 
-.debug-meta code,
-.yolo26-meta code {
+.debug-stats .stat-wide {
+  grid-column: 1 / -1;
+}
+
+.debug-stats code {
   font-size: 0.8rem;
   padding: 0.1rem 0.35rem;
-  background: #eef1fb;
+  background: #e6f1f0;
   border-radius: 6px;
+  width: fit-content;
 }
 
 .plate-list {
@@ -1194,8 +1995,8 @@ button.secondary {
   margin: 0.25rem 0 0.35rem;
   padding: 0.75rem 0.85rem;
   border-radius: 10px;
-  border: 1px solid #b9c9ff;
-  background: linear-gradient(180deg, #eef3ff 0%, #f7f9ff 100%);
+  border: 1px solid #b7d8d1;
+  background: linear-gradient(180deg, #eef7f5 0%, #f7fbfa 100%);
 }
 
 .best-head {
@@ -1209,13 +2010,12 @@ button.secondary {
   font-size: 0.75rem;
   padding: 0.05rem 0.45rem;
   border-radius: 999px;
-  background: #4b6bff;
+  background: var(--accent);
   color: #fff;
   margin-right: auto;
 }
 
-.debug-toggle,
-.yolo26-toggle {
+.debug-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -1226,8 +2026,7 @@ button.secondary {
   cursor: pointer;
 }
 
-.debug-toggle input,
-.yolo26-toggle input {
+.debug-toggle input {
   width: auto;
   accent-color: var(--accent);
 }
@@ -1243,31 +2042,31 @@ button.secondary {
 }
 
 @media (max-width: 960px) {
-  .engine-row,
-  .yolo26-row {
-    grid-template-columns: 1fr;
-  }
-  .debug-area {
-    grid-template-columns: 1fr;
-  }
-  .debug-actions {
-    margin-left: 0;
-    width: 100%;
-  }
-}
-
-@media (max-width: 960px) {
   .page-form {
     grid-template-columns: 1fr;
   }
 
-  .plates-layout {
+  .plates-layout,
+  .form-row,
+  .engine-grid,
+  .cloud-grid,
+  .engine-row,
+  .debug-area,
+  .debug-stats {
     grid-template-columns: 1fr;
   }
 
-  .form-row,
-  .provider-form {
-    grid-template-columns: 1fr;
+  .engine-enable {
+    flex-direction: column;
+  }
+
+  .debug-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .debug-actions button {
+    flex: 1;
   }
 }
 

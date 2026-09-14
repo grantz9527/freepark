@@ -50,6 +50,7 @@ public enum ErrorCode {
     YOLO26_PLATE_UPSTREAM_FAILED("error.yolo26.upstream-failed", HttpStatus.BAD_GATEWAY),
     YOLO26_PLATE_EMPTY_IMAGE("error.yolo26.empty-image", HttpStatus.BAD_REQUEST),
     INVALID_HYPER_LPR3_CONFIG("error.hyperlpr3.invalid-config", HttpStatus.BAD_REQUEST),
+    INVALID_CLOUD_STORAGE_CONFIG("error.cloud.invalid-config", HttpStatus.BAD_REQUEST),
     SOFTWARE_PLATE_DISABLED("error.software-plate.disabled", HttpStatus.BAD_REQUEST),
     SOFTWARE_PLATE_EMPTY_IMAGE("error.software-plate.empty-image", HttpStatus.BAD_REQUEST),
     NOT_FOUND("error.not-found", HttpStatus.NOT_FOUND),

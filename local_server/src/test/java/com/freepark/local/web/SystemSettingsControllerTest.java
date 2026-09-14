@@ -45,6 +45,7 @@ class SystemSettingsControllerTest {
                 .andExpect(jsonPath("$.data.defaultLocale").exists())
                 .andExpect(jsonPath("$.data.timezone").exists())
                 .andExpect(jsonPath("$.data.imageStoragePath").exists())
+                .andExpect(jsonPath("$.data.imageStorageEnabled").value(true))
                 .andExpect(jsonPath("$.data.supportedLocales").isArray())
                 .andExpect(jsonPath("$.data.supportedTimezones").isArray());
     }
@@ -56,7 +57,7 @@ class SystemSettingsControllerTest {
         mockMvc.perform(put("/api/v1/system-settings")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\",\"YELLOW\",\"GREEN\"],\"imageStoragePath\":\"D:/freepark/images\"}"))
+                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\",\"YELLOW\",\"GREEN\"],\"imageStoragePath\":\"D:/freepark/images\",\"softwarePlateProvider\":\"YOLO26_PLATE\",\"yolo26Plate\":{\"enabled\":false},\"hyperLpr3\":{\"enabled\":false}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.defaultLocale").value("en"))
                 .andExpect(jsonPath("$.data.timezone").value("UTC"))
@@ -93,8 +94,79 @@ class SystemSettingsControllerTest {
         mockMvc.perform(put("/api/v1/system-settings")
                         .header("Authorization", "Bearer " + operatorToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\"],\"imageStoragePath\":\"./data/images\"}"))
+                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\"],\"imageStoragePath\":\"./data/images\",\"softwarePlateProvider\":\"YOLO26_PLATE\",\"yolo26Plate\":{\"enabled\":false},\"hyperLpr3\":{\"enabled\":false}}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("forbidden"));
+    }
+
+    @Test
+    void adminCanSaveAliyunCloudStorage() throws Exception {
+        String token = adminToken();
+        String body = """
+                {
+                  "defaultLocale":"zh-CN",
+                  "timezone":"Asia/Shanghai",
+                  "defaultPlateColor":"BLUE",
+                  "allowedPlateColors":["BLUE"],
+                  "imageStoragePath":"./data/images",
+                  "softwarePlateProvider":"HYPER_LPR3",
+                  "yolo26Plate":{"enabled":false,"baseUrl":"http://127.0.0.1:8780","minConfidence":0.25,"connectTimeoutMs":5000,"readTimeoutMs":60000},
+                  "hyperLpr3":{"enabled":false,"baseUrl":"http://127.0.0.1:8715","minConfidence":0.6,"connectTimeoutMs":5000,"readTimeoutMs":60000},
+                  "cloudStorage":{
+                    "enabled":true,
+                    "provider":"ALIYUN_OSS",
+                    "aliyun":{
+                      "endpoint":"oss-cn-hangzhou.aliyuncs.com",
+                      "accessKeyId":"LTAItest",
+                      "accessKeySecret":"secret-value",
+                      "bucket":"freepark-images",
+                      "pathPrefix":"images/",
+                      "customDomain":"https://img.example.com"
+                    }
+                  }
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/system-settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cloudStorage.enabled").value(true))
+                .andExpect(jsonPath("$.data.cloudStorage.provider").value("ALIYUN_OSS"))
+                .andExpect(jsonPath("$.data.cloudStorage.aliyun.bucket").value("freepark-images"))
+                .andExpect(jsonPath("$.data.cloudStorage.aliyun.accessKeyId").value("LTAItest"))
+                .andExpect(jsonPath("$.data.cloudStorage.aliyun.accessKeySecretSet").value(true))
+                .andExpect(jsonPath("$.data.cloudStorage.aliyun.accessKeySecret").doesNotExist());
+    }
+
+    @Test
+    void adminCanDisableLocalImageStorage() throws Exception {
+        String token = adminToken();
+        String body = """
+                {
+                  "defaultLocale":"zh-CN",
+                  "timezone":"Asia/Shanghai",
+                  "defaultPlateColor":"BLUE",
+                  "allowedPlateColors":["BLUE"],
+                  "imageStoragePath":"./data/images",
+                  "imageStorageEnabled":false,
+                  "softwarePlateProvider":"HYPER_LPR3",
+                  "yolo26Plate":{"enabled":false},
+                  "hyperLpr3":{"enabled":false}
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/system-settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.imageStorageEnabled").value(false))
+                .andExpect(jsonPath("$.data.imageStoragePath").value("./data/images"));
+
+        mockMvc.perform(get("/api/v1/system-settings").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.imageStorageEnabled").value(false));
     }
 }

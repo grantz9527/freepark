@@ -1,10 +1,12 @@
 package com.freepark.local.sitesettings.service;
 
+import com.freepark.local.sitesettings.dto.CloudStorageSettings;
 import com.freepark.local.sitesettings.dto.SystemSettingsView;
 import com.freepark.local.sitesettings.dto.UpdateSystemSettingsRequest;
 import com.freepark.local.sitesettings.dto.Yolo26PlateSettings;
 import com.freepark.local.softwareplate.SoftwarePlateProvider;
 import com.freepark.local.softwareplate.dto.HyperLpr3Settings;
+import com.freepark.local.storage.CloudStorageProvider;
 
 import java.net.URI;
 import java.time.Instant;
@@ -63,10 +65,14 @@ public class SystemSettingsService {
         settings.setAllowedPlateColors(allowed);
         settings.setDefaultPlateColor(defaultPlateColor);
         settings.setImageStoragePath(normalizeImageStoragePath(request.imageStoragePath()));
+        if (request.imageStorageEnabled() != null) {
+            settings.setImageStorageEnabled(request.imageStorageEnabled());
+        }
         settings.setSoftwarePlateProvider(request.softwarePlateProvider() == null
                 ? SoftwarePlateProvider.YOLO26_PLATE : request.softwarePlateProvider());
         applyYolo26(settings, request.yolo26Plate());
         applyHyperLpr3(settings, request.hyperLpr3());
+        applyCloudStorage(settings, request.cloudStorage());
         // 保证同一时刻最多只有当前选中的 provider 被启用
         enforceSingleSoftwarePlateEnabled(settings);
         return toView(settingsRepository.save(settings));
@@ -95,6 +101,11 @@ public class SystemSettingsService {
     @Transactional(readOnly = true)
     public String getImageStoragePath() {
         return normalizeImageStoragePath(requireSettings().getImageStoragePath());
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isImageStorageEnabled() {
+        return requireSettings().isImageStorageEnabled();
     }
 
     @Transactional(readOnly = true)
@@ -309,6 +320,7 @@ public class SystemSettingsService {
                 settings.getDefaultPlateColor(),
                 List.copyOf(settings.getAllowedPlateColors()),
                 settings.getImageStoragePath(),
+                settings.isImageStorageEnabled(),
                 settings.getSoftwarePlateProvider(),
                 new Yolo26PlateSettings(
                         settings.isYolo26PlateEnabled(),
@@ -322,6 +334,7 @@ public class SystemSettingsService {
                         settings.getHyperlpr3MinConf(),
                         settings.getHyperlpr3ConnectTimeoutMs(),
                         settings.getHyperlpr3ReadTimeoutMs()),
+                toCloudView(settings),
                 SupportedLocale.languageTags(),
                 SupportedTimezone.all(),
                 PlateColorSupport.all(),
@@ -350,5 +363,139 @@ public class SystemSettingsService {
         if (current != SoftwarePlateProvider.HYPER_LPR3) {
             settings.setHyperlpr3Enabled(false);
         }
+    }
+
+    private void applyCloudStorage(SiteSettings settings, UpdateSystemSettingsRequest.CloudStorageUpdate update) {
+        if (update == null) {
+            return;
+        }
+        CloudStorageProvider provider = update.provider() == null
+                ? CloudStorageProvider.ALIYUN_OSS
+                : update.provider();
+        settings.setCloudStorageProvider(provider);
+        applyAliyun(settings, update.aliyun());
+        applyHuawei(settings, update.huawei());
+        applyTencent(settings, update.tencent());
+        if (update.enabled()) {
+            requireCloudProviderReady(settings, provider);
+            settings.setCloudStorageEnabled(true);
+        } else {
+            settings.setCloudStorageEnabled(false);
+        }
+    }
+
+    private void applyAliyun(SiteSettings settings, UpdateSystemSettingsRequest.AliyunOssUpdate update) {
+        if (update == null) {
+            return;
+        }
+        settings.setAliyunOssEndpoint(trimToNull(update.endpoint()));
+        settings.setAliyunOssAccessKeyId(trimToNull(update.accessKeyId()));
+        settings.setAliyunOssAccessKeySecret(
+                keepOrUpdateSecret(update.accessKeySecret(), settings.getAliyunOssAccessKeySecret()));
+        settings.setAliyunOssBucket(trimToNull(update.bucket()));
+        settings.setAliyunOssPathPrefix(trimToEmpty(update.pathPrefix()));
+        settings.setAliyunOssCustomDomain(trimToEmpty(update.customDomain()));
+    }
+
+    private void applyHuawei(SiteSettings settings, UpdateSystemSettingsRequest.HuaweiObsUpdate update) {
+        if (update == null) {
+            return;
+        }
+        settings.setHuaweiObsEndpoint(trimToNull(update.endpoint()));
+        settings.setHuaweiObsAccessKey(trimToNull(update.accessKey()));
+        settings.setHuaweiObsSecretKey(keepOrUpdateSecret(update.secretKey(), settings.getHuaweiObsSecretKey()));
+        settings.setHuaweiObsBucket(trimToNull(update.bucket()));
+        settings.setHuaweiObsPathPrefix(trimToEmpty(update.pathPrefix()));
+        settings.setHuaweiObsCustomDomain(trimToEmpty(update.customDomain()));
+    }
+
+    private void applyTencent(SiteSettings settings, UpdateSystemSettingsRequest.TencentCosUpdate update) {
+        if (update == null) {
+            return;
+        }
+        settings.setTencentCosRegion(trimToNull(update.region()));
+        settings.setTencentCosSecretId(trimToNull(update.secretId()));
+        settings.setTencentCosSecretKey(keepOrUpdateSecret(update.secretKey(), settings.getTencentCosSecretKey()));
+        settings.setTencentCosBucket(trimToNull(update.bucket()));
+        settings.setTencentCosPathPrefix(trimToEmpty(update.pathPrefix()));
+        settings.setTencentCosCustomDomain(trimToEmpty(update.customDomain()));
+    }
+
+    private void requireCloudProviderReady(SiteSettings settings, CloudStorageProvider provider) {
+        switch (provider) {
+            case ALIYUN_OSS -> {
+                requireCloudField(settings.getAliyunOssEndpoint(), "aliyun.endpoint");
+                requireCloudField(settings.getAliyunOssAccessKeyId(), "aliyun.accessKeyId");
+                requireCloudField(settings.getAliyunOssAccessKeySecret(), "aliyun.accessKeySecret");
+                requireCloudField(settings.getAliyunOssBucket(), "aliyun.bucket");
+            }
+            case HUAWEI_OBS -> {
+                requireCloudField(settings.getHuaweiObsEndpoint(), "huawei.endpoint");
+                requireCloudField(settings.getHuaweiObsAccessKey(), "huawei.accessKey");
+                requireCloudField(settings.getHuaweiObsSecretKey(), "huawei.secretKey");
+                requireCloudField(settings.getHuaweiObsBucket(), "huawei.bucket");
+            }
+            case TENCENT_COS -> {
+                requireCloudField(settings.getTencentCosRegion(), "tencent.region");
+                requireCloudField(settings.getTencentCosSecretId(), "tencent.secretId");
+                requireCloudField(settings.getTencentCosSecretKey(), "tencent.secretKey");
+                requireCloudField(settings.getTencentCosBucket(), "tencent.bucket");
+            }
+        }
+    }
+
+    private static void requireCloudField(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_CLOUD_STORAGE_CONFIG, field);
+        }
+    }
+
+    private CloudStorageSettings toCloudView(SiteSettings settings) {
+        return new CloudStorageSettings(
+                settings.isCloudStorageEnabled(),
+                settings.getCloudStorageProvider(),
+                new CloudStorageSettings.AliyunOssSettings(
+                        nullToEmpty(settings.getAliyunOssEndpoint()),
+                        nullToEmpty(settings.getAliyunOssAccessKeyId()),
+                        !isBlank(settings.getAliyunOssAccessKeySecret()),
+                        nullToEmpty(settings.getAliyunOssBucket()),
+                        nullToEmpty(settings.getAliyunOssPathPrefix()),
+                        nullToEmpty(settings.getAliyunOssCustomDomain())),
+                new CloudStorageSettings.HuaweiObsSettings(
+                        nullToEmpty(settings.getHuaweiObsEndpoint()),
+                        nullToEmpty(settings.getHuaweiObsAccessKey()),
+                        !isBlank(settings.getHuaweiObsSecretKey()),
+                        nullToEmpty(settings.getHuaweiObsBucket()),
+                        nullToEmpty(settings.getHuaweiObsPathPrefix()),
+                        nullToEmpty(settings.getHuaweiObsCustomDomain())),
+                new CloudStorageSettings.TencentCosSettings(
+                        nullToEmpty(settings.getTencentCosRegion()),
+                        nullToEmpty(settings.getTencentCosSecretId()),
+                        !isBlank(settings.getTencentCosSecretKey()),
+                        nullToEmpty(settings.getTencentCosBucket()),
+                        nullToEmpty(settings.getTencentCosPathPrefix()),
+                        nullToEmpty(settings.getTencentCosCustomDomain())));
+    }
+
+    private static String keepOrUpdateSecret(String incoming, String existing) {
+        String trimmed = incoming == null ? "" : incoming.trim();
+        return trimmed.isEmpty() ? existing : trimmed;
+    }
+
+    private static String trimToNull(String value) {
+        String trimmed = value == null ? "" : value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static String trimToEmpty(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

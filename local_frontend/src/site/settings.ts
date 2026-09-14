@@ -15,6 +15,7 @@ export const siteAllowedPlateColors = ref<PlateColor[]>([
   'WHITE',
 ])
 export const siteImageStoragePath = ref('./data/images')
+export const siteImageStorageEnabled = ref(true)
 export type SoftwarePlateProvider = 'YOLO26_PLATE' | 'HYPER_LPR3'
 export const softwarePlateProvider = ref<SoftwarePlateProvider>('YOLO26_PLATE')
 export interface Yolo26PlateSettings {
@@ -57,6 +58,7 @@ export function applySiteSettings(data: SystemSettingsView): void {
   siteDefaultPlateColor.value = data.defaultPlateColor
   siteAllowedPlateColors.value = [...data.allowedPlateColors]
   siteImageStoragePath.value = data.imageStoragePath || './data/images'
+  siteImageStorageEnabled.value = data.imageStorageEnabled !== false
   softwarePlateProvider.value =
     data.softwarePlateProvider === 'HYPER_LPR3' ? 'HYPER_LPR3' : 'YOLO26_PLATE'
   yolo26PlateSettings.value = {
@@ -93,6 +95,7 @@ export function clearSiteSettingsCache(): void {
   siteDefaultPlateColor.value = 'BLUE'
   siteAllowedPlateColors.value = ['BLUE', 'YELLOW', 'GREEN', 'YELLOW_GREEN', 'BLACK', 'WHITE']
   siteImageStoragePath.value = './data/images'
+  siteImageStorageEnabled.value = true
   softwarePlateProvider.value = 'YOLO26_PLATE'
   yolo26PlateSettings.value = {
     enabled: false,

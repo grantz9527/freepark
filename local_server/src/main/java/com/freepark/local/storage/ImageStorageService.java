@@ -17,6 +17,7 @@ import com.freepark.local.sitesettings.service.SystemSettingsService;
 /**
  * 图片本地存储：把 base64 图片解码落盘到「系统设置」指定的图片存储目录，
  * 数据库仅保存相对路径（recognition/yyyyMMdd/uuid.ext），通过 HTTP 提供访问。
+ * 系统设置关闭本地存储时不落盘，返回 null，避免阻断识别链路。
  */
 @Service
 public class ImageStorageService {
@@ -68,6 +69,9 @@ public class ImageStorageService {
     /** 保存原始图片字节（Frigate 快照等二进制来源），返回相对存储路径或 null。 */
     public String saveImage(byte[] bytes, String mime, String deviceCode) {
         if (bytes == null || bytes.length == 0) {
+            return null;
+        }
+        if (!settings.isImageStorageEnabled()) {
             return null;
         }
         String safeMime = mime == null || mime.isBlank() ? "image/jpeg" : mime;

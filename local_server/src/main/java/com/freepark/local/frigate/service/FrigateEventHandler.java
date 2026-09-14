@@ -191,7 +191,7 @@ public class FrigateEventHandler {
 
     /**
      * 联动通道通行判定：与设备直连链路同一套车场规则（白名单/黑名单/模式白名单/内部车辆/欠费拦截等）。
-     * 欠费拦截仅在车场该方向开启且本节点具备算费数据源时查询金额。
+     * 欠费拦截在云端离线时跳过，不阻塞本机放行。
      */
     private AccessDecisionView decideForLane(ParkingLane lane, AccessDirection direction, String plate, PlateColor plateColor) {
         ParkingLot lot = lane.getLot();
@@ -199,14 +199,10 @@ public class FrigateEventHandler {
         boolean interceptArrears = direction == AccessDirection.ENTRANCE
                 ? lot.isEntryInterceptArrears()
                 : lot.isExitInterceptArrears();
-        BigDecimal dueAmount = null;
-        if (interceptArrears) {
-            if (feeQuoteClient.hasFeeQuoteSource()) {
-                dueAmount = quoteFeeQuietly(lot.getCode(), plate, plateColor);
-            } else {
-                log.debug("车场({}) 配置了欠费拦截，但本节点未配置算费接口/模拟金额，欠费拦截不生效", lotId);
-            }
-        }
+        BigDecimal dueAmount = interceptArrears
+                ? feeQuoteClient.quoteForAccess(
+                        lot.getCode(), plate, plateColor == null ? null : plateColor.name()).orElse(null)
+                : null;
         AccessDecisionView decision = accessDecisions.decide(lotId, new AccessDecisionRequest(
                 lane.getId(),
                 plate,
@@ -229,19 +225,6 @@ public class FrigateEventHandler {
             if (barrier.isEnabled()) {
                 pendingGateOpens.remember(barrier.getId(), lotCode, plate, plateColor);
             }
-        }
-    }
-
-    /**
-     * 向算费接口查询欠费金额：成功返回金额（≥0），任何失败均返回 null 且不拦截，
-     * 避免外部算费服务故障阻断正常通行。
-     */
-    private BigDecimal quoteFeeQuietly(String lotCode, String plate, PlateColor plateColor) {
-        try {
-            return feeQuoteClient.quote(lotCode, plate, plateColor == null ? null : plateColor.name());
-        } catch (Exception e) {
-            log.warn("欠费金额查询失败（不拦截放行）：plate={} reason={}", plate, e.getMessage());
-            return null;
         }
     }
 

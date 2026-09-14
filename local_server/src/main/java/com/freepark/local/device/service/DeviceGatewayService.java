@@ -279,21 +279,17 @@ public class DeviceGatewayService {
         }
 
         UUID lotId = device.getLane().getLot().getId();
-        // 欠费拦截：仅当车场该方向配置了「欠费拦截」且本节点具备算费数据源
-        // （节点配置了算费接口地址或开启模拟金额）才向算费接口查询欠费金额；
-        // 本地服务自身不提供计价，两者皆无时欠费拦截不生效、不发请求。
-        // 查询失败（远程异常/模拟配置无效）不拦截，只记日志，避免外部故障影响通行。
+        // 欠费拦截：仅当车场该方向配置了「欠费拦截」才询问算费。
+        // 云端离线/超时时 quoteForAccess 立即返回空，欠费拦截不生效，本机其它规则照常放行。
         boolean interceptArrears = direction == AccessDirection.ENTRANCE
                 ? device.getLane().getLot().isEntryInterceptArrears()
                 : device.getLane().getLot().isExitInterceptArrears();
-        BigDecimal dueAmount = null;
-        if (interceptArrears) {
-            if (feeQuoteClient.hasFeeQuoteSource()) {
-                dueAmount = quoteFeeQuietly(device.getLane().getLot().getCode(), plate, record.getPlateColor());
-            } else {
-                log.debug("车场({}) 配置了欠费拦截，但本节点未配置算费接口/模拟金额，欠费拦截不生效", lotId);
-            }
-        }
+        BigDecimal dueAmount = interceptArrears
+                ? feeQuoteClient.quoteForAccess(
+                        device.getLane().getLot().getCode(),
+                        plate,
+                        record.getPlateColor() == null ? null : record.getPlateColor().name()).orElse(null)
+                : null;
         AccessDecisionView decision = accessDecisions.decide(lotId, new AccessDecisionRequest(
                 device.getLane().getId(),
                 plate,
@@ -302,9 +298,8 @@ public class DeviceGatewayService {
                 null, // 通道未配置拦截色，由调用方具备时提供
                 direction == AccessDirection.EXIT ? parkingSessions.hasOpenSession(lotId, plate) : null,
                 dueAmount));
-        log.info("识别通行判定 device={} plate={} direction={} lot={} arrearsIntercept={} feeSource={} due={} result={} remark={}",
-                device.getCode(), plate, direction, lotId, interceptArrears,
-                feeQuoteClient.hasFeeQuoteSource(), dueAmount,
+        log.info("识别通行判定 device={} plate={} direction={} lot={} arrearsIntercept={} due={} result={} remark={}",
+                device.getCode(), plate, direction, lotId, interceptArrears, dueAmount,
                 decision.result(), decision.remark());
         if (decision.result() == AccessDecisionView.Result.INTERCEPTED) {
             log.info("识别拦截不开闸：device={} plate={} direction={} remark={} due={}",
@@ -387,20 +382,6 @@ public class DeviceGatewayService {
                     normalizedPlate + "\n" + feeText);
         }
         return protocol.buildPushResponse(false);
-    }
-
-    /**
-     * 向算费接口查询欠费金额（仅车场该方向配置了欠费拦截时调用）：
-     * 成功返回金额（≥0），任何失败（未配置接口、远程异常、模拟配置无效）均返回 null 且不拦截，
-     * 避免外部算费服务故障阻断正常通行。
-     */
-    private BigDecimal quoteFeeQuietly(String lotCode, String plate, PlateColor plateColor) {
-        try {
-            return feeQuoteClient.quote(lotCode, plate, plateColor == null ? null : plateColor.name());
-        } catch (Exception e) {
-            log.warn("欠费金额查询失败（不拦截放行）：plate={} reason={}", plate, e.getMessage());
-            return null;
-        }
     }
 
     /** 白名单放行播报片段：voicePart 用于语音（“月租车,剩余23天”），ledLine2 用于 LED 第二行（“月租车 剩余23天”）。 */

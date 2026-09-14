@@ -1424,6 +1424,43 @@ export interface HyperLpr3SettingsView {
   readTimeoutMs: number
 }
 
+export type CloudStorageProvider = 'ALIYUN_OSS' | 'HUAWEI_OBS' | 'TENCENT_COS'
+
+export interface AliyunOssSettingsView {
+  endpoint: string
+  accessKeyId: string
+  accessKeySecretSet: boolean
+  bucket: string
+  pathPrefix: string
+  customDomain: string
+}
+
+export interface HuaweiObsSettingsView {
+  endpoint: string
+  accessKey: string
+  secretKeySet: boolean
+  bucket: string
+  pathPrefix: string
+  customDomain: string
+}
+
+export interface TencentCosSettingsView {
+  region: string
+  secretId: string
+  secretKeySet: boolean
+  bucket: string
+  pathPrefix: string
+  customDomain: string
+}
+
+export interface CloudStorageSettingsView {
+  enabled: boolean
+  provider: CloudStorageProvider
+  aliyun: AliyunOssSettingsView
+  huawei: HuaweiObsSettingsView
+  tencent: TencentCosSettingsView
+}
+
 export type SoftwarePlateProvider = 'YOLO26_PLATE' | 'HYPER_LPR3'
 
 export interface Yolo26BBox {
@@ -1466,9 +1503,11 @@ export interface SystemSettingsView {
   defaultPlateColor: PlateColor
   allowedPlateColors: PlateColor[]
   imageStoragePath: string
+  imageStorageEnabled: boolean
   softwarePlateProvider: SoftwarePlateProvider
   yolo26Plate: Yolo26PlateSettingsView
   hyperLpr3: HyperLpr3SettingsView
+  cloudStorage?: CloudStorageSettingsView | null
   supportedLocales: string[]
   supportedTimezones: string[]
   supportedPlateColors: PlateColor[]
@@ -1486,6 +1525,7 @@ export function updateSystemSettings(
     defaultPlateColor: PlateColor
     allowedPlateColors: PlateColor[]
     imageStoragePath: string
+    imageStorageEnabled?: boolean
     softwarePlateProvider: SoftwarePlateProvider
     yolo26Plate: {
       enabled: boolean
@@ -1501,6 +1541,34 @@ export function updateSystemSettings(
       connectTimeoutMs?: number | null
       readTimeoutMs?: number | null
     }
+    cloudStorage?: {
+      enabled: boolean
+      provider: CloudStorageProvider
+      aliyun?: {
+        endpoint?: string | null
+        accessKeyId?: string | null
+        accessKeySecret?: string | null
+        bucket?: string | null
+        pathPrefix?: string | null
+        customDomain?: string | null
+      } | null
+      huawei?: {
+        endpoint?: string | null
+        accessKey?: string | null
+        secretKey?: string | null
+        bucket?: string | null
+        pathPrefix?: string | null
+        customDomain?: string | null
+      } | null
+      tencent?: {
+        region?: string | null
+        secretId?: string | null
+        secretKey?: string | null
+        bucket?: string | null
+        pathPrefix?: string | null
+        customDomain?: string | null
+      } | null
+    } | null
   },
   locale: string,
 ): Promise<ApiResponse<SystemSettingsView>> {
