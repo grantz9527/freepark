@@ -6,7 +6,10 @@ import com.freepark.local.sitesettings.dto.UpdateSystemSettingsRequest;
 import com.freepark.local.sitesettings.dto.Yolo26PlateSettings;
 import com.freepark.local.softwareplate.SoftwarePlateProvider;
 import com.freepark.local.softwareplate.dto.HyperLpr3Settings;
+import com.freepark.local.storage.CloudObjectKeys;
 import com.freepark.local.storage.CloudStorageProvider;
+import com.freepark.local.storage.CloudUploadTarget;
+import com.freepark.local.storage.ImageCompressor;
 
 import java.net.URI;
 import java.time.Instant;
@@ -106,6 +109,25 @@ public class SystemSettingsService {
     @Transactional(readOnly = true)
     public boolean isImageStorageEnabled() {
         return requireSettings().isImageStorageEnabled();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isCloudStorageEnabled() {
+        return requireSettings().isCloudStorageEnabled();
+    }
+
+    /** 当前生效的云上传凭据；未开启或配置不完整时返回 null。 */
+    @Transactional(readOnly = true)
+    public CloudUploadTarget cloudUploadTarget() {
+        SiteSettings settings = requireSettings();
+        if (!settings.isCloudStorageEnabled()) {
+            return null;
+        }
+        return switch (settings.getCloudStorageProvider()) {
+            case ALIYUN_OSS -> aliyunTarget(settings);
+            case HUAWEI_OBS -> huaweiTarget(settings);
+            case TENCENT_COS -> tencentTarget(settings);
+        };
     }
 
     @Transactional(readOnly = true)
@@ -376,6 +398,7 @@ public class SystemSettingsService {
         applyAliyun(settings, update.aliyun());
         applyHuawei(settings, update.huawei());
         applyTencent(settings, update.tencent());
+        settings.setCloudStorageMaxImageKb(normalizeMaxImageKb(update.maxImageKb()));
         if (update.enabled()) {
             requireCloudProviderReady(settings, provider);
             settings.setCloudStorageEnabled(true);
@@ -421,6 +444,66 @@ public class SystemSettingsService {
         settings.setTencentCosCustomDomain(trimToEmpty(update.customDomain()));
     }
 
+    private static CloudUploadTarget aliyunTarget(SiteSettings settings) {
+        if (isBlank(settings.getAliyunOssEndpoint())
+                || isBlank(settings.getAliyunOssAccessKeyId())
+                || isBlank(settings.getAliyunOssAccessKeySecret())
+                || isBlank(settings.getAliyunOssBucket())) {
+            return null;
+        }
+        String host = CloudObjectKeys.hostWithoutScheme(settings.getAliyunOssEndpoint());
+        return new CloudUploadTarget(
+                CloudStorageProvider.ALIYUN_OSS,
+                host,
+                CloudObjectKeys.regionFromOssEndpoint(host),
+                settings.getAliyunOssAccessKeyId(),
+                settings.getAliyunOssAccessKeySecret(),
+                settings.getAliyunOssBucket().trim(),
+                nullToEmpty(settings.getAliyunOssPathPrefix()),
+                nullToEmpty(settings.getAliyunOssCustomDomain()),
+                settings.getCloudStorageMaxImageKb() * 1024);
+    }
+
+    private static CloudUploadTarget huaweiTarget(SiteSettings settings) {
+        if (isBlank(settings.getHuaweiObsEndpoint())
+                || isBlank(settings.getHuaweiObsAccessKey())
+                || isBlank(settings.getHuaweiObsSecretKey())
+                || isBlank(settings.getHuaweiObsBucket())) {
+            return null;
+        }
+        String host = CloudObjectKeys.hostWithoutScheme(settings.getHuaweiObsEndpoint());
+        return new CloudUploadTarget(
+                CloudStorageProvider.HUAWEI_OBS,
+                host,
+                CloudObjectKeys.regionFromHuaweiEndpoint(host),
+                settings.getHuaweiObsAccessKey(),
+                settings.getHuaweiObsSecretKey(),
+                settings.getHuaweiObsBucket().trim(),
+                nullToEmpty(settings.getHuaweiObsPathPrefix()),
+                nullToEmpty(settings.getHuaweiObsCustomDomain()),
+                settings.getCloudStorageMaxImageKb() * 1024);
+    }
+
+    private static CloudUploadTarget tencentTarget(SiteSettings settings) {
+        if (isBlank(settings.getTencentCosRegion())
+                || isBlank(settings.getTencentCosSecretId())
+                || isBlank(settings.getTencentCosSecretKey())
+                || isBlank(settings.getTencentCosBucket())) {
+            return null;
+        }
+        String region = settings.getTencentCosRegion().trim();
+        return new CloudUploadTarget(
+                CloudStorageProvider.TENCENT_COS,
+                "cos." + region + ".myqcloud.com",
+                region,
+                settings.getTencentCosSecretId(),
+                settings.getTencentCosSecretKey(),
+                settings.getTencentCosBucket().trim(),
+                nullToEmpty(settings.getTencentCosPathPrefix()),
+                nullToEmpty(settings.getTencentCosCustomDomain()),
+                settings.getCloudStorageMaxImageKb() * 1024);
+    }
+
     private void requireCloudProviderReady(SiteSettings settings, CloudStorageProvider provider) {
         switch (provider) {
             case ALIYUN_OSS -> {
@@ -444,6 +527,16 @@ public class SystemSettingsService {
         }
     }
 
+    private static int normalizeMaxImageKb(Integer kb) {
+        if (kb == null) {
+            return ImageCompressor.DEFAULT_MAX_KB;
+        }
+        if (kb < ImageCompressor.MIN_KB || kb > ImageCompressor.MAX_KB) {
+            throw new BusinessException(ErrorCode.INVALID_CLOUD_STORAGE_CONFIG, "maxImageKb");
+        }
+        return kb;
+    }
+
     private static void requireCloudField(String value, String field) {
         if (value == null || value.isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_CLOUD_STORAGE_CONFIG, field);
@@ -454,6 +547,7 @@ public class SystemSettingsService {
         return new CloudStorageSettings(
                 settings.isCloudStorageEnabled(),
                 settings.getCloudStorageProvider(),
+                settings.getCloudStorageMaxImageKb(),
                 new CloudStorageSettings.AliyunOssSettings(
                         nullToEmpty(settings.getAliyunOssEndpoint()),
                         nullToEmpty(settings.getAliyunOssAccessKeyId()),

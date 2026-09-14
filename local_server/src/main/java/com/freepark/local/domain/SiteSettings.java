@@ -105,6 +105,9 @@ public class SiteSettings {
     @Column(name = "cloud_storage_provider", length = 32)
     private CloudStorageProvider cloudStorageProvider = CloudStorageProvider.ALIYUN_OSS;
 
+    @Column(name = "cloud_storage_max_image_kb")
+    private Integer cloudStorageMaxImageKb = 200;
+
     @Column(name = "aliyun_oss_endpoint", length = 256)
     private String aliyunOssEndpoint;
 
@@ -284,6 +287,14 @@ public class SiteSettings {
 
     public void setCloudStorageProvider(CloudStorageProvider cloudStorageProvider) {
         this.cloudStorageProvider = cloudStorageProvider == null ? CloudStorageProvider.ALIYUN_OSS : cloudStorageProvider;
+    }
+
+    public int getCloudStorageMaxImageKb() {
+        return cloudStorageMaxImageKb == null ? 200 : cloudStorageMaxImageKb;
+    }
+
+    public void setCloudStorageMaxImageKb(Integer cloudStorageMaxImageKb) {
+        this.cloudStorageMaxImageKb = cloudStorageMaxImageKb == null ? 200 : cloudStorageMaxImageKb;
     }
 
     public String getAliyunOssEndpoint() { return aliyunOssEndpoint; }

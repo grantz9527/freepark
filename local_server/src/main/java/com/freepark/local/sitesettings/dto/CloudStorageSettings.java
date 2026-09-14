@@ -5,6 +5,7 @@ import com.freepark.local.storage.CloudStorageProvider;
 public record CloudStorageSettings(
         boolean enabled,
         CloudStorageProvider provider,
+        int maxImageKb,
         AliyunOssSettings aliyun,
         HuaweiObsSettings huawei,
         TencentCosSettings tencent) {

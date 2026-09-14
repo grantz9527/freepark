@@ -35,6 +35,7 @@ const imageStorageEnabled = ref(true)
 
 const cloudProvider = ref<CloudStorageProvider>('ALIYUN_OSS')
 const cloudEnabled = ref(false)
+const cloudMaxImageKb = ref(200)
 const cloudOptions: Array<{
   value: CloudStorageProvider
   labelKey: string
@@ -286,6 +287,8 @@ function applyCloudFromView(data: SystemSettingsView): void {
   if (!cloud) return
   cloudProvider.value = parseCloudProvider(cloud.provider)
   cloudEnabled.value = !!cloud.enabled
+  const kb = Number(cloud.maxImageKb)
+  cloudMaxImageKb.value = Number.isFinite(kb) && kb > 0 ? Math.round(kb) : 200
   if (cloud.aliyun) {
     aliyunOss.value = {
       endpoint: cloud.aliyun.endpoint || '',
@@ -379,6 +382,10 @@ async function loadSettings(): Promise<void> {
 function validateCloudStorage(): boolean {
   cloudFormError.value = ''
   if (!cloudEnabled.value) return true
+  const kb = Number(cloudMaxImageKb.value)
+  if (!Number.isInteger(kb) || kb < 20 || kb > 5120) {
+    return failCloud('systemSettings.cloud.maxImageKbInvalid')
+  }
   if (cloudProvider.value === 'ALIYUN_OSS') {
     const c = aliyunOss.value
     if (!c.endpoint.trim()) return failCloud('systemSettings.cloud.endpointRequired')
@@ -489,6 +496,7 @@ async function onSubmit(): Promise<void> {
         cloudStorage: {
           enabled: cloudEnabled.value,
           provider: cloudProvider.value,
+          maxImageKb: Number(cloudMaxImageKb.value) || 200,
           aliyun: {
             endpoint: aliyunOss.value.endpoint,
             accessKeyId: aliyunOss.value.accessKeyId,
@@ -751,6 +759,20 @@ onMounted(() => {
               <span class="toggle-track" aria-hidden="true" />
               <span class="toggle-text">{{ cloudEnabled ? t('common.on') : t('common.off') }}</span>
             </label>
+          </div>
+
+          <div v-if="cloudEnabled" class="form engine-form">
+            <label>
+              <span>{{ t('systemSettings.cloud.maxImageKb') }}</span>
+              <input
+                v-model.number="cloudMaxImageKb"
+                type="number"
+                min="20"
+                max="5120"
+                step="10"
+              />
+            </label>
+            <p class="hint cloud-field-hint">{{ t('systemSettings.cloud.maxImageKbHint') }}</p>
           </div>
 
           <div v-if="cloudEnabled && cloudProvider === 'ALIYUN_OSS'" class="form engine-form">

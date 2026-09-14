@@ -1456,6 +1456,7 @@ export interface TencentCosSettingsView {
 export interface CloudStorageSettingsView {
   enabled: boolean
   provider: CloudStorageProvider
+  maxImageKb?: number | null
   aliyun: AliyunOssSettingsView
   huawei: HuaweiObsSettingsView
   tencent: TencentCosSettingsView
@@ -1544,6 +1545,7 @@ export function updateSystemSettings(
     cloudStorage?: {
       enabled: boolean
       provider: CloudStorageProvider
+      maxImageKb?: number | null
       aliyun?: {
         endpoint?: string | null
         accessKeyId?: string | null

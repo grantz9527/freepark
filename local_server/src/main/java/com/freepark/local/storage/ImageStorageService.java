@@ -10,28 +10,32 @@ import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.freepark.local.sitesettings.service.SystemSettingsService;
 
 /**
- * 图片本地存储：把 base64 图片解码落盘到「系统设置」指定的图片存储目录，
- * 数据库仅保存相对路径（recognition/yyyyMMdd/uuid.ext），通过 HTTP 提供访问。
- * 系统设置关闭本地存储时不落盘，返回 null，避免阻断识别链路。
+ * 识别抓拍图存储：按系统设置写入本地目录，并在开启云存储时异步上传同一对象。
+ * 本地与云存储可独立开关；两者都关时不保存，返回 null。
  */
 @Service
 public class ImageStorageService {
 
-    /** 图片访问 URL 前缀，前端通过该前缀加载图片。 */
+    /** 图片访问 URL 前缀，前端通过该前缀加载本机落盘图片。 */
     public static final String IMAGE_URL_PREFIX = "/api/v1/images/";
 
+    private static final Logger log = LoggerFactory.getLogger(ImageStorageService.class);
     private static final DateTimeFormatter DATE_DIR = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final String RECOGNITION_SUBDIR = "recognition";
 
     private final SystemSettingsService settings;
+    private final CloudImageUploadService cloudUploads;
 
-    public ImageStorageService(SystemSettingsService settings) {
+    public ImageStorageService(SystemSettingsService settings, CloudImageUploadService cloudUploads) {
         this.settings = settings;
+        this.cloudUploads = cloudUploads;
     }
 
     /**
@@ -71,30 +75,52 @@ public class ImageStorageService {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
-        if (!settings.isImageStorageEnabled()) {
+        boolean localOn = settings.isImageStorageEnabled();
+        boolean cloudOn = settings.isCloudStorageEnabled();
+        if (!localOn && !cloudOn) {
             return null;
         }
         String safeMime = mime == null || mime.isBlank() ? "image/jpeg" : mime;
-        try {
-            String dateDir = DATE_DIR.format(LocalDate.now());
-            String fileName = (deviceCode == null || deviceCode.isBlank() ? "" : sanitize(deviceCode) + "-")
-                    + UUID.randomUUID() + extensionFor(safeMime);
-            Path relative = Paths.get(RECOGNITION_SUBDIR, dateDir, fileName);
-            Path target = resolveImagePath(relative.toString());
-            Files.createDirectories(target.getParent());
-            Files.write(target, bytes);
-            return relative.toString().replace('\\', '/');
-        } catch (IOException e) {
-            return null;
+        String dateDir = DATE_DIR.format(LocalDate.now());
+        String fileName = (deviceCode == null || deviceCode.isBlank() ? "" : sanitize(deviceCode) + "-")
+                + UUID.randomUUID() + extensionFor(safeMime);
+        String relative = Paths.get(RECOGNITION_SUBDIR, dateDir, fileName).toString().replace('\\', '/');
+        if (localOn) {
+            try {
+                Path target = resolveImagePath(relative);
+                Files.createDirectories(target.getParent());
+                Files.write(target, bytes);
+            } catch (IOException e) {
+                log.warn("local image write failed relative={}: {}", relative, e.toString());
+                if (!cloudOn) {
+                    return null;
+                }
+            }
         }
+        if (cloudOn) {
+            cloudUploads.uploadAsync(bytes, relative, safeMime);
+        }
+        return relative;
     }
 
-    /** 把相对路径拼成前端可访问的 URL（/api/v1/images/xxx）。 */
+    /**
+     * 把相对路径拼成前端可访问的 URL。
+     * 本地存储开启时走本机 /api/v1/images/；仅云存储时走自定义域名或默认对象地址。
+     */
     public String toPublicUrl(String relativePath) {
         if (relativePath == null || relativePath.isBlank()) {
             return null;
         }
-        return IMAGE_URL_PREFIX + relativePath.replace('\\', '/');
+        String relative = relativePath.replace('\\', '/');
+        if (settings.isImageStorageEnabled()) {
+            return IMAGE_URL_PREFIX + relative;
+        }
+        CloudUploadTarget target = settings.cloudUploadTarget();
+        if (target != null) {
+            String key = CloudObjectKeys.objectKey(target.objectPrefix(), relative);
+            return CloudObjectKeys.publicUrl(target.customDomain(), target.virtualHost(), key);
+        }
+        return IMAGE_URL_PREFIX + relative;
     }
 
     /** 把相对路径解析为图片存储目录下的文件路径（用于 HTTP 提供图片）。 */

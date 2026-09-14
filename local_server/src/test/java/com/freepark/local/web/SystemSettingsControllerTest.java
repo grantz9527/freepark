@@ -122,7 +122,8 @@ class SystemSettingsControllerTest {
                       "bucket":"freepark-images",
                       "pathPrefix":"images/",
                       "customDomain":"https://img.example.com"
-                    }
+                    },
+                    "maxImageKb":300
                   }
                 }
                 """;
@@ -137,7 +138,8 @@ class SystemSettingsControllerTest {
                 .andExpect(jsonPath("$.data.cloudStorage.aliyun.bucket").value("freepark-images"))
                 .andExpect(jsonPath("$.data.cloudStorage.aliyun.accessKeyId").value("LTAItest"))
                 .andExpect(jsonPath("$.data.cloudStorage.aliyun.accessKeySecretSet").value(true))
-                .andExpect(jsonPath("$.data.cloudStorage.aliyun.accessKeySecret").doesNotExist());
+                .andExpect(jsonPath("$.data.cloudStorage.aliyun.accessKeySecret").doesNotExist())
+                .andExpect(jsonPath("$.data.cloudStorage.maxImageKb").value(300));
     }
 
     @Test

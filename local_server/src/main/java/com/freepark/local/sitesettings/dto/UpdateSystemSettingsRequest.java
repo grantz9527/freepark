@@ -47,6 +47,7 @@ public record UpdateSystemSettingsRequest(
     public record CloudStorageUpdate(
             boolean enabled,
             CloudStorageProvider provider,
+            @Min(20) @Max(5120) Integer maxImageKb,
             @Valid AliyunOssUpdate aliyun,
             @Valid HuaweiObsUpdate huawei,
             @Valid TencentCosUpdate tencent) {
