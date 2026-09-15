@@ -37,6 +37,9 @@ spring:
     multipart:
       max-file-size: ${MULTIPART_MAX_FILE_SIZE:20MB}
       max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:20MB}
+  mvc:
+    async:
+      request-timeout: 30m
 
 management:
   endpoints:
@@ -49,6 +52,12 @@ management:
         enabled: true
 
 freepark:
+  preview:
+    # Frigate 内置 go2rtc 端口；拉流失败时再试 Frigate API 上的 /api/go2rtc 反代
+    go2rtc-port: ${GO2RTC_PORT:1984}
+    try-frigate-api-proxy: ${GO2RTC_VIA_FRIGATE:true}
+    max-sessions: ${PREVIEW_MAX_SESSIONS:2}
+    connect-timeout: ${PREVIEW_CONNECT_TIMEOUT:20s}
   frigate:
     # 同一相机识别出同一合法车牌后的入库去重窗口（毫秒）
     plate-dedup-window-ms: ${FRIGATE_PLATE_DEDUP_WINDOW_MS:30000}

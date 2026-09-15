@@ -64,9 +64,9 @@ public class SiteSettings {
     // ======== 软件车牌识别（全局开关 + provider + 各家独立参数） ========
     @Enumerated(EnumType.STRING)
     @Column(name = "software_plate_provider", length = 32)
-    private SoftwarePlateProvider softwarePlateProvider = SoftwarePlateProvider.YOLO26_PLATE;
+    private SoftwarePlateProvider softwarePlateProvider = SoftwarePlateProvider.HYPER_LPR3;
 
-    // ======== YOLO26-Plate 软件识别（可选） ========
+    // ======== 历史 YOLO26-Plate 列（已停用，保留以免无迁移删列） ========
     @Column(name = "yolo26_plate_enabled", nullable = false)
     private boolean yolo26PlateEnabled = false;
 
@@ -250,11 +250,11 @@ public class SiteSettings {
     public void setYolo26PlateReadTimeoutMs(Integer ms) { this.yolo26PlateReadTimeoutMs = ms; }
 
     public SoftwarePlateProvider getSoftwarePlateProvider() {
-        return softwarePlateProvider == null ? SoftwarePlateProvider.YOLO26_PLATE : softwarePlateProvider;
+        return SoftwarePlateProvider.effective(softwarePlateProvider);
     }
 
     public void setSoftwarePlateProvider(SoftwarePlateProvider softwarePlateProvider) {
-        this.softwarePlateProvider = softwarePlateProvider == null ? SoftwarePlateProvider.YOLO26_PLATE : softwarePlateProvider;
+        this.softwarePlateProvider = SoftwarePlateProvider.effective(softwarePlateProvider);
     }
 
     public boolean isHyperlpr3Enabled() { return hyperlpr3Enabled; }

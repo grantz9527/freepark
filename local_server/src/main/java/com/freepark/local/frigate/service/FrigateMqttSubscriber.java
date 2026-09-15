@@ -36,7 +36,8 @@ import com.freepark.local.domain.FrigateSettingsRepository;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.hyperlpr3.HyperLpr3Client;
 import com.freepark.local.storage.ImageStorageService;
-import com.freepark.local.yolo26plate.Yolo26PlateClient;
+import com.freepark.local.softwareplate.PlateShape;
+import com.freepark.local.softwareplate.SoftwarePlateModels.DetectedPlate;
 
 import jakarta.annotation.PreDestroy;
 
@@ -285,8 +286,8 @@ public class FrigateMqttSubscriber {
                             if (assisted != null && assisted.equals(current)) {
                                 log.info("Frigate plate {} verified by HyperLPR3", current);
                             } else if (assisted != null
-                                    && !Yolo26PlateClient.isValidPlateShapePublic(current)
-                                    && Yolo26PlateClient.isValidPlateShapePublic(assisted)) {
+                                    && !PlateShape.isValid(current)
+                                    && PlateShape.isValid(assisted)) {
                                 // Frigate 识别残缺/非法（如丢省份汉字）时，采用 HyperLPR3 的合法结果。
                                 log.warn("Frigate plate {} invalid, use HyperLPR3 {}", current, assisted);
                                 plate = assisted;
@@ -315,7 +316,7 @@ public class FrigateMqttSubscriber {
                 return;
             }
             // 过滤明显不正确的车牌：必须符合国内车牌结构（省份汉字 + 字母 + 5~6 位）。
-            if (!Yolo26PlateClient.isValidPlateShapePublic(normalized)) {
+            if (!PlateShape.isValid(normalized)) {
                 log.info(
                         "Frigate MQTT payload ignored topic={} camera={} plate={} (invalid plate shape)",
                         topic, cameraName, normalized);
@@ -393,7 +394,7 @@ public class FrigateMqttSubscriber {
                     best = entry.getKey();
                 }
             }
-            if (best != null && Yolo26PlateClient.isValidPlateShapePublic(best)) {
+            if (best != null && PlateShape.isValid(best)) {
                 source = "HyperLPR3";
             } else {
                 best = null;
@@ -491,7 +492,7 @@ public class FrigateMqttSubscriber {
          *  注意：不刷新 lastUpdateAt，避免本服务自己的抽样帧延长投票窗口、拖慢出结果。 */
         synchronized boolean recordHyperVote(String rawPlate, PlateColor color, double conf) {
             String normalized = normalizePlate(rawPlate);
-            if (normalized == null || !Yolo26PlateClient.isValidPlateShapePublic(normalized)) {
+            if (normalized == null || !PlateShape.isValid(normalized)) {
                 return false;
             }
             hyperVotes.compute(normalized, (k, v) -> new HyperVote(
@@ -532,7 +533,7 @@ public class FrigateMqttSubscriber {
                     cameraName, eventId, snapshotPath);
             return null;
         }
-        Yolo26PlateClient.DetectedPlate best = hyperLpr3Client.recognizeBestEffort(image, eventId);
+        DetectedPlate best = hyperLpr3Client.recognizeBestEffort(image, eventId);
         if (best == null) {
             log.warn("Frigate LPR skip camera={} event={}: HyperLPR3 returned nothing",
                     cameraName, eventId);
@@ -568,7 +569,7 @@ public class FrigateMqttSubscriber {
                 log.warn("Frigate LPR frame camera={} {}: snapshot download failed", cameraName, tag);
                 return;
             }
-            Yolo26PlateClient.DetectedPlate best = hyperLpr3Client.recognizeBestEffort(image, tag);
+            DetectedPlate best = hyperLpr3Client.recognizeBestEffort(image, tag);
             if (best == null || best.plate() == null || best.plate().isBlank()) {
                 log.debug("Frigate LPR frame camera={} {}: nothing recognized", cameraName, tag);
                 return;

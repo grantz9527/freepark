@@ -168,8 +168,8 @@ public class AioDriverService {
                     barrier.getCode(), brand, source);
             return false;
         }
-        if (barrier.getHost() == null || barrier.getHost().isBlank() || barrier.getPort() == null) {
-            log.warn("识别联动跳过开闸：code={} brand={} 档案缺少连接地址 host/port（source={}）",
+        if (barrier.getHost() == null || barrier.getHost().isBlank()) {
+            log.warn("识别联动跳过开闸：code={} brand={} 档案缺少连接地址 host（source={}）",
                     barrier.getCode(), brand, source);
             return false;
         }

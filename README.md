@@ -56,6 +56,51 @@ The backend uses Java 21, Spring Data JPA, MySQL, and HTTP I18N (`Accept-Languag
 
 - [`local_frontend`](local_frontend/README.md): Vue 3 + vue-i18n console for `local_server`, default port `5173`
 
+- [`docker/mosquitto`](docker/mosquitto/README.md): MQTT broker (Docker) / MQTT Broker（Docker）
+
+- [`docker/frigate`](docker/frigate/README.md): Frigate NVR / LPR + go2rtc (Docker) / Frigate 识别与直播（Docker）
+
+- [`docker/hyperlpr3`](docker/hyperlpr3/README.md): HyperLPR3 REST (port `8715`) / HyperLPR3 识别服务（端口 `8715`）
+
+## AI deploy / AI 部署
+
+This repo is meant to be **deployed by an AI**. The contract lives in [`ai-build`](ai-build/README.md). Do not invent ports or compose files from other READMEs.
+
+本仓库设计为**交给 AI 部署**。约定只在 [`ai-build`](ai-build/README.md)。不要从其它 README 自行拼端口或 compose。
+
+**Hand it to another AI / 交给其它 AI：** paste [`ai-build/PROMPT.md`](ai-build/PROMPT.md) into that agent, or tell it: *follow `ai-build/AGENTS.md`*. It must pick **one** OS tree and not mix them.
+
+把 [`ai-build/PROMPT.md`](ai-build/PROMPT.md) 整段贴给目标 AI，或让它执行 `ai-build/AGENTS.md`。必须只选一套系统目录，不要混用。
+
+| Host OS | Scripts |
+| --- | --- |
+| Windows | [`ai-build/windows`](ai-build/windows/README.md) |
+| Linux / macOS | [`ai-build/linux`](ai-build/linux/README.md) |
+
+Need Docker, JDK 21, and Node.js 22+ on the machine. Default path starts MySQL `:3307` + MQTT `:1883`, then `local_server` `:8081` and `local_frontend` `:5173`. Frigate and HyperLPR3 are optional (`-WithLpr` / `--with-lpr`, `-WithFrigate` / `--with-frigate`).
+
+本机需要 Docker、JDK 21、Node.js 22+。默认只起控制台依赖（MySQL `:3307`、MQTT `:1883`），再启动后端 `:8081` 与前端 `:5173`。Frigate、HyperLPR3 为可选。
+
+Windows:
+
+```powershell
+powershell -File ai-build/windows/up.ps1
+powershell -File ai-build/windows/install.ps1
+```
+
+Linux / macOS:
+
+```sh
+sh ai-build/linux/up.sh
+sh ai-build/linux/install.sh
+```
+
+Then start `local_server` and `local_frontend`, and run `verify` in the same OS folder. Full order: [`ai-build/AGENTS.md`](ai-build/AGENTS.md).
+
+随后在同一系统目录下启动后端、前端并执行 `verify`。完整顺序见 [`ai-build/AGENTS.md`](ai-build/AGENTS.md)。
+
+Console / 控制台： [http://localhost:5173](http://localhost:5173) — `admin` / `admin123`.
+
 ## Default account / 默认账号
 
 On first startup, sign in with the default account:

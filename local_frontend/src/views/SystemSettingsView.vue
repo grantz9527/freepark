@@ -9,14 +9,15 @@ import {
   updateSystemSettings,
   type CloudStorageProvider,
   type PlateColor,
+  type SoftwarePlateDetectedPlate,
   type SoftwarePlateProvider,
   type SoftwarePlateRecognitionResult,
   type SystemSettingsView,
-  type Yolo26DetectedPlate,
 } from '@/api/client'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { formatSiteTime } from '@/composables/useSiteTime'
 import { LOCALE_LABELS, type SupportedLocale } from '@/i18n/locales'
+import { plateSwatchStyle } from '@/lib/plateBadge'
 import { applySiteSettings } from '@/site/settings'
 
 const { t, locale } = useI18n()
@@ -99,8 +100,8 @@ const supportedTimezones = ref<string[]>([])
 const supportedPlateColors = ref<PlateColor[]>([])
 const updatedAt = ref('')
 
-// 软件车牌识别：引擎选择 + 两套独立配置
-const softwarePlateProvider = ref<SoftwarePlateProvider>('YOLO26_PLATE')
+// 软件车牌识别：HyperLPR3
+const softwarePlateProvider = ref<SoftwarePlateProvider>('HYPER_LPR3')
 const providerOptions: Array<{
   value: SoftwarePlateProvider
   labelKey: string
@@ -113,18 +114,7 @@ const providerOptions: Array<{
     hintKey: 'systemSettings.softwarePlate.providerHyperLpr3Hint',
     recommended: true,
   },
-  {
-    value: 'YOLO26_PLATE',
-    labelKey: 'systemSettings.softwarePlate.providerYolo26',
-    hintKey: 'systemSettings.softwarePlate.providerYolo26Hint',
-  },
 ]
-
-const yolo26Enabled = ref(false)
-const yolo26BaseUrl = ref('http://127.0.0.1:8780')
-const yolo26MinConf = ref(0.25)
-const yolo26ConnectMs = ref(5000)
-const yolo26ReadMs = ref(60000)
 
 const hyperLpr3Enabled = ref(false)
 const hyperLpr3BaseUrl = ref('http://127.0.0.1:8715')
@@ -147,62 +137,45 @@ const debugVisiblePlates = computed(() => {
   return r.plates.filter((p) => !p.suppressed)
 })
 
-const isCurrentProviderEnabled = computed(() =>
-  softwarePlateProvider.value === 'YOLO26_PLATE' ? yolo26Enabled.value : hyperLpr3Enabled.value,
-)
-
-const currentEngineI18nKey = computed(() =>
-  softwarePlateProvider.value === 'HYPER_LPR3'
-    ? 'systemSettings.hyperLpr3'
-    : 'systemSettings.yolo26',
-)
+const currentEngineI18nKey = computed(() => 'systemSettings.hyperLpr3')
 
 const currentEnabled = computed({
-  get: () => isCurrentProviderEnabled.value,
+  get: () => hyperLpr3Enabled.value,
   set: (value: boolean) => {
-    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3Enabled.value = value
-    else yolo26Enabled.value = value
+    hyperLpr3Enabled.value = value
   },
 })
 
 const currentBaseUrl = computed({
-  get: () =>
-    softwarePlateProvider.value === 'HYPER_LPR3' ? hyperLpr3BaseUrl.value : yolo26BaseUrl.value,
+  get: () => hyperLpr3BaseUrl.value,
   set: (value: string) => {
-    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3BaseUrl.value = value
-    else yolo26BaseUrl.value = value
+    hyperLpr3BaseUrl.value = value
   },
 })
 
 const currentMinConf = computed({
-  get: () =>
-    softwarePlateProvider.value === 'HYPER_LPR3' ? hyperLpr3MinConf.value : yolo26MinConf.value,
+  get: () => hyperLpr3MinConf.value,
   set: (value: number) => {
-    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3MinConf.value = value
-    else yolo26MinConf.value = value
+    hyperLpr3MinConf.value = value
   },
 })
 
 const currentConnectMs = computed({
-  get: () =>
-    softwarePlateProvider.value === 'HYPER_LPR3' ? hyperLpr3ConnectMs.value : yolo26ConnectMs.value,
+  get: () => hyperLpr3ConnectMs.value,
   set: (value: number) => {
-    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3ConnectMs.value = value
-    else yolo26ConnectMs.value = value
+    hyperLpr3ConnectMs.value = value
   },
 })
 
 const currentReadMs = computed({
-  get: () =>
-    softwarePlateProvider.value === 'HYPER_LPR3' ? hyperLpr3ReadMs.value : yolo26ReadMs.value,
+  get: () => hyperLpr3ReadMs.value,
   set: (value: number) => {
-    if (softwarePlateProvider.value === 'HYPER_LPR3') hyperLpr3ReadMs.value = value
-    else yolo26ReadMs.value = value
+    hyperLpr3ReadMs.value = value
   },
 })
 
 function engineEnabled(provider: SoftwarePlateProvider): boolean {
-  return provider === 'HYPER_LPR3' ? hyperLpr3Enabled.value : yolo26Enabled.value
+  return provider === 'HYPER_LPR3' ? hyperLpr3Enabled.value : false
 }
 
 const localeOptions = computed(() =>
@@ -218,19 +191,6 @@ const defaultPlateColorOptions = computed(() =>
     label: plateColorLabel(color),
   })),
 )
-
-watch(softwarePlateProvider, (newVal, oldVal) => {
-  // 切换引擎时：(a) 把原引擎的启用开关关闭，保证同一时刻只可能启用当前一个
-  if (oldVal && oldVal !== newVal) {
-    if (oldVal === 'YOLO26_PLATE') yolo26Enabled.value = false
-    if (oldVal === 'HYPER_LPR3') hyperLpr3Enabled.value = false
-  }
-  // (b) 清空调试面板，避免把 A 引擎的结果错当成 B 引擎
-  debugTestFile.value = null
-  debugTestPreview.value = ''
-  debugTestResult.value = null
-  debugTestError.value = ''
-})
 
 watch(
   allowedPlateColors,
@@ -354,13 +314,7 @@ async function loadSettings(): Promise<void> {
     allowedPlateColors.value = [...data.allowedPlateColors]
     applyLocalStorageFromView(data)
     applyCloudFromView(data)
-    softwarePlateProvider.value =
-      data.softwarePlateProvider === 'HYPER_LPR3' ? 'HYPER_LPR3' : 'YOLO26_PLATE'
-    yolo26Enabled.value = !!data.yolo26Plate?.enabled
-    yolo26BaseUrl.value = data.yolo26Plate?.baseUrl || 'http://127.0.0.1:8780'
-    yolo26MinConf.value = data.yolo26Plate?.minConfidence ?? 0.25
-    yolo26ConnectMs.value = data.yolo26Plate?.connectTimeoutMs ?? 5000
-    yolo26ReadMs.value = data.yolo26Plate?.readTimeoutMs ?? 60000
+    softwarePlateProvider.value = 'HYPER_LPR3'
     hyperLpr3Enabled.value = !!data.hyperLpr3?.enabled
     hyperLpr3BaseUrl.value = data.hyperLpr3?.baseUrl || 'http://127.0.0.1:8715'
     hyperLpr3MinConf.value = data.hyperLpr3?.minConfidence ?? 0.6
@@ -439,24 +393,6 @@ async function onSubmit(): Promise<void> {
   if (!validateCloudStorage()) {
     return
   }
-  // 互斥：同时只能启用当前选中 provider 的那一套，另一个强制关
-  if (softwarePlateProvider.value !== 'YOLO26_PLATE' && yolo26Enabled.value) {
-    yolo26Enabled.value = false
-  }
-  if (softwarePlateProvider.value !== 'HYPER_LPR3' && hyperLpr3Enabled.value) {
-    hyperLpr3Enabled.value = false
-  }
-  if (yolo26Enabled.value) {
-    const err = validateBaseUrl(
-      yolo26BaseUrl.value,
-      'systemSettings.yolo26.baseUrlRequired',
-      'systemSettings.yolo26.baseUrlInvalid',
-    )
-    if (err) {
-      errorMessage.value = err
-      return
-    }
-  }
   if (hyperLpr3Enabled.value) {
     const err = validateBaseUrl(
       hyperLpr3BaseUrl.value,
@@ -478,14 +414,7 @@ async function onSubmit(): Promise<void> {
         allowedPlateColors: allowedPlateColors.value,
         imageStoragePath: storagePath || './data/images',
         imageStorageEnabled: imageStorageEnabled.value,
-        softwarePlateProvider: softwarePlateProvider.value,
-        yolo26Plate: {
-          enabled: yolo26Enabled.value,
-          baseUrl: yolo26BaseUrl.value.trim() || null,
-          minConfidence: yolo26MinConf.value,
-          connectTimeoutMs: yolo26ConnectMs.value,
-          readTimeoutMs: yolo26ReadMs.value,
-        },
+        softwarePlateProvider: 'HYPER_LPR3',
         hyperLpr3: {
           enabled: hyperLpr3Enabled.value,
           baseUrl: hyperLpr3BaseUrl.value.trim() || null,
@@ -532,13 +461,7 @@ async function onSubmit(): Promise<void> {
     allowedPlateColors.value = [...data.allowedPlateColors]
     applyLocalStorageFromView(data, storagePath)
     applyCloudFromView(data)
-    softwarePlateProvider.value =
-      data.softwarePlateProvider === 'HYPER_LPR3' ? 'HYPER_LPR3' : 'YOLO26_PLATE'
-    yolo26Enabled.value = !!data.yolo26Plate?.enabled
-    yolo26BaseUrl.value = data.yolo26Plate?.baseUrl || 'http://127.0.0.1:8780'
-    yolo26MinConf.value = data.yolo26Plate?.minConfidence ?? 0.25
-    yolo26ConnectMs.value = data.yolo26Plate?.connectTimeoutMs ?? 5000
-    yolo26ReadMs.value = data.yolo26Plate?.readTimeoutMs ?? 60000
+    softwarePlateProvider.value = 'HYPER_LPR3'
     hyperLpr3Enabled.value = !!data.hyperLpr3?.enabled
     hyperLpr3BaseUrl.value = data.hyperLpr3?.baseUrl || 'http://127.0.0.1:8715'
     hyperLpr3MinConf.value = data.hyperLpr3?.minConfidence ?? 0.6
@@ -598,8 +521,8 @@ function onDebugDrop(e: DragEvent): void {
 }
 
 async function runDebugTest(forceProvider?: SoftwarePlateProvider): Promise<void> {
-  const provider: SoftwarePlateProvider = forceProvider ?? softwarePlateProvider.value
-  const enabled = provider === 'YOLO26_PLATE' ? yolo26Enabled.value : hyperLpr3Enabled.value
+  const provider: SoftwarePlateProvider = forceProvider ?? 'HYPER_LPR3'
+  const enabled = hyperLpr3Enabled.value
   debugTestError.value = ''
   debugTestResult.value = null
   if (!enabled) {
@@ -632,15 +555,13 @@ function pct(v: number): string {
   return (v * 100).toFixed(2) + '%'
 }
 
-function plateOrDash(p: Yolo26DetectedPlate, providerKey: string): string {
+function plateOrDash(p: SoftwarePlateDetectedPlate, providerKey: string): string {
   if (p.error) return t(`${providerKey}.recognizeError`, [p.error])
   return p.plate || '-'
 }
 
 function currentProviderKey(): string {
-  return softwarePlateProvider.value === 'HYPER_LPR3'
-    ? 'systemSettings.hyperLpr3'
-    : 'systemSettings.yolo26'
+  return 'systemSettings.hyperLpr3'
 }
 
 function debugProviderLabel(provider: SoftwarePlateProvider): string {
@@ -1005,21 +926,29 @@ onMounted(() => {
                   :checked="isPlateColorChecked(color)"
                   @change="togglePlateColor(color, ($event.target as HTMLInputElement).checked)"
                 />
+                <span class="color-swatch" :style="plateSwatchStyle(color)" aria-hidden="true" />
                 <span>{{ plateColorLabel(color) }}</span>
               </label>
             </div>
           </div>
           <label class="default-color">
             <span>{{ t('systemSettings.defaultPlateColor') }}</span>
-            <select v-model="defaultPlateColor">
-              <option
-                v-for="option in defaultPlateColorOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ option.label }}
-              </option>
-            </select>
+            <div class="default-color-row">
+              <span
+                class="color-swatch"
+                :style="plateSwatchStyle(defaultPlateColor)"
+                aria-hidden="true"
+              />
+              <select v-model="defaultPlateColor">
+                <option
+                  v-for="option in defaultPlateColorOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
           </label>
         </div>
       </article>
@@ -1188,15 +1117,6 @@ onMounted(() => {
             >
               {{ t('systemSettings.softwarePlate.testHyperLpr3') }}
             </button>
-            <button
-              type="button"
-              class="ghost"
-              :disabled="debugTestLoading || !debugTestFile || !yolo26Enabled"
-              :title="yolo26Enabled ? '' : t('systemSettings.yolo26.enableFirst')"
-              @click="runDebugTest('YOLO26_PLATE')"
-            >
-              {{ t('systemSettings.softwarePlate.testYolo26') }}
-            </button>
           </div>
         </div>
         <div class="debug-area">
@@ -1209,26 +1129,26 @@ onMounted(() => {
             <div v-else-if="debugTestResult" class="debug-meta">
               <div class="debug-stats">
                 <div>
-                  <span>{{ t('systemSettings.yolo26.resultCount') }}</span>
+                  <span>{{ t('systemSettings.softwarePlate.resultCount') }}</span>
                   <b>{{ debugTestResult.count }}</b>
                 </div>
                 <div>
-                  <span>{{ t('systemSettings.yolo26.resultElapsed') }}</span>
+                  <span>{{ t('systemSettings.softwarePlate.resultElapsed') }}</span>
                   <b>{{ debugTestResult.elapsedMs }} ms</b>
                 </div>
                 <div>
-                  <span>{{ t('systemSettings.yolo26.resultDevice') }}</span>
+                  <span>{{ t('systemSettings.softwarePlate.resultDevice') }}</span>
                   <b>{{ debugTestResult.device }}</b>
                 </div>
                 <div class="stat-wide">
-                  <span>{{ t('systemSettings.yolo26.resultUpstream') }}</span>
+                  <span>{{ t('systemSettings.softwarePlate.resultUpstream') }}</span>
                   <code>{{ debugTestResult.upstreamBaseUrl }}</code>
                 </div>
               </div>
 
               <section v-if="debugTestResult.best" class="best-plate">
                 <div class="best-head">
-                  <span class="tag">{{ t('systemSettings.yolo26.bestTag') }}</span>
+                  <span class="tag">{{ t('systemSettings.softwarePlate.bestTag') }}</span>
                   <span class="plate-text">
                     {{ plateOrDash(debugTestResult.best, currentProviderKey()) }}
                   </span>
@@ -1237,24 +1157,24 @@ onMounted(() => {
                   </span>
                 </div>
                 <div class="plate-sub">
-                  <span>{{ t('systemSettings.yolo26.overallScore') }} {{ pct(debugTestResult.best.score ?? 0) }}</span>
-                  <span>{{ t('systemSettings.yolo26.detScore') }} {{ pct(debugTestResult.best.detectConfidence) }}</span>
-                  <span>{{ t('systemSettings.yolo26.recScore') }} {{ pct(debugTestResult.best.plateConfidence) }}</span>
+                  <span>{{ t('systemSettings.softwarePlate.overallScore') }} {{ pct(debugTestResult.best.score ?? 0) }}</span>
+                  <span>{{ t('systemSettings.softwarePlate.detScore') }} {{ pct(debugTestResult.best.detectConfidence) }}</span>
+                  <span>{{ t('systemSettings.softwarePlate.recScore') }} {{ pct(debugTestResult.best.plateConfidence) }}</span>
                   <span v-if="debugTestResult.best.plateColorConfidence">
-                    {{ t('systemSettings.yolo26.colorScore') }} {{ pct(debugTestResult.best.plateColorConfidence) }}
+                    {{ t('systemSettings.softwarePlate.colorScore') }} {{ pct(debugTestResult.best.plateColorConfidence) }}
                   </span>
                   <span v-if="debugTestResult.best.plateValid === false" class="badge warn">
-                    {{ t('systemSettings.yolo26.invalidPlate') }}
+                    {{ t('systemSettings.softwarePlate.invalidPlate') }}
                   </span>
                   <span v-if="debugTestResult.best.cls === 1" class="badge">
-                    {{ t('systemSettings.yolo26.doubleRow') }}
+                    {{ t('systemSettings.softwarePlate.doubleRow') }}
                   </span>
                 </div>
               </section>
 
               <label v-if="debugTestResult.plates.length > 0" class="debug-toggle">
                 <input type="checkbox" v-model="debugShowAllCandidates" />
-                <span>{{ t('systemSettings.yolo26.showAllCandidates') }}</span>
+                <span>{{ t('systemSettings.softwarePlate.showAllCandidates') }}</span>
               </label>
 
               <ul v-if="debugVisiblePlates.length" class="plate-list">
@@ -1268,23 +1188,23 @@ onMounted(() => {
                     <span class="plate-color">{{ plateColorLabel(p.plateColor ?? 'OTHER') }}</span>
                   </div>
                   <div class="plate-sub">
-                    <span v-if="p.score != null">{{ t('systemSettings.yolo26.overallScore') }} {{ pct(p.score) }}</span>
-                    <span>{{ t('systemSettings.yolo26.detScore') }} {{ pct(p.detectConfidence) }}</span>
-                    <span>{{ t('systemSettings.yolo26.recScore') }} {{ pct(p.plateConfidence) }}</span>
+                    <span v-if="p.score != null">{{ t('systemSettings.softwarePlate.overallScore') }} {{ pct(p.score) }}</span>
+                    <span>{{ t('systemSettings.softwarePlate.detScore') }} {{ pct(p.detectConfidence) }}</span>
+                    <span>{{ t('systemSettings.softwarePlate.recScore') }} {{ pct(p.plateConfidence) }}</span>
                     <span v-if="p.plateColorConfidence">
-                      {{ t('systemSettings.yolo26.colorScore') }} {{ pct(p.plateColorConfidence) }}
+                      {{ t('systemSettings.softwarePlate.colorScore') }} {{ pct(p.plateColorConfidence) }}
                     </span>
                     <span v-if="p.plateValid === false" class="badge warn">
-                      {{ t('systemSettings.yolo26.invalidPlate') }}
+                      {{ t('systemSettings.softwarePlate.invalidPlate') }}
                     </span>
                     <span v-if="p.suppressed" class="badge warn">
-                      {{ t('systemSettings.yolo26.suppressed') }}
+                      {{ t('systemSettings.softwarePlate.suppressed') }}
                     </span>
-                    <span v-if="p.cls === 1" class="badge">{{ t('systemSettings.yolo26.doubleRow') }}</span>
+                    <span v-if="p.cls === 1" class="badge">{{ t('systemSettings.softwarePlate.doubleRow') }}</span>
                   </div>
                 </li>
               </ul>
-              <p v-else-if="!debugTestError" class="hint">{{ t('systemSettings.yolo26.noPlate') }}</p>
+              <p v-else-if="!debugTestError" class="hint">{{ t('systemSettings.softwarePlate.noPlate') }}</p>
             </div>
             <div v-else class="debug-empty">
               <span>{{ t('systemSettings.softwarePlate.debugEmpty') }}</span>
@@ -1413,7 +1333,7 @@ onMounted(() => {
 
 .color-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(8.4rem, 1fr));
   gap: 0.45rem 0.75rem;
 }
 
@@ -1422,6 +1342,32 @@ onMounted(() => {
   align-items: center;
   gap: 0.45rem;
   font-size: 0.9rem;
+}
+
+.color-swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.default-color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.default-color-row .color-swatch {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 6px;
+}
+
+.default-color-row select {
+  flex: 1;
+  min-width: 0;
 }
 
 .color-option input {

@@ -14,8 +14,10 @@ import com.freepark.driver.api.model.DeviceConfig;
 /**
  * 臻识设备 HTTP 命令通道（JDK HttpClient + Jackson，驱动自带依赖）。
  *
- * <p>演示用的默认实现：向 {@code http://host:port/v1/device/command} POST
+ * <p>演示用的默认实现：向 {@code http://host:80/v1/device/command} POST
  * JSON {@code { "cmd": "...", "text": "...", "durationMs": n }}。
+ * {@link DeviceConfig#port()} 为视频流 RTSP 端口，HTTP 命令默认 80，
+ * 可用 params {@code httpPort} 覆盖。
  *
  * <p>【厂商接入 TODO】真实臻识一体机/相机控制接口请按厂商文档替换：
  * 命令端点路径（默认可取 DeviceConfig.params 的 "commandPath" 覆盖）、
@@ -38,8 +40,7 @@ public final class HttpZhensiCommandTransport implements ZhensiCommandTransport 
         String path = config.params() != null
                 ? config.params().getOrDefault("commandPath", DEFAULT_PATH)
                 : DEFAULT_PATH;
-        this.endpoint = "http://%s:%d%s".formatted(config.host(),
-                config.port() == null ? 80 : config.port(), path);
+        this.endpoint = "http://%s:%d%s".formatted(config.host(), httpPort(config), path);
     }
 
     @Override
@@ -72,8 +73,7 @@ public final class HttpZhensiCommandTransport implements ZhensiCommandTransport 
         // TODO 真实健康探测接口；示范实现直接尝试 TCP 可达性即可，细节按厂商文档补充
         try {
             HttpRequest request = HttpRequest.newBuilder(
-                            URI.create("http://%s:%d".formatted(config.host(),
-                                    config.port() == null ? 80 : config.port())))
+                            URI.create("http://%s:%d".formatted(config.host(), httpPort(config))))
                     .timeout(Duration.ofSeconds(2))
                     .GET()
                     .build();
@@ -81,5 +81,21 @@ public final class HttpZhensiCommandTransport implements ZhensiCommandTransport 
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** 档案 port 为 RTSP；HTTP 命令默认 80，params.httpPort 可覆盖。 */
+    private static int httpPort(DeviceConfig config) {
+        String override = config.params() == null ? null : config.params().get("httpPort");
+        if (override != null && !override.isBlank()) {
+            try {
+                int parsed = Integer.parseInt(override.trim());
+                if (parsed >= 1 && parsed <= 65535) {
+                    return parsed;
+                }
+            } catch (NumberFormatException ignored) {
+                // fall through to default
+            }
+        }
+        return 80;
     }
 }

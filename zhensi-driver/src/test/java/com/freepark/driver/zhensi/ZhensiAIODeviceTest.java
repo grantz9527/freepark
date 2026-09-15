@@ -35,7 +35,7 @@ final class RecordingTransport implements ZhensiCommandTransport {
 class ZhensiAIODeviceTest {
 
     private static DeviceConfig cfg(String key) {
-        return DeviceConfig.of(key, "ZHENSHI", "HTZ-S02", "192.168.1.10", 8080);
+        return DeviceConfig.of(key, "ZHENSHI", "YELLOW_CARD_LED_LINE4", "192.168.1.10", 8080);
     }
 
     @Test
@@ -200,7 +200,7 @@ class ZhensiAIODeviceTest {
         AioDriverRegistry registry = new AioDriverRegistry();
         registry.register(new ZhensiDriverFactory());
 
-        assertTrue(registry.supports("ZHENSHI", "HTZ-S02"));
+        assertTrue(registry.supports("ZHENSHI", "YELLOW_CARD_LED_LINE4"));
         assertTrue(registry.supports("zhenshi", "ANY"));
 
         // 同一工厂可创建多台设备实例；这里仅验证装配不触碰网络

@@ -77,7 +77,7 @@ class AioDriverRegistryTest {
 
         // 同一系统的两条不同车道，一台臻识、一台别家，各自能取到实例
         ParkingAIODevice zhenshi =
-                registry.deviceFor(DeviceConfig.of("GATE-001", "ZHENSHI", "HTZ-S02", "192.168.1.10", 8080));
+                registry.deviceFor(DeviceConfig.of("GATE-001", "ZHENSHI", "YELLOW_CARD_LED_LINE4", "192.168.1.10", 8080));
         ParkingAIODevice baigu =
                 registry.deviceFor(DeviceConfig.of("GATE-002", "BAIGU", "BG-200", "192.168.1.20", 80));
         assertNotNull(zhenshi);
@@ -90,9 +90,9 @@ class AioDriverRegistryTest {
         registry.register(new ZhenshiFactory());
 
         ParkingAIODevice a =
-                registry.deviceFor(DeviceConfig.of("GATE-001", "zhenshi", "HTZ-S02", "192.168.1.10", 8080));
+                registry.deviceFor(DeviceConfig.of("GATE-001", "zhenshi", "YELLOW_CARD_LED_LINE4", "192.168.1.10", 8080));
         ParkingAIODevice b =
-                registry.deviceFor(DeviceConfig.of("GATE-002", "ZHENSHI", "HTZ-S02", "192.168.1.11", 8080));
+                registry.deviceFor(DeviceConfig.of("GATE-002", "ZHENSHI", "YELLOW_CARD_LED_LINE4", "192.168.1.11", 8080));
 
         // 类型写一份，实例是两台
         assertTrue(a != b);
@@ -103,7 +103,7 @@ class AioDriverRegistryTest {
 
         // 同 deviceKey 幂等：平台反复取用同一实例
         assertSame(a, registry.deviceFor(
-                DeviceConfig.of("GATE-001", "ZHENSHI", "HTZ-S02", "192.168.1.10", 8080)));
+                DeviceConfig.of("GATE-001", "ZHENSHI", "YELLOW_CARD_LED_LINE4", "192.168.1.10", 8080)));
     }
 
     @Test
@@ -112,7 +112,7 @@ class AioDriverRegistryTest {
         registry.register(new ZhenshiFactory()); // model="*"
 
         // 任何臻识型号都被接管
-        assertTrue(registry.supports("ZHENSHI", "HTZ-S02"));
+        assertTrue(registry.supports("ZHENSHI", "YELLOW_CARD_LED_LINE4"));
         assertTrue(registry.supports("zhenshi", "ANY-MODEL"));
     }
 

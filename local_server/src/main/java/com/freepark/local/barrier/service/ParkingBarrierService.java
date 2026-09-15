@@ -77,6 +77,7 @@ public class ParkingBarrierService {
         barrier.setBrand(request.brand());
         barrier.setModel(request.model());
         barrier.setConnection(request.host(), request.port());
+        barrier.setStreamUrl(request.streamUrl());
         return toLiveView(barriers.save(barrier));
     }
 
@@ -141,6 +142,7 @@ public class ParkingBarrierService {
         barrier.setBrand(request.brand());
         barrier.setModel(request.model());
         barrier.setConnection(request.host(), request.port());
+        barrier.setStreamUrl(request.streamUrl());
         return toLiveView(barriers.save(barrier));
     }
 
@@ -170,6 +172,7 @@ public class ParkingBarrierService {
         barrier.setBrand(request.brand());
         barrier.setModel(request.model());
         barrier.setConnection(request.host(), request.port());
+        barrier.setStreamUrl(request.streamUrl());
     }
 
     private ParkingBarrier requireBarrier(UUID laneId, UUID barrierId) {

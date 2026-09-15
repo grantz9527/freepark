@@ -16,22 +16,8 @@ export const siteAllowedPlateColors = ref<PlateColor[]>([
 ])
 export const siteImageStoragePath = ref('./data/images')
 export const siteImageStorageEnabled = ref(true)
-export type SoftwarePlateProvider = 'YOLO26_PLATE' | 'HYPER_LPR3'
-export const softwarePlateProvider = ref<SoftwarePlateProvider>('YOLO26_PLATE')
-export interface Yolo26PlateSettings {
-  enabled: boolean
-  baseUrl: string
-  minConfidence: number
-  connectTimeoutMs: number
-  readTimeoutMs: number
-}
-export const yolo26PlateSettings = ref<Yolo26PlateSettings>({
-  enabled: false,
-  baseUrl: 'http://127.0.0.1:8780',
-  minConfidence: 0.25,
-  connectTimeoutMs: 5000,
-  readTimeoutMs: 60000,
-})
+export type SoftwarePlateProvider = 'HYPER_LPR3'
+export const softwarePlateProvider = ref<SoftwarePlateProvider>('HYPER_LPR3')
 export interface HyperLpr3Settings {
   enabled: boolean
   baseUrl: string
@@ -59,15 +45,7 @@ export function applySiteSettings(data: SystemSettingsView): void {
   siteAllowedPlateColors.value = [...data.allowedPlateColors]
   siteImageStoragePath.value = data.imageStoragePath || './data/images'
   siteImageStorageEnabled.value = data.imageStorageEnabled !== false
-  softwarePlateProvider.value =
-    data.softwarePlateProvider === 'HYPER_LPR3' ? 'HYPER_LPR3' : 'YOLO26_PLATE'
-  yolo26PlateSettings.value = {
-    enabled: !!data.yolo26Plate?.enabled,
-    baseUrl: data.yolo26Plate?.baseUrl || 'http://127.0.0.1:8780',
-    minConfidence: clamp01(data.yolo26Plate?.minConfidence ?? 0.25),
-    connectTimeoutMs: clampInt(data.yolo26Plate?.connectTimeoutMs ?? 5000, 1000, 600000),
-    readTimeoutMs: clampInt(data.yolo26Plate?.readTimeoutMs ?? 60000, 1000, 600000),
-  }
+  softwarePlateProvider.value = 'HYPER_LPR3'
   hyperLpr3Settings.value = {
     enabled: !!data.hyperLpr3?.enabled,
     baseUrl: data.hyperLpr3?.baseUrl || 'http://127.0.0.1:8715',
@@ -79,7 +57,7 @@ export function applySiteSettings(data: SystemSettingsView): void {
 }
 
 function clamp01(v: number): number {
-  if (Number.isNaN(v)) return 0.25
+  if (Number.isNaN(v)) return 0.6
   return Math.max(0, Math.min(1, v))
 }
 function clampInt(v: number, lo: number, hi: number): number {
@@ -96,14 +74,7 @@ export function clearSiteSettingsCache(): void {
   siteAllowedPlateColors.value = ['BLUE', 'YELLOW', 'GREEN', 'YELLOW_GREEN', 'BLACK', 'WHITE']
   siteImageStoragePath.value = './data/images'
   siteImageStorageEnabled.value = true
-  softwarePlateProvider.value = 'YOLO26_PLATE'
-  yolo26PlateSettings.value = {
-    enabled: false,
-    baseUrl: 'http://127.0.0.1:8780',
-    minConfidence: 0.25,
-    connectTimeoutMs: 5000,
-    readTimeoutMs: 60000,
-  }
+  softwarePlateProvider.value = 'HYPER_LPR3'
   hyperLpr3Settings.value = {
     enabled: false,
     baseUrl: 'http://127.0.0.1:8715',

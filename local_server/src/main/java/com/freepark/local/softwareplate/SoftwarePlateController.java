@@ -18,7 +18,7 @@ import com.freepark.local.common.i18n.MessageService;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
 import com.freepark.local.domain.UserRole;
-import com.freepark.local.yolo26plate.Yolo26PlateClient.RecognitionResult;
+import com.freepark.local.softwareplate.SoftwarePlateModels.RecognitionResult;
 
 @RestController
 @RequestMapping("/api/v1/system-settings")
@@ -36,7 +36,7 @@ public class SoftwarePlateController {
     }
 
     // 通用识别接口：按系统设置选中的 provider 执行；允许用 provider / minConfidence / imageId 临时覆盖
-    @PostMapping(value = {"/software-plate/recognize", "/yolo26/recognize"}, consumes = "multipart/form-data")
+    @PostMapping(value = "/software-plate/recognize", consumes = "multipart/form-data")
     public ApiResponse<RecognitionResult> recognize(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam("image") MultipartFile image,

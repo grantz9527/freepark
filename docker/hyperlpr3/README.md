@@ -1,0 +1,13 @@
+# HyperLPR3
+
+社区版 REST 服务，端口 `8715`。首次 `docker compose build` 会拉依赖和模型，可能超过 10 分钟。
+
+```sh
+docker compose -f docker/hyperlpr3/docker-compose.yml up -d --build
+```
+
+健康检查：http://127.0.0.1:8715/api/v1/docs
+
+场端系统设置里启用 HyperLPR3，服务地址填 `http://127.0.0.1:8715`。
+
+一键部署请用仓库根目录的 [`ai-build`](../../ai-build/README.md)，加 `--with-lpr`。

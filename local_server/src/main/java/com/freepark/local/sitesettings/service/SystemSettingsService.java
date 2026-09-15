@@ -3,7 +3,6 @@ package com.freepark.local.sitesettings.service;
 import com.freepark.local.sitesettings.dto.CloudStorageSettings;
 import com.freepark.local.sitesettings.dto.SystemSettingsView;
 import com.freepark.local.sitesettings.dto.UpdateSystemSettingsRequest;
-import com.freepark.local.sitesettings.dto.Yolo26PlateSettings;
 import com.freepark.local.softwareplate.SoftwarePlateProvider;
 import com.freepark.local.softwareplate.dto.HyperLpr3Settings;
 import com.freepark.local.storage.CloudObjectKeys;
@@ -15,7 +14,6 @@ import java.net.URI;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -71,9 +69,8 @@ public class SystemSettingsService {
         if (request.imageStorageEnabled() != null) {
             settings.setImageStorageEnabled(request.imageStorageEnabled());
         }
-        settings.setSoftwarePlateProvider(request.softwarePlateProvider() == null
-                ? SoftwarePlateProvider.YOLO26_PLATE : request.softwarePlateProvider());
-        applyYolo26(settings, request.yolo26Plate());
+        settings.setSoftwarePlateProvider(SoftwarePlateProvider.HYPER_LPR3);
+        settings.setYolo26PlateEnabled(false);
         applyHyperLpr3(settings, request.hyperLpr3());
         applyCloudStorage(settings, request.cloudStorage());
         // 保证同一时刻最多只有当前选中的 provider 被启用
@@ -174,24 +171,12 @@ public class SystemSettingsService {
         return trimmed.isBlank() ? SiteSettings.DEFAULT_IMAGE_STORAGE_PATH : trimmed;
     }
 
-    // ---------------- Yolo26-Plate ----------------
+    // ---------------- HyperLPR3 ----------------
 
-    public static final String DEFAULT_YOLO26_BASE_URL = "http://127.0.0.1:8780";
-    public static final double DEFAULT_YOLO26_MIN_CONF = 0.25;
-    public static final int DEFAULT_YOLO26_CONNECT_TIMEOUT_MS = 5_000;
-    public static final int DEFAULT_YOLO26_READ_TIMEOUT_MS = 60_000;
-
-    @Transactional(readOnly = true)
-    public Yolo26PlateSettings getYolo26PlateSettings() {
-        SiteSettings s = requireSettings();
-        ensureYolo26Defaults(s);
-        return new Yolo26PlateSettings(
-                s.isYolo26PlateEnabled(),
-                s.getYolo26PlateBaseUrl(),
-                s.getYolo26PlateMinConf(),
-                s.getYolo26PlateConnectTimeoutMs(),
-                s.getYolo26PlateReadTimeoutMs());
-    }
+    public static final String DEFAULT_HYPER_LPR3_BASE_URL = "http://127.0.0.1:8715";
+    public static final double DEFAULT_HYPER_LPR3_MIN_CONF = 0.6;
+    public static final int DEFAULT_HYPER_LPR3_CONNECT_TIMEOUT_MS = 5_000;
+    public static final int DEFAULT_HYPER_LPR3_READ_TIMEOUT_MS = 60_000;
 
     @Transactional(readOnly = true)
     public HyperLpr3Settings getHyperLpr3Settings() {
@@ -205,48 +190,20 @@ public class SystemSettingsService {
                 s.getHyperlpr3ReadTimeoutMs());
     }
 
-    /**
-     * 当前选中的 provider 对应的 client 是否启用。
-     */
     @Transactional(readOnly = true)
     public boolean isSoftwarePlateEnabledForCurrentProvider() {
-        SiteSettings s = requireSettings();
-        return switch (s.getSoftwarePlateProvider()) {
-            case YOLO26_PLATE -> s.isYolo26PlateEnabled();
-            case HYPER_LPR3 -> s.isHyperlpr3Enabled();
-        };
+        return requireSettings().isHyperlpr3Enabled();
     }
 
     @Transactional(readOnly = true)
     public SoftwarePlateProvider getSoftwarePlateProvider() {
-        return requireSettings().getSoftwarePlateProvider();
+        return SoftwarePlateProvider.HYPER_LPR3;
     }
-
-    private void applyYolo26(SiteSettings settings, UpdateSystemSettingsRequest.Yolo26Update update) {
-        boolean enabled = update.enabled();
-        String baseUrl = normalizeBaseUrl(update.baseUrl(), enabled, DEFAULT_YOLO26_BASE_URL,
-                ErrorCode.INVALID_YOLO26_PLATE_CONFIG);
-        if (enabled && (baseUrl == null || baseUrl.isBlank())) {
-            throw new BusinessException(ErrorCode.INVALID_YOLO26_PLATE_CONFIG, "baseUrl");
-        }
-        double minConf = clamp(update.minConfidence() == null ? DEFAULT_YOLO26_MIN_CONF : update.minConfidence(), 0.0, 1.0);
-        int connect = clampRange(update.connectTimeoutMs(), DEFAULT_YOLO26_CONNECT_TIMEOUT_MS, 500, 600_000);
-        int read = clampRange(update.readTimeoutMs(), DEFAULT_YOLO26_READ_TIMEOUT_MS, 1_000, 600_000);
-        settings.setYolo26PlateEnabled(enabled);
-        settings.setYolo26PlateBaseUrl(baseUrl);
-        settings.setYolo26PlateMinConf(minConf);
-        settings.setYolo26PlateConnectTimeoutMs(connect);
-        settings.setYolo26PlateReadTimeoutMs(read);
-    }
-
-    // ---------------- HyperLPR3 ----------------
-
-    public static final String DEFAULT_HYPER_LPR3_BASE_URL = "http://127.0.0.1:8715";
-    public static final double DEFAULT_HYPER_LPR3_MIN_CONF = 0.6;
-    public static final int DEFAULT_HYPER_LPR3_CONNECT_TIMEOUT_MS = 5_000;
-    public static final int DEFAULT_HYPER_LPR3_READ_TIMEOUT_MS = 60_000;
 
     private void applyHyperLpr3(SiteSettings settings, UpdateSystemSettingsRequest.HyperLpr3Update update) {
+        if (update == null) {
+            return;
+        }
         boolean enabled = update.enabled();
         String baseUrl = normalizeBaseUrl(update.baseUrl(), enabled, DEFAULT_HYPER_LPR3_BASE_URL,
                 ErrorCode.INVALID_HYPER_LPR3_CONFIG);
@@ -295,24 +252,6 @@ public class SystemSettingsService {
         return (int) Math.max(lo, Math.min(hi, n));
     }
 
-    private void ensureYolo26Defaults(SiteSettings s) {
-        if (!s.isYolo26PlateEnabled()) {
-            s.setYolo26PlateEnabled(false);
-        }
-        if (s.getYolo26PlateBaseUrl() == null || s.getYolo26PlateBaseUrl().isBlank()) {
-            s.setYolo26PlateBaseUrl(DEFAULT_YOLO26_BASE_URL);
-        }
-        if (s.getYolo26PlateMinConf() == null || s.getYolo26PlateMinConf() < 0 || s.getYolo26PlateMinConf() > 1) {
-            s.setYolo26PlateMinConf(DEFAULT_YOLO26_MIN_CONF);
-        }
-        if (s.getYolo26PlateConnectTimeoutMs() == null) {
-            s.setYolo26PlateConnectTimeoutMs(DEFAULT_YOLO26_CONNECT_TIMEOUT_MS);
-        }
-        if (s.getYolo26PlateReadTimeoutMs() == null) {
-            s.setYolo26PlateReadTimeoutMs(DEFAULT_YOLO26_READ_TIMEOUT_MS);
-        }
-    }
-
     private void ensureHyperLpr3Defaults(SiteSettings s) {
         if (s.getHyperlpr3BaseUrl() == null || s.getHyperlpr3BaseUrl().isBlank()) {
             s.setHyperlpr3BaseUrl(DEFAULT_HYPER_LPR3_BASE_URL);
@@ -331,11 +270,9 @@ public class SystemSettingsService {
     private SystemSettingsView toView(SiteSettings settings) {
         ensurePlateColorDefaults(settings);
         ensureImageStoragePath(settings);
-        ensureYolo26Defaults(settings);
         ensureHyperLpr3Defaults(settings);
-        if (settings.getSoftwarePlateProvider() == null) {
-            settings.setSoftwarePlateProvider(SoftwarePlateProvider.YOLO26_PLATE);
-        }
+        settings.setSoftwarePlateProvider(SoftwarePlateProvider.HYPER_LPR3);
+        settings.setYolo26PlateEnabled(false);
         return new SystemSettingsView(
                 settings.getDefaultLocale(),
                 settings.getTimezone(),
@@ -343,13 +280,7 @@ public class SystemSettingsService {
                 List.copyOf(settings.getAllowedPlateColors()),
                 settings.getImageStoragePath(),
                 settings.isImageStorageEnabled(),
-                settings.getSoftwarePlateProvider(),
-                new Yolo26PlateSettings(
-                        settings.isYolo26PlateEnabled(),
-                        settings.getYolo26PlateBaseUrl(),
-                        settings.getYolo26PlateMinConf(),
-                        settings.getYolo26PlateConnectTimeoutMs(),
-                        settings.getYolo26PlateReadTimeoutMs()),
+                SoftwarePlateProvider.HYPER_LPR3,
                 new HyperLpr3Settings(
                         settings.isHyperlpr3Enabled(),
                         settings.getHyperlpr3BaseUrl(),
@@ -360,7 +291,7 @@ public class SystemSettingsService {
                 SupportedLocale.languageTags(),
                 SupportedTimezone.all(),
                 PlateColorSupport.all(),
-                Arrays.asList(SoftwarePlateProvider.values()),
+                SoftwarePlateProvider.selectable(),
                 settings.getUpdatedAt());
     }
 
@@ -372,19 +303,9 @@ public class SystemSettingsService {
         }
     }
 
-    /**
-     * 强制只允许当前 softwarePlateProvider 对应的启用开关为 true，
-     * 其它 provider 一律强制关闭，避免同一时刻两个引擎都处于启用态。
-     */
     private void enforceSingleSoftwarePlateEnabled(SiteSettings settings) {
-        SoftwarePlateProvider current = settings.getSoftwarePlateProvider() == null
-                ? SoftwarePlateProvider.YOLO26_PLATE : settings.getSoftwarePlateProvider();
-        if (current != SoftwarePlateProvider.YOLO26_PLATE) {
-            settings.setYolo26PlateEnabled(false);
-        }
-        if (current != SoftwarePlateProvider.HYPER_LPR3) {
-            settings.setHyperlpr3Enabled(false);
-        }
+        settings.setSoftwarePlateProvider(SoftwarePlateProvider.HYPER_LPR3);
+        settings.setYolo26PlateEnabled(false);
     }
 
     private void applyCloudStorage(SiteSettings settings, UpdateSystemSettingsRequest.CloudStorageUpdate update) {

@@ -1,0 +1,15 @@
+name: freepark-hyperlpr3
+
+# HyperLPR3 社区版 REST（端口 8715）
+# 首次 build 会下载依赖与模型，可能超过 10 分钟。
+# 启动：在仓库根目录
+#   docker compose -f docker/hyperlpr3/docker-compose.yml up -d --build
+
+services:
+  hyperlpr3:
+    build: .
+    image: freepark-hyperlpr3:latest
+    container_name: freepark-hyperlpr3
+    restart: unless-stopped
+    ports:
+      - "8715:8715"

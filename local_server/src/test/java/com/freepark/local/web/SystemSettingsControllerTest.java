@@ -57,7 +57,7 @@ class SystemSettingsControllerTest {
         mockMvc.perform(put("/api/v1/system-settings")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\",\"YELLOW\",\"GREEN\"],\"imageStoragePath\":\"D:/freepark/images\",\"softwarePlateProvider\":\"YOLO26_PLATE\",\"yolo26Plate\":{\"enabled\":false},\"hyperLpr3\":{\"enabled\":false}}"))
+                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\",\"YELLOW\",\"GREEN\"],\"imageStoragePath\":\"D:/freepark/images\",\"softwarePlateProvider\":\"HYPER_LPR3\",\"hyperLpr3\":{\"enabled\":false}}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.defaultLocale").value("en"))
                 .andExpect(jsonPath("$.data.timezone").value("UTC"))
@@ -94,7 +94,7 @@ class SystemSettingsControllerTest {
         mockMvc.perform(put("/api/v1/system-settings")
                         .header("Authorization", "Bearer " + operatorToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\"],\"imageStoragePath\":\"./data/images\",\"softwarePlateProvider\":\"YOLO26_PLATE\",\"yolo26Plate\":{\"enabled\":false},\"hyperLpr3\":{\"enabled\":false}}"))
+                        .content("{\"defaultLocale\":\"en\",\"timezone\":\"UTC\",\"defaultPlateColor\":\"BLUE\",\"allowedPlateColors\":[\"BLUE\"],\"imageStoragePath\":\"./data/images\",\"softwarePlateProvider\":\"HYPER_LPR3\",\"hyperLpr3\":{\"enabled\":false}}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("forbidden"));
     }
@@ -110,7 +110,6 @@ class SystemSettingsControllerTest {
                   "allowedPlateColors":["BLUE"],
                   "imageStoragePath":"./data/images",
                   "softwarePlateProvider":"HYPER_LPR3",
-                  "yolo26Plate":{"enabled":false,"baseUrl":"http://127.0.0.1:8780","minConfidence":0.25,"connectTimeoutMs":5000,"readTimeoutMs":60000},
                   "hyperLpr3":{"enabled":false,"baseUrl":"http://127.0.0.1:8715","minConfidence":0.6,"connectTimeoutMs":5000,"readTimeoutMs":60000},
                   "cloudStorage":{
                     "enabled":true,
@@ -154,7 +153,6 @@ class SystemSettingsControllerTest {
                   "imageStoragePath":"./data/images",
                   "imageStorageEnabled":false,
                   "softwarePlateProvider":"HYPER_LPR3",
-                  "yolo26Plate":{"enabled":false},
                   "hyperLpr3":{"enabled":false}
                 }
                 """;

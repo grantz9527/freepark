@@ -281,6 +281,7 @@ async function sendCommand(command: IotCommand): Promise<void> {
 
 <template>
   <section class="page">
+    <p class="banner note">{{ t('iot.pageNote') }}</p>
     <p class="banner planning">{{ t('iot.planningHint') }}</p>
 
     <div class="toolbar">
@@ -460,6 +461,14 @@ async function sendCommand(command: IotCommand): Promise<void> {
 .page {
   display: grid;
   gap: 0.9rem;
+}
+
+.banner.note {
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: 8px;
+  color: #1f4b73;
+  background: #e8f2fb;
 }
 
 .banner.planning {

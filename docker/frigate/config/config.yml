@@ -12,7 +12,7 @@ mqtt:
 cameras:
   cam_a4f8c910:
     enabled: true
-    type: "lpr"
+    type: lpr
     friendly_name: 车牌识别
     ffmpeg:
       inputs:
@@ -33,6 +33,20 @@ cameras:
     live:
       streams:
         Stream 1: cam_a4f8c910
+  cam_acfb0350:
+    enabled: true
+    friendly_name: 测试
+    ffmpeg:
+      inputs:
+        - path: rtsp://10.168.1.70:8557/h264
+          roles:
+            - detect
+    detect:
+      width: 1280
+      height: 720
+    live:
+      streams:
+        Stream 1: cam_acfb0350
 version: 0.17-0
 # 原生 LPR：Frigate 内置 YOLOv9 车牌检测 + PaddleOCR，事件直接带 recognized_license_plate
 lpr:
@@ -47,4 +61,6 @@ logger:
 go2rtc:
   streams:
     cam_a4f8c910:
-      - rtsp://192.168.0.100:8557/h264
+      - rtsp://10.168.1.71:8557/h264
+    cam_acfb0350:
+      - rtsp://10.168.1.70:8557/h264

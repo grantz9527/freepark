@@ -77,7 +77,7 @@
 
 ## 4. 云端 Broker（Mosquitto）部署与凭据
 
-local_server 对接的 MQTT 服务器即“云端 Broker”。开发/联调环境下，`_workspace_freepark/docker-compose.yml`（注意：不是 `local_server/docker-compose.yml`）里的 Mosquitto 容器就充当该 Broker（云端后端与 local_server 都连它）：
+local_server 对接的 MQTT 服务器即“云端 Broker”。开发/联调环境下，`_workspace_freepark/docker/mosquitto/docker-compose.yml` 里的 Mosquitto 容器就充当该 Broker（云端后端与 local_server 都连它）：
 
 | 项 | 值 |
 |---|---|
@@ -85,9 +85,9 @@ local_server 对接的 MQTT 服务器即“云端 Broker”。开发/联调环�
 | 端口 | `1883:1883`（MQTT）；`9001:9001` 已映射但 **conf 未配置 websocket listener**，勿依赖 |
 | 认证 | `allow_anonymous false`，密码文件 `/mosquitto/config/pwfile` |
 | 账号 | 仅一个用户：`freepark` / `freepark` |
-| 配置 | `./mosquitto/config/mosquitto.conf`；数据/日志落盘到 `./mosquitto/{data,log}` |
+| 配置 | `docker/mosquitto/config/mosquitto.conf`；数据/日志落盘到 `docker/mosquitto/{data,log}` |
 
-启动：`docker compose up -d`（在 `_workspace_freepark` 目录）。
+启动（在 `_workspace_freepark` 仓库根目录）：`docker compose -f docker/mosquitto/docker-compose.yml up -d`
 
 ---
 
@@ -621,4 +621,4 @@ docker exec freepark-mosquitto mosquitto_pub -t "parking/command/node-001" -u fr
 | 云端协议常量/下发（对端参照） | `freepark-cloud-simple-backend/…/settings/runtime/EdgeConfigSyncProtocol.java`、`EdgeConfigSyncDispatcher.java` |
 | 云端条目字段形状（对端参照） | `freepark-cloud-simple-backend/…/parking/edge/EdgeDomainItems.java` |
 | 云端流水幂等键/唯一约束 | `freepark-cloud-simple-backend/…/parking/entity/ParkingSession.java`（`uk_parking_session_edge`） |
-| 联调用云端 Broker 部署 | `_workspace_freepark/docker-compose.yml`、`_workspace_freepark/mosquitto/config/mosquitto.conf` |
+| 联调用云端 Broker 部署 | `_workspace_freepark/docker/mosquitto/docker-compose.yml`、`_workspace_freepark/docker/mosquitto/config/mosquitto.conf` |

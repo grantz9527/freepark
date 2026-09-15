@@ -1,0 +1,32 @@
+name: freepark-frigate
+
+# Frigate 识别 + 内置 go2rtc 直播
+# 启动：在仓库根目录执行
+#   docker compose -f docker/frigate/docker-compose.yml up -d
+# 详见 docker/frigate/README.md
+
+services:
+  frigate:
+    container_name: frigate
+    image: ghcr.io/blakeblackshear/frigate:stable
+    restart: unless-stopped
+    shm_size: "128mb"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config:/config
+      - frigate-storage:/media/frigate
+    ports:
+      - "5000:5000"
+      - "1935:1935"
+      - "8554:8554"
+      - "8555:8555"
+      - "8555:8555/udp"
+      - "1984:1984"
+    environment:
+      TZ: Asia/Shanghai
+
+volumes:
+  frigate-storage:
+    external: true
+    name: frigate-storage

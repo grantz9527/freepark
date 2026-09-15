@@ -17,3 +17,7 @@ freepark:
     username: admin
     password: admin123
     display-name: Administrator
+  preview:
+    go2rtc-port: 1
+    try-frigate-api-proxy: false
+    connect-timeout: 2s

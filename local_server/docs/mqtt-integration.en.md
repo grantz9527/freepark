@@ -78,7 +78,7 @@ All four clients use **the same cloud broker**: `local_server` stores a single "
 
 ## 4. Cloud Broker (Mosquitto) Deployment & Credentials
 
-The MQTT server that `local_server` talks to is the "cloud broker". In dev/staging the Mosquitto container from `_workspace_freepark/docker-compose.yml` (NOT `local_server/docker-compose.yml`) plays that role (both the cloud backend and `local_server` connect to it):
+The MQTT server that `local_server` talks to is the "cloud broker". In dev/staging the Mosquitto container from `_workspace_freepark/docker/mosquitto/docker-compose.yml` plays that role (both the cloud backend and `local_server` connect to it):
 
 | Item | Value |
 |---|---|
@@ -86,9 +86,9 @@ The MQTT server that `local_server` talks to is the "cloud broker". In dev/stagi
 | Ports | `1883:1883` (MQTT); `9001:9001` is mapped but **no websocket listener is configured** — do not rely on it |
 | Auth | `allow_anonymous false`, password file `/mosquitto/config/pwfile` |
 | Account | Single user: `freepark` / `freepark` |
-| Config | `./mosquitto/config/mosquitto.conf`; data/log persisted under `./mosquitto/{data,log}` |
+| Config | `docker/mosquitto/config/mosquitto.conf`; data/log persisted under `docker/mosquitto/{data,log}` |
 
-Start with: `docker compose up -d` (run inside `_workspace_freepark`).
+Start (from `_workspace_freepark` repo root): `docker compose -f docker/mosquitto/docker-compose.yml up -d`
 
 ---
 
@@ -591,4 +591,4 @@ Verify: local_server logs `applied cloud parking session`; the local `parking_se
 | Cloud protocol constants / dispatcher (peer reference) | `freepark-cloud-simple-backend/…/settings/runtime/EdgeConfigSyncProtocol.java`, `EdgeConfigSyncDispatcher.java` |
 | Cloud item shapes (peer reference) | `freepark-cloud-simple-backend/…/parking/edge/EdgeDomainItems.java` |
 | Cloud session idempotency key / unique constraint | `freepark-cloud-simple-backend/…/parking/entity/ParkingSession.java` (`uk_parking_session_edge`) |
-| Cloud broker deployment (dev/staging) | `_workspace_freepark/docker-compose.yml`, `_workspace_freepark/mosquitto/config/mosquitto.conf` |
+| Cloud broker deployment (dev/staging) | `_workspace_freepark/docker/mosquitto/docker-compose.yml`, `_workspace_freepark/docker/mosquitto/config/mosquitto.conf` |

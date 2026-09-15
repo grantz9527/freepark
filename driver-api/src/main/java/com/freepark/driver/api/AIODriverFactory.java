@@ -32,7 +32,7 @@ public interface AIODriverFactory {
     /**
      * 型号匹配串。支持：
      * <ul>
-     *   <li>精确型号，如 {@code "HTZ-S02"}；</li>
+     *   <li>精确型号，如 {@code "YELLOW_CARD_LED_LINE4"}；</li>
      *   <li>{@code "*"} 表示该品牌整条产品线都由本工厂接管。</li>
      * </ul>
      */
@@ -78,7 +78,7 @@ public interface AIODriverFactory {
      * <ul>
      *   <li>返回空列表：型号不做细分，按 {@link #model()} 接管——
      *       通常 {@code model()} 为 {@code "*"}，即覆盖该品牌整条产品线；</li>
-     *   <li>返回具体型号（如 {@code "HTZ-S02"}）：多个驱动/型号并存时，
+     *   <li>返回具体型号（如 {@code "YELLOW_CARD_LED_LINE4"}）：多个驱动/型号并存时，
      *       卡片将逐一列出，帮助区分本驱动能接管的设备。</li>
      * </ul>
      */

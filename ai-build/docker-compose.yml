@@ -1,0 +1,94 @@
+name: freepark-ai-build
+
+# 其它 AI / 人类一键拉起场端依赖。
+# 默认：MySQL + Mosquitto。
+# 可选：--profile lpr（HyperLPR3）  --profile frigate（需先有 docker volume frigate-storage）
+#
+# 在仓库根目录执行：
+#   docker compose -f ai-build/docker-compose.yml up -d
+# 或用 ai-build/windows/up.ps1 、 ai-build/linux/up.sh
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: freepark-local-mysql
+    environment:
+      MYSQL_DATABASE: freepark_local
+      MYSQL_USER: freepark_local
+      MYSQL_PASSWORD: freepark_local
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+00:00
+    volumes:
+      - freepark-local-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: freepark-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ../docker/mosquitto/config:/mosquitto/config:ro
+      - ../docker/mosquitto/data:/mosquitto/data
+      - ../docker/mosquitto/log:/mosquitto/log
+    environment:
+      TZ: Asia/Shanghai
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mosquitto_sub -t '$$SYS/broker/version' -C 1 -W 2 -u freepark -P freepark -h 127.0.0.1 || exit 1",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  hyperlpr3:
+    profiles: ["lpr"]
+    build:
+      context: ../docker/hyperlpr3
+      dockerfile: Dockerfile
+    image: freepark-hyperlpr3:latest
+    container_name: freepark-hyperlpr3
+    restart: unless-stopped
+    ports:
+      - "8715:8715"
+
+  frigate:
+    profiles: ["frigate"]
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: frigate
+    restart: unless-stopped
+    shm_size: "128mb"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    volumes:
+      - ../docker/frigate/config:/config
+      - frigate-storage:/media/frigate
+    ports:
+      - "5000:5000"
+      - "1935:1935"
+      - "8554:8554"
+      - "8555:8555"
+      - "8555:8555/udp"
+      - "1984:1984"
+    environment:
+      TZ: Asia/Shanghai
+
+volumes:
+  freepark-local-mysql:
+  frigate-storage:
+    name: frigate-storage

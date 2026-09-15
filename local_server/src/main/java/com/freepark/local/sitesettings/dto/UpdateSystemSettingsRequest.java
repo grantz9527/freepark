@@ -23,8 +23,8 @@ public record UpdateSystemSettingsRequest(
         @NotEmpty List<PlateColor> allowedPlateColors,
         @NotBlank @Size(max = 512) String imageStoragePath,
         Boolean imageStorageEnabled,
-        @NotNull SoftwarePlateProvider softwarePlateProvider,
-        @NotNull @Valid Yolo26Update yolo26Plate,
+        SoftwarePlateProvider softwarePlateProvider,
+        @Valid Yolo26Update yolo26Plate,
         @NotNull @Valid HyperLpr3Update hyperLpr3,
         @Valid CloudStorageUpdate cloudStorage) {
 

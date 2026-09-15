@@ -24,7 +24,7 @@ import com.freepark.local.domain.PlateColor;
 import jakarta.annotation.PreDestroy;
 
 /**
- * 算费接口后台探活：随机取本机在停车辆（没有则随机车牌）打一次算费。
+ * 算费接口后台探活：优先随机取本机在停车辆打算费；没有可用在停车牌时才用随机车牌。
  * 15 秒无响应则让识别路径在 30 秒内跳过算费，避免云端卡死堵住开闸。
  */
 @Component
@@ -64,7 +64,7 @@ public class FeeQuoteHealthProbe {
     @EventListener(ApplicationReadyEvent.class)
     public void start() {
         scheduler.scheduleWithFixedDelay(this::tick, 5, TICK_INTERVAL_SECONDS, TimeUnit.SECONDS);
-        log.info("算费接口探活已启动（在停车辆或随机车牌，超时 {} 秒，失败后识别路径 {} 秒内跳过）",
+        log.info("算费接口探活已启动（优先在停车辆，没有才用随机车牌，超时 {} 秒，失败后识别路径 {} 秒内跳过）",
                 FeeQuoteClient.PROBE_TIMEOUT.toSeconds(), 30);
     }
 
@@ -94,23 +94,37 @@ public class FeeQuoteHealthProbe {
     }
 
     ProbeTarget pickTarget() {
-        List<ParkingSession> parked = sessions.findTop50ByStatusOrderByEntryTimeDesc(ParkingSessionStatus.OPEN);
+        List<ParkingSession> parked = sessions.findTop50ByStatusOrderByEntryTimeDesc(ParkingSessionStatus.OPEN)
+                .stream()
+                .filter(session -> session.getPlateNumber() != null && !session.getPlateNumber().isBlank())
+                .toList();
         if (!parked.isEmpty()) {
             ParkingSession session = parked.get(ThreadLocalRandom.current().nextInt(parked.size()));
-            ParkingLot lot = session.getLotId() == null ? null : lots.findById(session.getLotId()).orElse(null);
-            if (lot != null && session.getPlateNumber() != null && !session.getPlateNumber().isBlank()) {
-                return new ProbeTarget(
-                        lot.getCode(),
-                        session.getPlateNumber(),
-                        colorName(session.getPlateColor()),
-                        true);
+            return new ProbeTarget(
+                    lotCodeFor(session),
+                    session.getPlateNumber(),
+                    colorName(session.getPlateColor()),
+                    true);
+        }
+        return new ProbeTarget(anyLotCode(), randomPlate(), PlateColor.BLUE.name(), false);
+    }
+
+    private String lotCodeFor(ParkingSession session) {
+        if (session.getLotId() != null) {
+            ParkingLot lot = lots.findById(session.getLotId()).orElse(null);
+            if (lot != null && lot.getCode() != null && !lot.getCode().isBlank()) {
+                return lot.getCode();
             }
         }
+        return anyLotCode();
+    }
+
+    private String anyLotCode() {
         List<ParkingLot> allLots = lots.findAll();
-        String lotCode = allLots.isEmpty()
-                ? null
-                : allLots.get(ThreadLocalRandom.current().nextInt(allLots.size())).getCode();
-        return new ProbeTarget(lotCode, randomPlate(), PlateColor.BLUE.name(), false);
+        if (allLots.isEmpty()) {
+            return null;
+        }
+        return allLots.get(ThreadLocalRandom.current().nextInt(allLots.size())).getCode();
     }
 
     static String randomPlate() {

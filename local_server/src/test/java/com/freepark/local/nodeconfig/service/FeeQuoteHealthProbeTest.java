@@ -74,6 +74,47 @@ class FeeQuoteHealthProbeTest {
     }
 
     @Test
+    void pickTargetSkipsBlankParkedPlateAndUsesAnotherParkedVehicle() {
+        UUID lotId = UUID.randomUUID();
+        ParkingLot lot = new ParkingLot("北门", "LOT-N", LotType.PUBLIC, null, 10, true);
+        ParkingSession blank = new ParkingSession(
+                lotId, "北门", "  ", PlateColor.BLUE, Instant.parse("2026-09-14T01:00:00Z"),
+                null, null, null, null);
+        ParkingSession parked = new ParkingSession(
+                lotId, "北门", "粤B88888", PlateColor.YELLOW, Instant.parse("2026-09-14T01:10:00Z"),
+                null, null, null, null);
+        when(sessions.findTop50ByStatusOrderByEntryTimeDesc(ParkingSessionStatus.OPEN))
+                .thenReturn(List.of(blank, parked));
+        when(lots.findById(lotId)).thenReturn(Optional.of(lot));
+
+        FeeQuoteHealthProbe.ProbeTarget target = probe.pickTarget();
+
+        assertTrue(target.fromParkedSession());
+        assertEquals("粤B88888", target.plateNumber());
+        assertEquals("YELLOW", target.plateColor());
+        assertEquals("LOT-N", target.lotCode());
+    }
+
+    @Test
+    void pickTargetKeepsParkedPlateWhenLotRecordIsMissing() {
+        UUID missingLotId = UUID.randomUUID();
+        ParkingLot otherLot = new ParkingLot("南门", "LOT-S", LotType.PUBLIC, null, 10, true);
+        ParkingSession parked = new ParkingSession(
+                missingLotId, "北门", "粤C77777", PlateColor.BLUE, Instant.parse("2026-09-14T01:00:00Z"),
+                null, null, null, null);
+        when(sessions.findTop50ByStatusOrderByEntryTimeDesc(ParkingSessionStatus.OPEN))
+                .thenReturn(List.of(parked));
+        when(lots.findById(missingLotId)).thenReturn(Optional.empty());
+        when(lots.findAll()).thenReturn(List.of(otherLot));
+
+        FeeQuoteHealthProbe.ProbeTarget target = probe.pickTarget();
+
+        assertTrue(target.fromParkedSession());
+        assertEquals("粤C77777", target.plateNumber());
+        assertEquals("LOT-S", target.lotCode());
+    }
+
+    @Test
     void randomPlateLooksLikeAMainlandPlate() {
         String plate = FeeQuoteHealthProbe.randomPlate();
         assertEquals(7, plate.length());

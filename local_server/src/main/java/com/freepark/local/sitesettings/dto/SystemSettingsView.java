@@ -15,7 +15,6 @@ public record SystemSettingsView(
         String imageStoragePath,
         boolean imageStorageEnabled,
         SoftwarePlateProvider softwarePlateProvider,
-        Yolo26PlateSettings yolo26Plate,
         HyperLpr3Settings hyperLpr3,
         CloudStorageSettings cloudStorage,
         List<String> supportedLocales,

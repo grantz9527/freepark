@@ -260,6 +260,7 @@ export interface BarrierView {
   model: string | null
   host: string | null
   port: number | null
+  streamUrl?: string | null
   enabled: boolean
   /** 最近一次心跳时间（识别网关轮询/推送时更新，落库约 60s 一次）。 */
   lastPollAt: string | null
@@ -277,6 +278,7 @@ export interface BarrierWritePayload {
   model?: string | null
   host?: string | null
   port?: number | null
+  streamUrl?: string | null
   enabled?: boolean
 }
 
@@ -381,6 +383,7 @@ export function createBarrierGlobal(
     model?: string | null
     host?: string | null
     port?: number | null
+    streamUrl?: string | null
     enabled?: boolean
   },
   locale: string,
@@ -416,6 +419,50 @@ export function updateBarrierGlobal(
 /** 全局删除设备。 */
 export function deleteBarrierGlobal(barrierId: string, locale: string): Promise<ApiResponse<null>> {
   return apiCall(`/api/v1/barriers/${barrierId}`, { method: 'DELETE' }, locale)
+}
+
+export interface StreamPreviewSourceView {
+  name: string
+  label?: string | null
+}
+
+/** Frigate/go2rtc 已登记的预览源（相机 ID + 友好名）。 */
+export function listStreamPreviewSources(
+  locale: string,
+): Promise<ApiResponse<StreamPreviewSourceView[]>> {
+  return apiCall('/api/v1/barriers/stream-preview/sources', { method: 'GET' }, locale)
+}
+
+/** 后端把 RTSP/H264 经 Frigate/go2rtc 转成浏览器可播的 fMP4 流。 */
+export async function openTranscodedStream(
+  streamUrl: string,
+  locale: string,
+  signal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  const requestHeaders = headers(locale, { 'Content-Type': 'application/json' })
+  requestHeaders.set('Accept', 'video/mp4, application/json')
+  const response = await fetch(`${API_BASE}/api/v1/barriers/stream-preview`, {
+    method: 'POST',
+    headers: requestHeaders,
+    body: JSON.stringify({ streamUrl }),
+    signal,
+  })
+  if (response.status === 401) {
+    clearSession()
+  }
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!response.ok || contentType.includes('application/json')) {
+    const body = (await response.json().catch(() => null)) as ApiResponse<null> | null
+    throw new ApiError(
+      response.status,
+      body?.code ?? 'error',
+      body?.message ?? `HTTP ${response.status}`,
+    )
+  }
+  if (response.body == null) {
+    throw new ApiError(response.status, 'error', 'HTTP empty body')
+  }
+  return response.body
 }
 
 /** 绑定设备到车道。 */
@@ -1408,14 +1455,6 @@ export function changePassword(
   )
 }
 
-export interface Yolo26PlateSettingsView {
-  enabled: boolean
-  baseUrl: string
-  minConfidence: number
-  connectTimeoutMs: number
-  readTimeoutMs: number
-}
-
 export interface HyperLpr3SettingsView {
   enabled: boolean
   baseUrl: string
@@ -1462,17 +1501,17 @@ export interface CloudStorageSettingsView {
   tencent: TencentCosSettingsView
 }
 
-export type SoftwarePlateProvider = 'YOLO26_PLATE' | 'HYPER_LPR3'
+export type SoftwarePlateProvider = 'HYPER_LPR3'
 
-export interface Yolo26BBox {
+export interface SoftwarePlateBBox {
   x1: number
   y1: number
   x2: number
   y2: number
 }
 
-export interface Yolo26DetectedPlate {
-  bbox: Yolo26BBox
+export interface SoftwarePlateDetectedPlate {
+  bbox: SoftwarePlateBBox
   detectConfidence: number
   cls: number
   keypoints: number[][]
@@ -1491,8 +1530,8 @@ export type SoftwarePlateRecognitionResult = {
   imageId: string
   elapsedMs: number
   count: number
-  plates: Yolo26DetectedPlate[]
-  best?: Yolo26DetectedPlate | null
+  plates: SoftwarePlateDetectedPlate[]
+  best?: SoftwarePlateDetectedPlate | null
   device: string
   upstreamBaseUrl: string
   provider?: SoftwarePlateProvider | null
@@ -1506,7 +1545,6 @@ export interface SystemSettingsView {
   imageStoragePath: string
   imageStorageEnabled: boolean
   softwarePlateProvider: SoftwarePlateProvider
-  yolo26Plate: Yolo26PlateSettingsView
   hyperLpr3: HyperLpr3SettingsView
   cloudStorage?: CloudStorageSettingsView | null
   supportedLocales: string[]
@@ -1527,14 +1565,7 @@ export function updateSystemSettings(
     allowedPlateColors: PlateColor[]
     imageStoragePath: string
     imageStorageEnabled?: boolean
-    softwarePlateProvider: SoftwarePlateProvider
-    yolo26Plate: {
-      enabled: boolean
-      baseUrl?: string | null
-      minConfidence?: number | null
-      connectTimeoutMs?: number | null
-      readTimeoutMs?: number | null
-    }
+    softwarePlateProvider?: SoftwarePlateProvider
     hyperLpr3: {
       enabled: boolean
       baseUrl?: string | null
@@ -1608,14 +1639,6 @@ export function testSoftwarePlateRecognize(
     },
     locale,
   )
-}
-
-export function testYolo26Recognize(
-  image: File | Blob,
-  filename: string,
-  locale: string,
-): Promise<ApiResponse<SoftwarePlateRecognitionResult>> {
-  return testSoftwarePlateRecognize(image, filename, locale, { provider: 'YOLO26_PLATE' })
 }
 
 export type NodeMode = 'OFFLINE' | 'EDGE'

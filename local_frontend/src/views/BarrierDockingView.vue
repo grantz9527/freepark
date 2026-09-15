@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
@@ -13,15 +13,20 @@ import {
   listAutoRegisteredDevices,
   listDeviceCommands,
   listDriverFactories,
+  listFrigateCamerasApi,
   listLanes,
+  listStreamPreviewSources,
+  openTranscodedStream,
   updateBarrierGlobal,
   type AutoRegisteredDeviceView,
   type BarrierView,
   type DriverFactoryView,
   type LaneView,
+  type StreamPreviewSourceView,
 } from '@/api/client'
 import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
+import { canPlayTranscodedFmp4, pipeFmp4ToVideo } from '@/lib/fmp4LivePlayer'
 
 const { t, locale } = useI18n()
 const { formatTime } = useSiteTime()
@@ -79,7 +84,8 @@ const modelSuggestions = computed(() => {
   return modelOptions.value.filter((m) => m.toLowerCase().includes(keyword))
 })
 const formHost = ref('')
-const formPortText = ref('')
+const formStreamUrl = ref('')
+const streamSources = ref<StreamPreviewSourceView[]>([])
 const formEnabled = ref(true)
 const formError = ref('')
 const saving = ref(false)
@@ -249,6 +255,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  closeStreamPreview()
   if (statusTimer !== null) {
     clearInterval(statusTimer)
     statusTimer = null
@@ -283,7 +290,7 @@ function resetForm(): void {
   formModel.value = ''
   modelSuggestOpen.value = false
   formHost.value = ''
-  formPortText.value = ''
+  formStreamUrl.value = ''
   formEnabled.value = true
   formError.value = ''
 }
@@ -291,6 +298,7 @@ function resetForm(): void {
 function openCreate(): void {
   resetForm()
   showForm.value = true
+  void loadStreamSources()
 }
 
 function openEdit(device: BarrierView): void {
@@ -301,10 +309,55 @@ function openEdit(device: BarrierView): void {
   formModel.value = device.model ?? ''
   modelSuggestOpen.value = false
   formHost.value = device.host ?? ''
-  formPortText.value = device.port != null ? String(device.port) : ''
+  formStreamUrl.value = device.streamUrl ?? ''
   formEnabled.value = device.enabled
   formError.value = ''
   showForm.value = true
+  void loadStreamSources()
+}
+
+async function loadStreamSources(): Promise<void> {
+  const byName = new Map<string, StreamPreviewSourceView>()
+  try {
+    const result = await listStreamPreviewSources(locale.value)
+    for (const source of result.data ?? []) {
+      if (source.name) byName.set(source.name, source)
+    }
+  } catch {
+    // 旧版后端没有 sources 接口时仍可用 Frigate 对接里的相机
+  }
+  try {
+    const result = await listFrigateCamerasApi(locale.value)
+    for (const camera of result.data ?? []) {
+      const name = camera.cameraName?.trim()
+      if (!name) continue
+      const existing = byName.get(name)
+      const label = camera.name?.trim() || existing?.label || name
+      byName.set(name, { name, label })
+    }
+  } catch {
+    // ignore
+  }
+  streamSources.value = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+const pickedStreamSource = computed(() => {
+  const current = formStreamUrl.value.trim()
+  const match = streamSources.value.find(
+    (item) => item.name === current || (item.label != null && item.label === current),
+  )
+  return match?.name ?? ''
+})
+
+function onPickStreamSource(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value
+  if (value) formStreamUrl.value = value
+}
+
+function streamSourceOptionLabel(source: StreamPreviewSourceView): string {
+  const label = source.label?.trim()
+  if (label && label !== source.name) return `${label} (${source.name})`
+  return source.name
 }
 
 /** 切换品牌时型号不兼容，清空待选型号并收起建议。 */
@@ -326,6 +379,7 @@ function pickTopModel(): void {
 }
 
 function closeForm(): void {
+  closeStreamPreview()
   showForm.value = false
   resetForm()
 }
@@ -349,9 +403,9 @@ async function onSubmit(): Promise<void> {
     formError.value = t('barriers.codeExists')
     return
   }
-  const port = parsePort()
-  if (port === 'invalid') {
-    formError.value = t('barriers.portInvalid')
+  const streamUrl = parseStreamUrl()
+  if (streamUrl === 'invalid') {
+    formError.value = t('barriers.streamUrlInvalid')
     return
   }
   // 品牌下有明确型号时必须选定具体型号
@@ -366,7 +420,7 @@ async function onSubmit(): Promise<void> {
     brand: formBrand.value.trim() || null,
     model: formModel.value.trim() || null,
     host: formHost.value.trim() || null,
-    port,
+    streamUrl,
   }
   saving.value = true
   try {
@@ -385,15 +439,176 @@ async function onSubmit(): Promise<void> {
   }
 }
 
-/** 端口解析：空=null；非 1-65535 整数返回 'invalid'。 */
-function parsePort(): number | null | 'invalid' {
-  const raw = formPortText.value.trim()
-  if (!raw) return null
-  const value = Number(raw)
-  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+/** 视频流地址：空=null；Frigate 相机 ID / 友好名或带协议的 URL 为合法。 */
+function isGo2rtcStreamName(text: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/.test(text)
+}
+
+function resolveStreamSourceName(text: string): string {
+  const match = streamSources.value.find(
+    (item) => item.name.toLowerCase() === text.toLowerCase() || item.label === text,
+  )
+  return match?.name ?? text
+}
+
+function parseStreamUrl(): string | null | 'invalid' {
+  const text = formStreamUrl.value.trim()
+  if (!text) return null
+  if (text.length > 512) return 'invalid'
+  const resolved = resolveStreamSourceName(text)
+  if (isGo2rtcStreamName(resolved)) return resolved
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(resolved)) return 'invalid'
+  return resolved
+}
+
+type StreamPreviewKind =
+  | 'empty'
+  | 'invalid'
+  | 'unsupported'
+  | 'hls'
+  | 'hls-unsupported'
+  | 'mjpeg'
+  | 'http'
+  | 'transcode'
+  | 'mse-unsupported'
+
+const showStreamPreview = ref(false)
+const streamPreviewKind = ref<StreamPreviewKind>('empty')
+const streamPreviewUrl = ref('')
+const streamPlayError = ref(false)
+const streamPreviewError = ref('')
+const streamConnecting = ref(false)
+const streamVideoRef = ref<HTMLVideoElement | null>(null)
+let streamPreviewAbort: AbortController | null = null
+
+const canPreviewStream = computed(() => {
+  const parsed = parseStreamUrl()
+  return parsed !== null && parsed !== 'invalid'
+})
+const previewButtonTitle = computed(() => {
+  const parsed = parseStreamUrl()
+  if (parsed === null) return t('barriers.viewStreamEmpty')
+  if (parsed === 'invalid') return t('barriers.streamUrlInvalid')
+  return t('barriers.viewStream')
+})
+
+function browserCanPlayHls(): boolean {
+  const video = document.createElement('video')
+  return video.canPlayType('application/vnd.apple.mpegurl') !== ''
+}
+
+function classifyPlayableStream(url: string): StreamPreviewKind {
+  if (isGo2rtcStreamName(url)) {
+    return canPlayTranscodedFmp4() ? 'transcode' : 'mse-unsupported'
+  }
+  const scheme = url.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1]?.toLowerCase()
+  if (!scheme) return 'invalid'
+  if (scheme === 'rtsp' || scheme === 'rtsps' || scheme === 'rtmp' || scheme === 'rtmps') {
+    return canPlayTranscodedFmp4() ? 'transcode' : 'mse-unsupported'
+  }
+  if (scheme !== 'http' && scheme !== 'https') {
+    return 'unsupported'
+  }
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
     return 'invalid'
   }
-  return value
+  const haystack = `${parsed.pathname}${parsed.search}`.toLowerCase()
+  if (parsed.pathname.toLowerCase().endsWith('.m3u8') || haystack.includes('.m3u8')) {
+    if (browserCanPlayHls()) return 'hls'
+    return canPlayTranscodedFmp4() ? 'transcode' : 'hls-unsupported'
+  }
+  if (haystack.includes('mjpeg') || haystack.includes('mjpg')) {
+    return 'mjpeg'
+  }
+  return 'http'
+}
+
+function redactStreamUrl(url: string): string {
+  return url.replace(/:\/\/([^/@]+):([^/@]+)@/, '://***:***@')
+}
+
+async function openStreamPreview(): Promise<void> {
+  const parsed = parseStreamUrl()
+  streamPlayError.value = false
+  streamPreviewError.value = ''
+  streamConnecting.value = false
+  stopTranscodedPreview()
+  if (parsed === null) {
+    streamPreviewKind.value = 'empty'
+    streamPreviewUrl.value = ''
+    showStreamPreview.value = true
+    return
+  }
+  if (parsed === 'invalid') {
+    streamPreviewKind.value = 'invalid'
+    streamPreviewUrl.value = ''
+    showStreamPreview.value = true
+    return
+  }
+  streamPreviewKind.value = classifyPlayableStream(parsed)
+  streamPreviewUrl.value = parsed
+  showStreamPreview.value = true
+  if (streamPreviewKind.value === 'transcode') {
+    await startTranscodedPreview(parsed)
+  }
+}
+
+async function startTranscodedPreview(url: string): Promise<void> {
+  const abort = new AbortController()
+  streamPreviewAbort = abort
+  streamConnecting.value = true
+  streamPlayError.value = false
+  streamPreviewError.value = ''
+  try {
+    await nextTick()
+    const video = streamVideoRef.value
+    if (!video) {
+      streamPlayError.value = true
+      streamPreviewError.value = t('barriers.viewStreamPlayFailed')
+      return
+    }
+    const body = await openTranscodedStream(url, locale.value, abort.signal)
+    if (abort.signal.aborted) return
+    streamConnecting.value = false
+    await pipeFmp4ToVideo(video, body, abort.signal)
+  } catch (error) {
+    if (abort.signal.aborted) return
+    streamConnecting.value = false
+    streamPlayError.value = true
+    streamPreviewError.value =
+      error instanceof ApiError ? error.message : t('barriers.viewStreamPlayFailed')
+  } finally {
+    if (streamPreviewAbort === abort) {
+      streamConnecting.value = false
+    }
+  }
+}
+
+function stopTranscodedPreview(): void {
+  streamPreviewAbort?.abort()
+  streamPreviewAbort = null
+  streamConnecting.value = false
+}
+
+function closeStreamPreview(): void {
+  stopTranscodedPreview()
+  const video = streamVideoRef.value
+  if (video) {
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+  }
+  showStreamPreview.value = false
+  streamPreviewUrl.value = ''
+  streamPlayError.value = false
+  streamPreviewError.value = ''
+}
+
+function onStreamVideoError(): void {
+  streamPlayError.value = true
 }
 
 /** 同步主板时间：轮询指令状态的间隔与总超时。服务端指令有效时限 5s（约 1~2 个轮询周期）。 */
@@ -640,7 +855,7 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
     </div>
 
     <div v-if="showForm" class="modal-backdrop">
-      <form class="modal" @submit.prevent="onSubmit">
+      <form class="modal wide" novalidate @submit.prevent="onSubmit">
         <h3>{{ isEditing ? t('barriers.editTitle') : t('barriers.createTitle') }}</h3>
         <p class="hint">{{ t('barriers.createHint') }}</p>
         <label>
@@ -697,8 +912,39 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
           <span class="field-hint">{{ t('barriers.hostHint') }}</span>
         </label>
         <label>
-          <span>{{ t('barriers.port') }}</span>
-          <input v-model="formPortText" type="number" min="1" max="65535" autocomplete="off" />
+          <span>{{ t('barriers.streamUrl') }}</span>
+          <div class="stream-url-fields">
+            <select
+              v-if="streamSources.length > 0"
+              class="stream-source-pick"
+              :value="pickedStreamSource"
+              @change="onPickStreamSource"
+            >
+              <option value="">{{ t('barriers.streamUrlPick') }}</option>
+              <option v-for="source in streamSources" :key="source.name" :value="source.name">
+                {{ streamSourceOptionLabel(source) }}
+              </option>
+            </select>
+            <div class="stream-url-row">
+              <input
+                v-model="formStreamUrl"
+                type="text"
+                maxlength="512"
+                autocomplete="off"
+                :placeholder="t('barriers.streamUrlPlaceholder')"
+              />
+              <button
+                type="button"
+                class="ghost"
+                :disabled="!canPreviewStream"
+                :title="previewButtonTitle"
+                @click="openStreamPreview"
+              >
+                {{ t('barriers.viewStream') }}
+              </button>
+            </div>
+          </div>
+          <span class="field-hint">{{ t('barriers.streamUrlHint') }}</span>
         </label>
         <div class="endpoint-guide">
           <p class="endpoint-title">{{ t('barriers.endpoints.title') }}</p>
@@ -732,6 +978,79 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
           </button>
         </div>
       </form>
+    </div>
+
+    <div
+      v-if="showStreamPreview"
+      class="modal-backdrop stream-preview-backdrop"
+      @click.self="closeStreamPreview"
+    >
+      <div class="modal stream-preview-dialog" role="dialog" aria-modal="true">
+        <h3>{{ t('barriers.viewStreamTitle') }}</h3>
+        <p v-if="streamPreviewUrl" class="field-hint stream-preview-url">
+          {{ redactStreamUrl(streamPreviewUrl) }}
+        </p>
+        <p v-if="streamPreviewKind === 'empty'" class="stream-preview-msg">
+          {{ t('barriers.viewStreamEmpty') }}
+        </p>
+        <p v-else-if="streamPreviewKind === 'invalid'" class="stream-preview-msg">
+          {{ t('barriers.streamUrlInvalid') }}
+        </p>
+        <p v-else-if="streamPreviewKind === 'mse-unsupported'" class="stream-preview-msg">
+          {{ t('barriers.viewStreamMseUnsupported') }}
+        </p>
+        <p v-else-if="streamPreviewKind === 'unsupported'" class="stream-preview-msg">
+          {{ t('barriers.viewStreamUnsupported') }}
+        </p>
+        <p v-else-if="streamPreviewKind === 'hls-unsupported'" class="stream-preview-msg">
+          {{ t('barriers.viewStreamHlsUnsupported') }}
+        </p>
+        <p v-else-if="streamPlayError" class="stream-preview-msg">
+          {{ streamPreviewError || t('barriers.viewStreamPlayFailed') }}
+        </p>
+        <div
+          v-else-if="streamPreviewKind === 'mjpeg'"
+          class="stream-preview-frame"
+        >
+          <img :src="streamPreviewUrl" alt="" @error="onStreamVideoError" />
+        </div>
+        <div
+          v-else-if="
+            streamPreviewKind === 'hls' ||
+            streamPreviewKind === 'http' ||
+            streamPreviewKind === 'transcode'
+          "
+          class="stream-preview-frame"
+        >
+          <p v-if="streamConnecting" class="stream-preview-connecting">
+            {{ t('barriers.viewStreamConnecting') }}
+          </p>
+          <video
+            v-if="streamPreviewKind === 'transcode'"
+            ref="streamVideoRef"
+            controls
+            autoplay
+            muted
+            playsinline
+            @error="onStreamVideoError"
+          />
+          <video
+            v-else
+            ref="streamVideoRef"
+            :src="streamPreviewUrl"
+            controls
+            autoplay
+            muted
+            playsinline
+            @error="onStreamVideoError"
+          />
+        </div>
+        <div class="actions">
+          <button type="button" class="ghost" @click="closeStreamPreview">
+            {{ t('barriers.viewStreamClose') }}
+          </button>
+        </div>
+      </div>
     </div>
   </section>
 </template>
@@ -920,6 +1239,91 @@ tbody tr:last-child td {
   padding: 1.25rem;
   box-shadow: var(--shadow);
   overflow-y: auto;
+}
+
+.modal.wide {
+  width: min(720px, 100%);
+}
+
+.stream-url-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.stream-source-pick {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.stream-url-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.stream-url-row input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.stream-url-row .ghost {
+  white-space: nowrap;
+  padding: 0.6rem 0.85rem;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.stream-url-row .ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stream-preview-backdrop {
+  z-index: 30;
+}
+
+.stream-preview-dialog {
+  width: min(880px, 100%);
+}
+
+.stream-preview-url {
+  margin: 0;
+  word-break: break-all;
+}
+
+.stream-preview-msg {
+  margin: 0;
+  padding: 1.25rem 0.75rem;
+  border-radius: 8px;
+  background: #f7faf8;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.stream-preview-frame {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #111;
+}
+
+.stream-preview-frame video,
+.stream-preview-frame img {
+  width: 100%;
+  max-height: min(70vh, 480px);
+  background: #000;
+}
+
+.stream-preview-connecting {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  color: #d7efe4;
+  font-size: 0.9rem;
 }
 
 .modal h3 {

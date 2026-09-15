@@ -12,26 +12,22 @@
 _tmp_*.js
 _tmp_*.json
 
-# External repositories
-/yolo26-plate/
+# Frigate runtime state (tracked: docker/frigate/config/config.yml, backup_config.yaml)
+docker/frigate/config/.exports
+docker/frigate/config/.jwt_secret
+docker/frigate/config/.search_stats.json
+docker/frigate/config/.timeline
+docker/frigate/config/.vacuum
+docker/frigate/config/*.db
+docker/frigate/config/*.db-shm
+docker/frigate/config/*.db-wal
+docker/frigate/config/go2rtc_homekit.yml
+docker/frigate/config/model_cache/
 
-# Frigate runtime state (tracked config files: frigate/config/config.yml, backup_config.yaml)
-frigate/config/.exports
-frigate/config/.jwt_secret
-frigate/config/.search_stats.json
-frigate/config/.timeline
-frigate/config/.vacuum
-frigate/config/*.db
-frigate/config/*.db-shm
-frigate/config/*.db-wal
-frigate/config/go2rtc_homekit.yml
-frigate/config/model_cache/
-frigate/gen_move.sh
-
-# Mosquitto runtime / credentials (tracked config file: mosquitto/config/mosquitto.conf)
-mosquitto/config/pwfile
-mosquitto/data/
-mosquitto/log/
+# Mosquitto runtime / credentials (tracked: docker/mosquitto/config/mosquitto.conf)
+docker/mosquitto/config/pwfile
+docker/mosquitto/data/
+docker/mosquitto/log/
 
 # Server local runtime data
 local_server/data/
