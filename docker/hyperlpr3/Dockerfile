@@ -1,4 +1,5 @@
-FROM python:3.10-slim-bookworm
+# Pins: ai-build/VERSIONS.md — Python 3.10.21 + hyperlpr3==0.1.3
+FROM python:3.10.21-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -27,12 +28,12 @@ RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple ; \
     pip config set global.trusted-host pypi.tuna.tsinghua.edu.cn ; \
     pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir --default-timeout=180 \
-        "numpy>=1.22,<2" \
-        "opencv-python-headless>=4.8,<5" \
-        "onnxruntime>=1.16,<2" \
-        "Pillow>=9" "requests" "tqdm" "loguru" \
-        "fastapi>=0.110,<1" "uvicorn>=0.27,<1" "python-multipart>=0.0.9,<1" && \
-    pip install --no-cache-dir --default-timeout=180 --no-deps hyperlpr3
+        "numpy==1.26.4" \
+        "opencv-python-headless==4.11.0.86" \
+        "onnxruntime==1.23.2" \
+        "Pillow==12.3.0" "requests" "tqdm" "loguru==0.7.3" \
+        "fastapi==0.141.1" "uvicorn==0.52.4" "python-multipart==0.0.32" && \
+    pip install --no-cache-dir --default-timeout=180 --no-deps hyperlpr3==0.1.3
 
 # 预热：触发模型文件下载（部分版本首次运行会拉取权重，避免容器第一次请求超时）
 RUN lpr3 --help || true

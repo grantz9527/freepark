@@ -269,8 +269,10 @@ function logout(): void {
   <div class="admin">
     <aside class="sidebar">
       <div class="brand">
-        <span class="mark" aria-hidden="true">P</span>
-        <div>
+        <span class="mark">
+          <img src="/logo.png" :alt="t('app.name')" />
+        </span>
+        <div class="brand-text">
           <strong>{{ t('app.name') }}</strong>
           <p>{{ t('app.console') }}</p>
         </div>
@@ -510,24 +512,50 @@ function logout(): void {
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.35rem 0.5rem 1.25rem;
+  gap: 0.7rem;
+  padding: 0.2rem 0.4rem 1.15rem;
+}
+
+.brand-text {
+  min-width: 0;
+}
+
+.brand strong {
+  display: block;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .brand p {
-  margin: 0.15rem 0 0;
+  margin: 0.12rem 0 0;
   color: var(--sidebar-text);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
 }
 
 .mark {
-  width: 2.25rem;
-  height: 2.25rem;
   display: grid;
   place-items: center;
-  border-radius: 8px;
-  background: var(--accent);
-  font-weight: 800;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 2.15rem;
+  height: 2.15rem;
+  padding: 0.22rem;
+  border-radius: 0.55rem;
+  background: linear-gradient(165deg, #fffdf8 0%, #f3e4c0 100%);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 22%),
+    inset 0 1px 0 rgb(255 255 255 / 70%);
+}
+
+.mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .nav {

@@ -8,10 +8,13 @@ import {
   enqueueDeviceCommand,
   listBarriers,
   listBooths,
+  listFrigateCamerasApi,
   type BarrierView,
   type BoothLaneView,
   type BoothView,
+  type FrigateCameraView,
 } from '@/api/client'
+import LaneLivePlayer from '@/components/LaneLivePlayer.vue'
 import PlateBadge from '@/components/PlateBadge.vue'
 import { useSiteTime } from '@/composables/useSiteTime'
 import { listRecognitionRecords, type RecognitionRecord } from '@/hardware/recognitionRecords'
@@ -23,9 +26,13 @@ const { formatTime } = useSiteTime()
 const route = useRoute()
 
 const loading = ref(false)
+const refreshing = ref(false)
 const errorMessage = ref('')
 const booth = ref<BoothView | null>(null)
 const logs = ref<string[]>([])
+const monitorMode = ref(false)
+const frigateCameras = ref<FrigateCameraView[]>([])
+const laneMonitorPick = ref<Record<string, string>>({})
 
 const boothId = computed(() => String(route.params.boothId ?? ''))
 const lotId = computed(() => {
@@ -66,7 +73,7 @@ async function load(): Promise<void> {
     if (!booth.value) {
       errorMessage.value = t('booths.viewNotFound')
     } else {
-      await Promise.all([loadLatestRecognitions(), loadLaneDevices()])
+      await Promise.all([loadLatestRecognitions(), loadLaneDevices(), loadFrigateCameras()])
     }
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : t('booths.loadFailed')
@@ -119,6 +126,89 @@ async function loadLatestRecognitions(): Promise<void> {
     // 识别记录加载失败不影响岗亭主界面展示
   }
   laneRecognitions.value = map
+}
+
+async function loadFrigateCameras(): Promise<void> {
+  try {
+    const result = await listFrigateCamerasApi(locale.value)
+    frigateCameras.value = result.data ?? []
+  } catch {
+    frigateCameras.value = []
+  }
+}
+
+type LaneMonitorSource = { key: string; label: string; url: string }
+
+function monitorSourcesFor(laneId: string): LaneMonitorSource[] {
+  const cameras = frigateCameras.value.filter(
+    (camera) => camera.laneId === laneId && camera.enabled && camera.cameraName.trim(),
+  )
+  const devices = (laneDevices.value[laneId] ?? []).filter(
+    (device) => device.enabled && device.streamUrl?.trim(),
+  )
+  const sources: LaneMonitorSource[] = [
+    ...cameras.map((camera) => ({
+      key: `frigate:${camera.id}`,
+      label: t('booths.monitorSourceFrigate', { name: camera.name || camera.cameraName }),
+      url: camera.cameraName.trim(),
+    })),
+    ...devices.map((device) => ({
+      key: `aio:${device.id}`,
+      label: t('booths.monitorSourceAio', { name: device.name || device.code }),
+      url: device.streamUrl!.trim(),
+    })),
+  ]
+  return sources
+}
+
+function monitorUrlFor(laneId: string): string | null {
+  const sources = monitorSourcesFor(laneId)
+  if (sources.length === 0) {
+    return null
+  }
+  const picked = laneMonitorPick.value[laneId]
+  return sources.find((item) => item.key === picked)?.url ?? sources[0].url
+}
+
+function onPickMonitorSource(laneId: string, event: Event): void {
+  const value = (event.target as HTMLSelectElement).value
+  laneMonitorPick.value = { ...laneMonitorPick.value, [laneId]: value }
+}
+
+async function refreshView(): Promise<void> {
+  if (!lotId.value) {
+    errorMessage.value = t('booths.viewNotFound')
+    return
+  }
+  if (!booth.value) {
+    await load()
+    return
+  }
+  refreshing.value = true
+  errorMessage.value = ''
+  try {
+    const next = await fetchBooth()
+    if (!next) {
+      booth.value = null
+      errorMessage.value = t('booths.viewNotFound')
+      return
+    }
+    booth.value = next
+    await Promise.all([loadLatestRecognitions(), loadLaneDevices(), loadFrigateCameras()])
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('booths.loadFailed')
+  } finally {
+    refreshing.value = false
+  }
+}
+
+async function toggleMonitorMode(): Promise<void> {
+  if (monitorMode.value) {
+    monitorMode.value = false
+    return
+  }
+  await loadFrigateCameras()
+  monitorMode.value = true
 }
 
 function laneTypeLabel(laneType: string): string {
@@ -225,6 +315,19 @@ onMounted(load)
         <span class="pill" :class="booth.enabled ? 'ok' : 'fail'">
           {{ booth.enabled ? t('internalVehicles.statusActive') : t('internalVehicles.statusDisabled') }}
         </span>
+        <div class="head-actions">
+          <button type="button" class="ghost" :disabled="refreshing || loading" @click="refreshView">
+            {{ refreshing ? t('booths.refreshing') : t('booths.refresh') }}
+          </button>
+          <button
+            type="button"
+            class="ghost"
+            :class="{ active: monitorMode }"
+            @click="toggleMonitorMode"
+          >
+            {{ monitorMode ? t('booths.monitorModeExit') : t('booths.monitorMode') }}
+          </button>
+        </div>
       </div>
 
       <p v-if="booth.lanes.length === 0" class="empty-card">
@@ -257,19 +360,40 @@ onMounted(load)
                 </span>
               </div>
               <p class="rec-time">{{ formatTime(laneRecognitions[lane.id]!.eventTime) }}</p>
+            </template>
+            <template v-if="monitorMode">
+              <label v-if="monitorSourcesFor(lane.id).length > 1" class="monitor-source">
+                <span>{{ t('booths.monitorSource') }}</span>
+                <select
+                  :value="laneMonitorPick[lane.id] || monitorSourcesFor(lane.id)[0]?.key"
+                  @change="onPickMonitorSource(lane.id, $event)"
+                >
+                  <option
+                    v-for="source in monitorSourcesFor(lane.id)"
+                    :key="source.key"
+                    :value="source.key"
+                  >
+                    {{ source.label }}
+                  </option>
+                </select>
+              </label>
               <div class="rec-media">
-                <img
-                  v-if="laneRecognitions[lane.id]!.eventImage"
-                  :src="laneRecognitions[lane.id]!.eventImage ?? undefined"
-                  class="rec-img"
-                  alt="recognition"
-                />
-                <div v-else class="rec-placeholder">
-                  {{ t('booths.noImage') }}
-                </div>
+                <LaneLivePlayer :active="monitorMode" :url="monitorUrlFor(lane.id)" />
               </div>
             </template>
-            <p v-else class="rec-empty">{{ t('booths.noRecognition') }}</p>
+            <div v-else class="rec-media">
+              <img
+                v-if="laneRecognitions[lane.id]?.eventImage"
+                :src="laneRecognitions[lane.id]!.eventImage ?? undefined"
+                class="rec-img"
+                alt="recognition"
+              />
+              <div v-else class="rec-placeholder">
+                {{
+                  laneRecognitions[lane.id] ? t('booths.noImage') : t('booths.noRecognition')
+                }}
+              </div>
+            </div>
           </div>
 
           <div class="lane-actions">
@@ -300,6 +424,7 @@ onMounted(load)
 .page {
   display: grid;
   gap: 0.9rem;
+  --lane-media-height: 240px;
 }
 
 .head-bar {
@@ -338,6 +463,50 @@ onMounted(load)
   margin: 0.2rem 0 0;
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.ghost {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+  font-weight: 600;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ghost.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #eef6f3;
+}
+
+.monitor-source {
+  display: grid;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.monitor-source select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+  background: #fff;
+  color: var(--text);
 }
 
 .pill {
@@ -395,11 +564,12 @@ onMounted(load)
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 0.9rem;
-  align-items: start;
+  align-items: stretch;
 }
 
 .lane-card {
   display: grid;
+  grid-template-rows: auto 1fr auto;
   gap: 0.6rem;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -440,13 +610,15 @@ onMounted(load)
 
 .rec-media {
   margin-top: 0.5rem;
+  height: var(--lane-media-height);
 }
 
 .rec-img {
   display: block;
   width: 100%;
-  max-height: 160px;
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
+  background: #111;
   border-radius: 6px;
 }
 
@@ -455,20 +627,11 @@ onMounted(load)
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 120px;
-  border: 1px dashed var(--border);
+  height: 100%;
   border-radius: 6px;
   background: #f2f4f3;
   color: var(--muted);
   font-size: 0.85rem;
-}
-
-.rec-empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-  text-align: center;
-  padding: 0.6rem 0;
 }
 
 .lane-actions {

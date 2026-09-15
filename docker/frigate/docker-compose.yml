@@ -1,6 +1,6 @@
 name: freepark-frigate
 
-# Frigate 识别 + 内置 go2rtc 直播
+# Frigate 0.17.2 + 内置 go2rtc。不要改成 :stable。
 # 启动：在仓库根目录执行
 #   docker compose -f docker/frigate/docker-compose.yml up -d
 # 详见 docker/frigate/README.md
@@ -8,7 +8,7 @@ name: freepark-frigate
 services:
   frigate:
     container_name: frigate
-    image: ghcr.io/blakeblackshear/frigate:stable
+    image: ghcr.io/blakeblackshear/frigate:0.17.2
     restart: unless-stopped
     shm_size: "128mb"
     extra_hosts:

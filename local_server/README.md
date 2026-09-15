@@ -14,7 +14,7 @@ Default port is **8081**.
 - Spring Boot 4.1.1
 - Spring Web MVC
 - Spring Data JPA (Hibernate)
-- MySQL 8.4
+- MySQL 8.4.11 (`mysql:8.4.11`)
 - Message bundles under `src/main/resources/i18n/`
 
 ## I18N

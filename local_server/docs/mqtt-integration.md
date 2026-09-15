@@ -36,7 +36,7 @@
 ## 3. 架构与数据流总览
 
 ```
-             ┌────────────────────┐          MQTT（同一条云端 Broker；联调环境即容器 freepark-mosquitto）
+             ┌────────────────────┐          MQTT（云端 Broker；不在本仓库场端 Docker 中部署）
              │      云端后端        │
              │ （心跳监控 + 配置下发 │
              │   + 停车流水上下行   │
@@ -75,19 +75,9 @@
 
 ---
 
-## 4. 云端 Broker（Mosquitto）部署与凭据
+## 4. 云端 Broker
 
-local_server 对接的 MQTT 服务器即“云端 Broker”。开发/联调环境下，`_workspace_freepark/docker/mosquitto/docker-compose.yml` 里的 Mosquitto 容器就充当该 Broker（云端后端与 local_server 都连它）：
-
-| 项 | 值 |
-|---|---|
-| 服务 | `mosquitto`，镜像 `eclipse-mosquitto:2`，容器名 `freepark-mosquitto` |
-| 端口 | `1883:1883`（MQTT）；`9001:9001` 已映射但 **conf 未配置 websocket listener**，勿依赖 |
-| 认证 | `allow_anonymous false`，密码文件 `/mosquitto/config/pwfile` |
-| 账号 | 仅一个用户：`freepark` / `freepark` |
-| 配置 | `docker/mosquitto/config/mosquitto.conf`；数据/日志落盘到 `docker/mosquitto/{data,log}` |
-
-启动（在 `_workspace_freepark` 仓库根目录）：`docker compose -f docker/mosquitto/docker-compose.yml up -d`
+local_server 对接的 MQTT 服务器是**云端 Broker**，由云侧部署，**本仓库场端 Docker 不含 Mosquitto**。EDGE 模式下在「节点配置」填写 Broker 地址与账号。
 
 ---
 
@@ -551,36 +541,36 @@ delta 增量示例（新增一条白名单）：
 
 ## 12. 联调验证手册（AI/测试端可直接照做）
 
-前置：Broker 已启动；`freepark/freepark` 可登录。
+前置：云端 Broker 已启动（本仓库场端不部署 Mosquitto）。在能访问该 Broker 的机器上执行 `mosquitto_sub` / `mosquitto_pub`，把 `<broker-host>` 换成节点配置里的 `mqttHost`。
 
 1) **收心跳**（应每 10s 一条）：
 ```
-docker exec freepark-mosquitto mosquitto_sub -t "parking/heartbeat/#" -u freepark -P freepark -v
+mosquitto_sub -h <broker-host> -t "parking/heartbeat/#" -u freepark -P freepark -v
 ```
 
 2) **人工模拟云端下发一条配置同步帧**（节点 `node-001`、订阅前缀 `parking/config-sync` 时主题=`parking/config-sync/node-001`）：
 ```
-docker exec freepark-mosquitto mosquitto_pub -t "parking/config-sync/node-001" -u freepark -P freepark \
+mosquitto_pub -h <broker-host> -t "parking/config-sync/node-001" -u freepark -P freepark \
   -m '{"schema":"edge.config.sync/3","edgeCode":"node-001","snapshotId":"test-1","version":3,"generatedAt":"2026-09-08T01:00:00Z","kind":"full","seq":1,"total":1,"lot":"P001","domain":"lot","items":[{"code":"P001","name":"测试场","lotType":"INTERNAL","enabled":true,"judgmentOrder":["BLACKLIST","WHITELIST","PATTERN_ALLOWLIST"]}]}'
 ```
 验证：GET `/api/v1/node-settings` 无关，直接查本地库或 local_server 日志（`配置同步帧已收齐…`）；全量请确保 `seq..total` 发齐，否则边缘会等下一轮。
 
 3) **收停车流水上报**：先在 local_server 完成一次入场（或直接改库把某条流水置待同步），上报器每 10s 补推，应能收到完整快照：
 ```
-docker exec freepark-mosquitto mosquitto_sub -t "parking/report/#" -u freepark -P freepark -v
+mosquitto_sub -h <broker-host> -t "parking/report/#" -u freepark -P freepark -v
 ```
 验证：日志出现 `已上报停车流水并清除待同步标记`；云端侧应能在 `parking_session` 查到该流水（`edge_node_code`/`edge_session_id` 有值）。
 
 4) **模拟云端缴费开闸**（节点 `node-001`、前缀 `parking/command`；先在该节点对某车牌做一次欠费拦截，再发）：
 ```
-docker exec freepark-mosquitto mosquitto_pub -t "parking/command/node-001" -u freepark -P freepark \
+mosquitto_pub -h <broker-host> -t "parking/command/node-001" -u freepark -P freepark \
   -m '{"schema":"edge.gate.command/1","edgeCode":"node-001","commandId":"test-open-1","command":"OPEN","reason":"PAYMENT","plate":"浙B12345","plateColor":"BLUE","lotCode":"P001","issuedAt":"2026-09-12T12:00:00Z"}'
 ```
 验证：local_server 日志出现 `缴费开闸完成` 或 `已下发`/`推送了开闸指令`；道闸应抬杆。若日志为 `未找到闸前拦截记录`，说明该车牌 20 分钟内没有 `fee_pending` 拦截。
 
 5) **模拟云端下发停车流水**（节点 `node-001`、车场 `P001` 须已存在于本地）：
 ```
-docker exec freepark-mosquitto mosquitto_pub -t "parking/command/node-001" -u freepark -P freepark \
+mosquitto_pub -h <broker-host> -t "parking/command/node-001" -u freepark -P freepark \
   -m '{"schema":"edge.parking.session/1","origin":"CLOUD","edgeCode":"node-001","cloudId":1001,"cloudRevision":1,"lotCode":"P001","plateNumber":"浙B12345","plateColor":"BLUE","status":"OPEN","entryTime":"2026-09-12T01:00:00Z","issuedAt":"2026-09-12T13:00:00Z"}'
 ```
 验证：local_server 日志出现 `已应用云端停车流水`；本地 `parking_session` 出现对应车牌且 `sync_pending` 为 false。
@@ -621,4 +611,4 @@ docker exec freepark-mosquitto mosquitto_pub -t "parking/command/node-001" -u fr
 | 云端协议常量/下发（对端参照） | `freepark-cloud-simple-backend/…/settings/runtime/EdgeConfigSyncProtocol.java`、`EdgeConfigSyncDispatcher.java` |
 | 云端条目字段形状（对端参照） | `freepark-cloud-simple-backend/…/parking/edge/EdgeDomainItems.java` |
 | 云端流水幂等键/唯一约束 | `freepark-cloud-simple-backend/…/parking/entity/ParkingSession.java`（`uk_parking_session_edge`） |
-| 联调用云端 Broker 部署 | `_workspace_freepark/docker/mosquitto/docker-compose.yml`、`_workspace_freepark/docker/mosquitto/config/mosquitto.conf` |
+| 云端 Broker | 由云侧部署，场端只填写地址；本仓库不包含 Mosquitto |

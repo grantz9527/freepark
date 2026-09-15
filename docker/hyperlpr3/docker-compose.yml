@@ -1,6 +1,6 @@
 name: freepark-hyperlpr3
 
-# HyperLPR3 社区版 REST（端口 8715）
+# HyperLPR3 0.1.3 REST（端口 8715）。版本钉死见 ai-build/VERSIONS.md。
 # 首次 build 会下载依赖与模型，可能超过 10 分钟。
 # 启动：在仓库根目录
 #   docker compose -f docker/hyperlpr3/docker-compose.yml up -d --build
@@ -8,7 +8,7 @@ name: freepark-hyperlpr3
 services:
   hyperlpr3:
     build: .
-    image: freepark-hyperlpr3:latest
+    image: freepark-hyperlpr3:0.1.3
     container_name: freepark-hyperlpr3
     restart: unless-stopped
     ports:

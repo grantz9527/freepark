@@ -36,7 +36,7 @@
 ## 3. Architecture & Data Flows
 
 ```
-             ┌────────────────────┐          MQTT (one cloud broker; the `freepark-mosquitto` container in dev/staging)
+             ┌────────────────────┐          MQTT (cloud broker; not deployed by this repo's site Docker)
              │   Cloud backend    │
              │ (heartbeat monitor │
              │  + config dispatch │
@@ -76,19 +76,9 @@ All four clients use **the same cloud broker**: `local_server` stores a single "
 
 ---
 
-## 4. Cloud Broker (Mosquitto) Deployment & Credentials
+## 4. Cloud Broker
 
-The MQTT server that `local_server` talks to is the "cloud broker". In dev/staging the Mosquitto container from `_workspace_freepark/docker/mosquitto/docker-compose.yml` plays that role (both the cloud backend and `local_server` connect to it):
-
-| Item | Value |
-|---|---|
-| Service | `mosquitto`, image `eclipse-mosquitto:2`, container `freepark-mosquitto` |
-| Ports | `1883:1883` (MQTT); `9001:9001` is mapped but **no websocket listener is configured** — do not rely on it |
-| Auth | `allow_anonymous false`, password file `/mosquitto/config/pwfile` |
-| Account | Single user: `freepark` / `freepark` |
-| Config | `docker/mosquitto/config/mosquitto.conf`; data/log persisted under `docker/mosquitto/{data,log}` |
-
-Start (from `_workspace_freepark` repo root): `docker compose -f docker/mosquitto/docker-compose.yml up -d`
+The MQTT server that `local_server` talks to is the **cloud broker**. It is deployed on the cloud side. **This repository does not ship Mosquitto on the site.** In EDGE mode, fill the broker address in Node settings.
 
 ---
 
@@ -529,29 +519,29 @@ Example:
 
 ## 12. Integration Verification Handbook (executable by AI / testers)
 
-Prerequisites: broker up; login `freepark` / `freepark`.
+Prerequisites: the **cloud** broker is up (this repo does not deploy Mosquitto on site). Run `mosquitto_sub` / `mosquitto_pub` from a host that can reach it; replace `<broker-host>` with the node-settings `mqttHost`.
 
 1) **Receive heartbeats** (one every ~10s):
 ```
-docker exec freepark-mosquitto mosquitto_sub -t "parking/heartbeat/#" -u freepark -P freepark -v
+mosquitto_sub -h <broker-host> -t "parking/heartbeat/#" -u freepark -P freepark -v
 ```
 
 2) **Manually emulate a cloud config-sync frame** (node `node-001`, subscription prefix `parking/config-sync` → topic `parking/config-sync/node-001`):
 ```
-docker exec freepark-mosquitto mosquitto_pub -t "parking/config-sync/node-001" -u freepark -P freepark \
+mosquitto_pub -h <broker-host> -t "parking/config-sync/node-001" -u freepark -P freepark \
   -m '{"schema":"edge.config.sync/3","edgeCode":"node-001","snapshotId":"test-1","version":3,"generatedAt":"2026-09-08T01:00:00Z","kind":"full","seq":1,"total":1,"lot":"P001","domain":"lot","items":[{"code":"P001","name":"Test Lot","lotType":"INTERNAL","enabled":true,"judgmentOrder":["BLACKLIST","WHITELIST","PATTERN_ALLOWLIST"]}]}'
 ```
 Verify: look at the local DB or the local_server log (`config sync frames received, applying snapshot…`). For a full snapshot make sure all `seq..total` frames arrive — otherwise the edge waits for the next round.
 
 3) **Receive parking-session reports**: first complete an entry on `local_server` (or mark a row pending directly in the DB); the reporter backfills every 10s, and you should receive full snapshots:
 ```
-docker exec freepark-mosquitto mosquitto_sub -t "parking/report/#" -u freepark -P freepark -v
+mosquitto_sub -h <broker-host> -t "parking/report/#" -u freepark -P freepark -v
 ```
 Verify: the log shows `reported parking session and cleared pending flag`; the cloud `parking_session` table should contain that session (with `edge_node_code`/`edge_session_id` filled).
 
 4) **Emulate a cloud session push** (node `node-001`, lot `P001` must already exist locally):
 ```
-docker exec freepark-mosquitto mosquitto_pub -t "parking/command/node-001" -u freepark -P freepark \
+mosquitto_pub -h <broker-host> -t "parking/command/node-001" -u freepark -P freepark \
   -m '{"schema":"edge.parking.session/1","origin":"CLOUD","edgeCode":"node-001","cloudId":1001,"cloudRevision":1,"lotCode":"P001","plateNumber":"浙B12345","plateColor":"BLUE","status":"OPEN","entryTime":"2026-09-12T01:00:00Z","issuedAt":"2026-09-12T13:00:00Z"}'
 ```
 Verify: local_server logs `applied cloud parking session`; the local `parking_session` row exists for that plate with `sync_pending=false`.
@@ -591,4 +581,4 @@ Verify: local_server logs `applied cloud parking session`; the local `parking_se
 | Cloud protocol constants / dispatcher (peer reference) | `freepark-cloud-simple-backend/…/settings/runtime/EdgeConfigSyncProtocol.java`, `EdgeConfigSyncDispatcher.java` |
 | Cloud item shapes (peer reference) | `freepark-cloud-simple-backend/…/parking/edge/EdgeDomainItems.java` |
 | Cloud session idempotency key / unique constraint | `freepark-cloud-simple-backend/…/parking/entity/ParkingSession.java` (`uk_parking_session_edge`) |
-| Cloud broker deployment (dev/staging) | `_workspace_freepark/docker/mosquitto/docker-compose.yml`, `_workspace_freepark/docker/mosquitto/config/mosquitto.conf` |
+| Cloud broker | Deployed on the cloud; the site only stores the address. This repo does not include Mosquitto |

@@ -1,10 +1,14 @@
-# AI one-click deploy
+# AI deploy (reference)
 
-This folder is the **only** deploy contract for FreePark. Another AI (or a human) should start here, not by guessing from scattered READMEs.
+Sample scripts and steps so another AI (or a human) can stand up a **dev-style** local console. **This is a reference, not a requirement.** Deploy however you need: different compose files, systemd, a single JAR, another reverse proxy, other ports.
 
-本目录是 FreePark **唯一**的部署约定。其它 AI 或人类应从这里开始，不要从各子项目 README 自行拼命令。
+本目录是参考部署，不是强制方案。可按自己的需求改 Docker、端口、进程与发布方式。
 
-Pick **one** OS directory and ignore the other:
+If you are new to Docker / JDK / the command line, ask someone with computer experience to deploy this project.
+
+若你是电脑小白，建议找有一定电脑基础的人员来部署本项目。
+
+Pick **one** OS directory if you use these scripts:
 
 | Path | OS |
 | --- | --- |
@@ -15,8 +19,9 @@ Shared (not OS-specific):
 
 | File | Purpose |
 | --- | --- |
-| [AGENTS.md](AGENTS.md) | Step-by-step procedure the agent must execute |
+| [AGENTS.md](AGENTS.md) | Sample step-by-step procedure (reference) |
 | [PROMPT.md](PROMPT.md) | Copy-paste prompt to hand to another AI |
-| [docker-compose.yml](docker-compose.yml) | MySQL + Mosquitto; optional HyperLPR3 / Frigate |
+| [docker-compose.yml](docker-compose.yml) | MySQL 8.4.11 + HyperLPR3 0.1.3 + Frigate 0.17.2. No MQTT. |
+| [VERSIONS.md](VERSIONS.md) | Pinned image / package versions |
 
 Default console after a successful deploy: **http://localhost:5173** — `admin` / `admin123`.

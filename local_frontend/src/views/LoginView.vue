@@ -40,8 +40,10 @@ async function onSubmit(): Promise<void> {
 <template>
   <div class="login-page">
     <section class="brand-pane">
-      <div>
-        <span class="mark">P</span>
+      <div class="brand-copy">
+        <span class="mark">
+          <img src="/logo.png" :alt="t('app.name')" />
+        </span>
         <p class="eyebrow">{{ t('app.console') }}</p>
         <h1>{{ t('app.name') }}</h1>
         <p class="lead">{{ t('login.hero') }}</p>
@@ -81,41 +83,67 @@ async function onSubmit(): Promise<void> {
 .brand-pane {
   display: grid;
   align-items: center;
-  padding: 3rem;
+  padding: 3.25rem 3.5rem;
   background:
-    radial-gradient(circle at top left, #1c8f84 0%, transparent 28%),
+    radial-gradient(ellipse 70% 55% at 12% 18%, rgb(212 168 64 / 18%) 0%, transparent 52%),
+    radial-gradient(circle at top left, #1c8f84 0%, transparent 30%),
     var(--sidebar);
   color: #fff;
 }
 
+.brand-copy {
+  display: grid;
+  justify-items: start;
+  max-width: 26rem;
+}
+
 .mark {
-  width: 3rem;
-  height: 3rem;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: var(--accent);
-  font-weight: 800;
-  margin-bottom: 1.5rem;
+  box-sizing: border-box;
+  width: 3.25rem;
+  height: 3.25rem;
+  margin: 0 0 1.35rem;
+  padding: 0.38rem;
+  border-radius: 0.85rem;
+  background: linear-gradient(165deg, #fffdf8 0%, #f3e4c0 100%);
+  box-shadow:
+    0 10px 26px rgb(0 0 0 / 26%),
+    0 0 0 1px rgb(255 255 255 / 16%),
+    inset 0 1px 0 rgb(255 255 255 / 80%);
+}
+
+.mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .eyebrow {
-  margin: 0 0 0.5rem;
-  color: #9ab5ae;
-  letter-spacing: 0.08em;
+  margin: 0 0 0.4rem;
+  color: #b7c9c3;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .brand-pane h1 {
-  margin: 0 0 0.75rem;
-  font-size: clamp(2rem, 4vw, 3rem);
+  margin: 0 0 0.7rem;
+  font-size: clamp(2.1rem, 4.2vw, 2.85rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
 .lead {
   margin: 0;
-  max-width: 24rem;
-  color: #d5e4df;
+  max-width: 22rem;
+  color: #c5d6d0;
+  font-size: 0.98rem;
+  line-height: 1.65;
 }
 
 .form-pane {

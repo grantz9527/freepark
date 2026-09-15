@@ -56,30 +56,32 @@ The backend uses Java 21, Spring Data JPA, MySQL, and HTTP I18N (`Accept-Languag
 
 - [`local_frontend`](local_frontend/README.md): Vue 3 + vue-i18n console for `local_server`, default port `5173`
 
-- [`docker/mosquitto`](docker/mosquitto/README.md): MQTT broker (Docker) / MQTT Broker（Docker）
+- [`docker/frigate`](docker/frigate/README.md): Frigate **0.17.2** NVR / LPR + go2rtc (Docker)
 
-- [`docker/frigate`](docker/frigate/README.md): Frigate NVR / LPR + go2rtc (Docker) / Frigate 识别与直播（Docker）
-
-- [`docker/hyperlpr3`](docker/hyperlpr3/README.md): HyperLPR3 REST (port `8715`) / HyperLPR3 识别服务（端口 `8715`）
+- [`docker/hyperlpr3`](docker/hyperlpr3/README.md): HyperLPR3 **0.1.3** REST (port `8715`)
 
 ## AI deploy / AI 部署
 
-This repo is meant to be **deployed by an AI**. The contract lives in [`ai-build`](ai-build/README.md). Do not invent ports or compose files from other READMEs.
+[`ai-build`](ai-build/README.md) is a **reference** for deploying this project (including handing the job to another AI). It is not the only valid way: adapt Docker, ports, and process layout to your own environment.
 
-本仓库设计为**交给 AI 部署**。约定只在 [`ai-build`](ai-build/README.md)。不要从其它 README 自行拼端口或 compose。
+[`ai-build`](ai-build/README.md) 是一份**参考**部署说明（也可交给其它 AI 执行），不是唯一做法。可按自己的环境调整 Docker、端口与进程安排。
 
-**Hand it to another AI / 交给其它 AI：** paste [`ai-build/PROMPT.md`](ai-build/PROMPT.md) into that agent, or tell it: *follow `ai-build/AGENTS.md`*. It must pick **one** OS tree and not mix them.
+**Beginners:** this stack needs Docker, JDK, Node.js and some command-line work. If you are not comfortable with that, ask someone with computer / ops experience to deploy it for you.
 
-把 [`ai-build/PROMPT.md`](ai-build/PROMPT.md) 整段贴给目标 AI，或让它执行 `ai-build/AGENTS.md`。必须只选一套系统目录，不要混用。
+**小白建议：** 本项目需要 Docker、JDK、Node.js 和基本命令行操作。若不熟悉这些，请找有一定电脑基础（或运维经验）的人员来部署。
+
+To have another AI follow the sample path, paste [`ai-build/PROMPT.md`](ai-build/PROMPT.md), or tell it to follow [`ai-build/AGENTS.md`](ai-build/AGENTS.md). Pick **one** OS tree and do not mix them.
+
+若按参考流程交给其它 AI：把 [`ai-build/PROMPT.md`](ai-build/PROMPT.md) 贴给它，或让它执行 `ai-build/AGENTS.md`。只选一套系统目录，不要混用。
 
 | Host OS | Scripts |
 | --- | --- |
 | Windows | [`ai-build/windows`](ai-build/windows/README.md) |
 | Linux / macOS | [`ai-build/linux`](ai-build/linux/README.md) |
 
-Need Docker, JDK 21, and Node.js 22+ on the machine. Default path starts MySQL `:3307` + MQTT `:1883`, then `local_server` `:8081` and `local_frontend` `:5173`. Frigate and HyperLPR3 are optional (`-WithLpr` / `--with-lpr`, `-WithFrigate` / `--with-frigate`).
+Need Docker, JDK 21, and Node.js 22+ on the machine. Local stack is **five services**: MySQL `8.4.11`, Frigate `0.17.2`, HyperLPR3 `0.1.3`, then `local_server` `:8081` and `local_frontend` `:5173`. MQTT is **not** deployed on site. Pins: [`ai-build/VERSIONS.md`](ai-build/VERSIONS.md).
 
-本机需要 Docker、JDK 21、Node.js 22+。默认只起控制台依赖（MySQL `:3307`、MQTT `:1883`），再启动后端 `:8081` 与前端 `:5173`。Frigate、HyperLPR3 为可选。
+本机需要 Docker、JDK 21、Node.js 22+。本地只部署 **五个服务**：MySQL `8.4.11`、Frigate `0.17.2`、HyperLPR3 `0.1.3`，以及后端 `:8081` 与前端 `:5173`。**场端不部署 MQTT。** 版本钉死见 [`ai-build/VERSIONS.md`](ai-build/VERSIONS.md)。
 
 Windows:
 

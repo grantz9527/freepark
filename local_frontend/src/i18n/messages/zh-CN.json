@@ -11,7 +11,7 @@
     "confirm": "确定"
   },
   "app": {
-    "name": "FreePark 本地",
+    "name": "FreePark",
     "tagline": "场端停车控制台",
     "console": "场端管理"
   },
@@ -357,7 +357,18 @@
     "directionExit": "出场",
     "viewTitle": "岗亭详情",
     "viewBack": "← 返回岗亭管理",
-    "viewNotFound": "未找到该岗亭，可能已被删除或切换了车场。"
+    "viewNotFound": "未找到该岗亭，可能已被删除或切换了车场。",
+    "refresh": "刷新",
+    "refreshing": "刷新中…",
+    "monitorMode": "监控模式",
+    "monitorModeExit": "识别图片",
+    "noMonitor": "该通道未绑定监控或一体机视频",
+    "monitorConnecting": "正在拉流，请稍候…",
+    "monitorPlayFailed": "无法播放该视频。请确认 Frigate 已启动且视频流可访问。",
+    "monitorUnsupported": "当前视频地址无法在网页中播放。",
+    "monitorSource": "视频源",
+    "monitorSourceFrigate": "监控 {name}",
+    "monitorSourceAio": "一体机 {name}"
   },
   "internalVehicles": {
     "create": "添加内部车辆",

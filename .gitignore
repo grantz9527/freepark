@@ -24,10 +24,8 @@ docker/frigate/config/*.db-wal
 docker/frigate/config/go2rtc_homekit.yml
 docker/frigate/config/model_cache/
 
-# Mosquitto runtime / credentials (tracked: docker/mosquitto/config/mosquitto.conf)
-docker/mosquitto/config/pwfile
-docker/mosquitto/data/
-docker/mosquitto/log/
+# Leftover local Mosquitto runtime if the old docker/mosquitto folder still exists
+docker/mosquitto/
 
 # Server local runtime data
 local_server/data/

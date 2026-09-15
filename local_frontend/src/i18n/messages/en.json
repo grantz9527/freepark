@@ -11,7 +11,7 @@
     "confirm": "Confirm"
   },
   "app": {
-    "name": "FreePark Local",
+    "name": "FreePark",
     "tagline": "On-site parking console",
     "console": "Site admin"
   },
@@ -357,7 +357,18 @@
     "directionExit": "Exit",
     "viewTitle": "Booth Detail",
     "viewBack": "← Back to Booths",
-    "viewNotFound": "Booth not found. It may have been deleted or the lot was switched."
+    "viewNotFound": "Booth not found. It may have been deleted or the lot was switched.",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…",
+    "monitorMode": "Monitor mode",
+    "monitorModeExit": "Snapshots",
+    "noMonitor": "No bound camera or device stream on this lane",
+    "monitorConnecting": "Pulling the live stream…",
+    "monitorPlayFailed": "Could not play this video. Confirm Frigate is running and the stream is reachable.",
+    "monitorUnsupported": "This video URL cannot be played in the browser.",
+    "monitorSource": "Video source",
+    "monitorSourceFrigate": "Camera {name}",
+    "monitorSourceAio": "Device {name}"
   },
   "internalVehicles": {
     "create": "Add internal vehicle",

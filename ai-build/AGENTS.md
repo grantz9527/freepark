@@ -1,6 +1,14 @@
-# Deploy FreePark (agent procedure)
+# Deploy FreePark (agent procedure, reference)
 
-Execute these steps in order. Stop if a required tool is missing. Do not skip health checks.
+These steps are a **sample** path for a local console. Operators may deploy differently (other compose, ports, or process managers). Do not treat this file as the only allowed topology.
+
+若操作者另有部署方式，按其要求执行，不必套用本文件的每一条。
+
+If the operator is a beginner with no command-line experience, stop and recommend they get help from someone comfortable with Docker, JDK, and Node.js.
+
+若操作者是电脑小白且无人协助，先说明本项目不适合零基础独自部署，建议找有一定电脑基础的人员。
+
+Execute the following only when using this sample path. Stop if a required tool is missing. Do not skip health checks.
 
 **Pick one OS tree and stay in it:**
 
@@ -15,7 +23,15 @@ Required on the host:
 - JDK 21 (for `local_server/mvnw`)
 - Node.js `^22.18.0 || >=24.12.0` and `npm`
 
-Optional: cameras / Frigate / HyperLPR3 — see §7. Default deploy is **console only** (MySQL + Mosquitto + `local_server` + `local_frontend`).
+**Local stack is exactly five services** (see [`VERSIONS.md`](VERSIONS.md)). Do **not** deploy an MQTT broker on the site.
+
+| Service | Version | Port |
+| --- | --- | --- |
+| MySQL | `mysql:8.4.11` | 3307 |
+| Frigate | `ghcr.io/blakeblackshear/frigate:0.17.2` | 5000 / 1984 |
+| HyperLPR3 | `hyperlpr3==0.1.3` (`python:3.10.21-slim-bookworm`) | 8715 |
+| `local_server` | Spring Boot 4.1.1, Java 21 | 8081 |
+| `local_frontend` | Vue 3 + Vite, Node 22+ | 5173 |
 
 Do not use `local_server/src/main/resources/application-dev.yml` (different MySQL port/password). Default `application.yml` expects MySQL at `localhost:3307`.
 
@@ -39,10 +55,11 @@ sh ai-build/linux/up.sh
 
 Wait until the script prints `OK`. Confirm:
 
-- `http://127.0.0.1:3307` — MySQL (container `freepark-local-mysql`)
-- `127.0.0.1:1883` — MQTT (container `freepark-mosquitto`, user `freepark` / `freepark`)
+- `127.0.0.1:3307` — MySQL 8.4.11 (`freepark-local-mysql`)
+- `http://127.0.0.1:8715/api/v1/docs` — HyperLPR3 0.1.3
+- `http://127.0.0.1:5000` — Frigate 0.17.2 (go2rtc `1984`)
 
-If Mosquitto is unhealthy, the usual cause is a missing `docker/mosquitto/config/pwfile`. The up script generates it. Do not commit `pwfile`.
+First HyperLPR3 image build can exceed 10 minutes. Do not retag MySQL / Frigate / HyperLPR3; pins live in [`VERSIONS.md`](VERSIONS.md).
 
 ## 2. Java drivers + frontend packages
 
@@ -120,46 +137,36 @@ Console: **http://localhost:5173** (or the Vite port). Default login: `admin` / 
 
 ## 6. What not to do
 
-- Do not `docker compose` Frigate by default. `docker/frigate/config/config.yml` points at site-specific RTSP URLs.
-- Do not put video on MQTT. MQTT is control/state only.
+- Do not deploy Mosquitto or any MQTT broker on the site.
+- Do not pull `frigate:stable` or `mysql:latest` — use the pins in [`VERSIONS.md`](VERSIONS.md).
+- Do not put video on MQTT. MQTT is control/state only (cloud broker).
 - Do not change i18n locales beyond zh-CN / zh-TW / en when editing product copy.
 - Do not implement backend features unless the operator asked; this repo is frontend-first for product work.
-- Do not commit `docker/mosquitto/config/pwfile`, Mosquitto data/log, or `local_server/data/`.
+- Do not commit `local_server/data/`.
 
-## 7. Optional recognition stack
+## 7. After Docker is up
 
-Only if the operator asked for plate recognition or live cameras.
+In the running console:
 
-HyperLPR3 (first **image build can exceed 10 minutes**):
+- System settings → enable HyperLPR3 → base URL `http://127.0.0.1:8715`
+- Frigate docking → API `127.0.0.1:5000`, MQTT = **external/cloud broker** (not this repo), topic prefix `frigate`
+- Camera ids must match go2rtc stream names in `docker/frigate/config/config.yml` (e.g. `cam_acfb0350`), not the Chinese friendly name
 
-Windows: `powershell -File ai-build/windows/up.ps1 -WithLpr`
-
-Linux / macOS: `sh ai-build/linux/up.sh --with-lpr`
-
-Listen port `8715`. Then in the running console: System settings → enable HyperLPR3 → base URL `http://127.0.0.1:8715`.
-
-Frigate (needs working RTSP in `docker/frigate/config/config.yml`):
-
-Windows: `powershell -File ai-build/windows/up.ps1 -WithFrigate`
-
-Linux / macOS: `sh ai-build/linux/up.sh --with-frigate`
-
-Ports: Frigate UI `5000`, go2rtc `1984`. In the console: Frigate docking → API `127.0.0.1:5000`, MQTT `127.0.0.1:1883`, topic prefix `frigate`. Camera ids must match go2rtc stream names (e.g. `cam_acfb0350`), not the Chinese friendly name.
+Frigate needs working RTSP in that config. If cameras are unreachable, the container may still run; the console and MySQL still work.
 
 ## Ports (do not remap unless asked)
 
 | Port | Service |
 | --- | --- |
-| 3307 | MySQL 8.4 |
-| 1883 | Mosquitto MQTT |
+| 3307 | MySQL 8.4.11 |
 | 8081 | local_server |
 | 5173 | local_frontend (Vite; +1 if busy) |
-| 8715 | HyperLPR3 (optional) |
-| 5000 / 1984 | Frigate / go2rtc (optional) |
+| 8715 | HyperLPR3 0.1.3 |
+| 5000 / 1984 | Frigate 0.17.2 / go2rtc |
 
 ## Facts other AIs get wrong
 
 - There is **no** reactor parent POM. Always `install` `driver-api` then `zhensi-driver` before `local_server`.
 - Use `local_server/mvnw` / `mvnw.cmd` so a global Maven install is not required.
 - Frontend README says `npm install` (there is also a `pnpm-lock.yaml`; still use npm unless the operator says otherwise).
-- Cloud MQTT docs (`local_server/docs/mqtt-integration.md`) are for EDGE↔cloud. Local Frigate MQTT is the Mosquitto container on `1883`.
+- Cloud MQTT docs (`local_server/docs/mqtt-integration.md`) are EDGE↔**cloud broker**. This repo does **not** run Mosquitto on the site.

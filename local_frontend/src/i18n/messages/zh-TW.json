@@ -11,7 +11,7 @@
     "confirm": "確定"
   },
   "app": {
-    "name": "FreePark 本地",
+    "name": "FreePark",
     "tagline": "場端停車控制台",
     "console": "場端管理"
   },
@@ -357,7 +357,18 @@
     "directionExit": "出場",
     "viewTitle": "崗亭詳情",
     "viewBack": "← 返回崗亭管理",
-    "viewNotFound": "找不到該崗亭，可能已被刪除或切換了車場。"
+    "viewNotFound": "找不到該崗亭，可能已被刪除或切換了車場。",
+    "refresh": "重新整理",
+    "refreshing": "重新整理中…",
+    "monitorMode": "監控模式",
+    "monitorModeExit": "識別圖片",
+    "noMonitor": "該通道未綁定監控或一體機視訊",
+    "monitorConnecting": "正在拉流，請稍候…",
+    "monitorPlayFailed": "無法播放該視訊。請確認 Frigate 已啟動且視訊流可存取。",
+    "monitorUnsupported": "目前視訊位址無法在網頁中播放。",
+    "monitorSource": "視訊源",
+    "monitorSourceFrigate": "監控 {name}",
+    "monitorSourceAio": "一體機 {name}"
   },
   "internalVehicles": {
     "create": "新增內部車輛",

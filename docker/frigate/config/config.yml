@@ -1,5 +1,4 @@
-# Frigate 本地配置 + 宿主机 MQTT
-# host.docker.internal: Docker Desktop 中容器访问宿主机的地址
+# Frigate 本地配置。MQTT Broker 不在场端部署，请改为云端或其它外部地址。
 mqtt:
   enabled: true
   host: host.docker.internal
@@ -48,6 +47,7 @@ cameras:
       streams:
         Stream 1: cam_acfb0350
 version: 0.17-0
+# 对应镜像 ghcr.io/blakeblackshear/frigate:0.17.2（见 ai-build/VERSIONS.md）
 # 原生 LPR：Frigate 内置 YOLOv9 车牌检测 + PaddleOCR，事件直接带 recognized_license_plate
 lpr:
   enabled: true
