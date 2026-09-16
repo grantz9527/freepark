@@ -130,7 +130,7 @@ export function createOperator(
 
 export type LotType = 'INTERNAL' | 'PUBLIC'
 
-export type InterceptRuleType = 'ARREARS' | 'BLACKLIST'
+export type InterceptRuleType = 'ARREARS' | 'BLACKLIST' | 'FULL'
 
 export type AccessJudgmentRuleType = 'BLACKLIST' | 'WHITELIST' | 'PATTERN_ALLOWLIST'
 
@@ -1675,6 +1675,9 @@ export function updateNodeSettings(
     mqttPassword: string
     // 心跳主题前缀不再由前端提供，缺省时后端落默认值 parking/heartbeat
     mqttTopicPrefix?: string
+    configSyncTopicPrefix?: string | null
+    reportTopicPrefix?: string | null
+    commandTopicPrefix?: string | null
     nodeCode: string
     feeApiUrl: string
     feeMockEnabled: boolean

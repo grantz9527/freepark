@@ -212,9 +212,10 @@ class ParkingLotControllerTest {
         mockMvc.perform(put("/api/v1/lots/" + lotId + "/intercept")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"entryRules\":[\"ARREARS\",\"BLACKLIST\"],\"exitRules\":[\"BLACKLIST\"]}"))
+                        .content("{\"entryRules\":[\"ARREARS\",\"BLACKLIST\",\"FULL\"],\"exitRules\":[\"BLACKLIST\",\"FULL\"]}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.entryRules.length()").value(2))
+                .andExpect(jsonPath("$.data.entryRules.length()").value(3))
+                .andExpect(jsonPath("$.data.entryRules[2]").value("FULL"))
                 .andExpect(jsonPath("$.data.exitRules.length()").value(1))
                 .andExpect(jsonPath("$.data.exitRules[0]").value("BLACKLIST"));
     }

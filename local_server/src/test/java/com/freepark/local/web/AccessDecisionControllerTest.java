@@ -5,6 +5,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Instant;
+import java.util.UUID;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,6 +17,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.freepark.local.domain.ParkingSession;
+import com.freepark.local.domain.ParkingSessionRepository;
+import com.freepark.local.domain.ParkingSessionStatus;
+import com.freepark.local.domain.PlateColor;
+import com.freepark.local.parkingflow.service.LotOccupancyTracker;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -28,6 +37,12 @@ class AccessDecisionControllerTest {
     @Autowired
     private JsonMapper jsonMapper;
 
+    @Autowired
+    private ParkingSessionRepository sessions;
+
+    @Autowired
+    private LotOccupancyTracker occupancy;
+
     private String adminToken() throws Exception {
         MvcResult login = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -39,12 +54,16 @@ class AccessDecisionControllerTest {
     }
 
     private String createLot(String token, String lotType) throws Exception {
+        return createLot(token, lotType, 50);
+    }
+
+    private String createLot(String token, String lotType, int totalSpaces) throws Exception {
         String code = "lot_" + System.nanoTime();
         MvcResult create = mockMvc.perform(post("/api/v1/lots")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Decision Lot\",\"code\":\"" + code
-                                + "\",\"lotType\":\"" + lotType + "\",\"totalSpaces\":50}"))
+                                + "\",\"lotType\":\"" + lotType + "\",\"totalSpaces\":" + totalSpaces + "}"))
                 .andExpect(status().isOk())
                 .andReturn();
         return jsonMapper.readTree(create.getResponse().getContentAsString())
@@ -78,6 +97,20 @@ class AccessDecisionControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body));
+    }
+
+    private void occupyLot(String lotId, String laneId, String plate) {
+        sessions.save(new ParkingSession(
+                UUID.fromString(lotId),
+                "Decision Lot",
+                plate,
+                PlateColor.BLUE,
+                Instant.now(),
+                UUID.fromString(laneId),
+                "Entry Lane",
+                null,
+                null));
+        occupancy.onChanged(UUID.fromString(lotId), null, ParkingSessionStatus.OPEN);
     }
 
     @Test
@@ -251,5 +284,82 @@ class AccessDecisionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.result").value("ALLOWED"))
                 .andExpect(jsonPath("$.data.remark").value("no_open_session"));
+    }
+
+    @Test
+    void fullOccupancyInterceptsEntryWhenLotIsFull() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token, "PUBLIC", 1);
+        String laneId = createLane(token, lotId);
+
+        mockMvc.perform(put("/api/v1/lots/" + lotId + "/intercept")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryRules\":[\"FULL\"],\"exitRules\":[]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.entryRules[0]").value("FULL"));
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"direction\":\"ENTRANCE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"));
+
+        occupyLot(lotId, laneId, "京A00001");
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"direction\":\"ENTRANCE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("INTERCEPTED"))
+                .andExpect(jsonPath("$.data.remark").value("lot_full"));
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A00001\",\"plateColor\":\"BLUE\",\"direction\":\"ENTRANCE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"));
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A99999\",\"plateColor\":\"BLUE\",\"direction\":\"EXIT\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"));
+    }
+
+    @Test
+    void fullOccupancyDoesNotInterceptWhenTotalSpacesIsZero() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token, "PUBLIC", 0);
+        String laneId = createLane(token, lotId);
+
+        mockMvc.perform(put("/api/v1/lots/" + lotId + "/intercept")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryRules\":[\"FULL\"],\"exitRules\":[]}"))
+                .andExpect(status().isOk());
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"direction\":\"ENTRANCE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("ALLOWED"));
+    }
+
+    @Test
+    void fullOccupancyIsNotBypassedByWhitelist() throws Exception {
+        String token = adminToken();
+        String lotId = createLot(token, "PUBLIC", 1);
+        String laneId = createLane(token, lotId);
+        addVehicle(token, lotId, "whitelist-vehicles", "京A12345");
+
+        mockMvc.perform(put("/api/v1/lots/" + lotId + "/intercept")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"entryRules\":[\"FULL\"],\"exitRules\":[]}"))
+                .andExpect(status().isOk());
+
+        occupyLot(lotId, laneId, "京A00001");
+
+        decide(token, lotId, laneId,
+                "{\"laneId\":\"" + laneId + "\",\"plateNumber\":\"京A12345\",\"plateColor\":\"BLUE\",\"direction\":\"ENTRANCE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.result").value("INTERCEPTED"))
+                .andExpect(jsonPath("$.data.remark").value("lot_full"));
     }
 }

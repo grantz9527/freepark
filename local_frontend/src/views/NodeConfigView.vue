@@ -19,6 +19,7 @@ const mqttUsername = ref('')
 const mqttPassword = ref('')
 const mqttPasswordSet = ref(false)
 const mqttNodeCode = ref('')
+const configSyncTopicPrefix = ref('')
 const feeApiUrl = ref('')
 const feeMockEnabled = ref(false)
 const feeMockAmount = ref<number | null>(null)
@@ -214,7 +215,7 @@ const mqttDocZh: MqttDocBlock[] = [
       [
         '配置同步订阅',
         'cloud → edge',
-        { code: '{configSyncTopicPrefix}/{nodeCode}' },
+        { code: 'parking/config-sync/{nodeCode}' },
         'edge.config.sync/3 · QoS 1 · 云端下发 full / delta 分帧',
       ],
       [
@@ -248,7 +249,7 @@ const mqttDocZh: MqttDocBlock[] = [
       '主题与订阅：心跳固定发布到 parking/heartbeat/{nodeCode}，云端用 parking/heartbeat/# 订阅即可收到全部节点；停车流水默认上报到 parking/report/{nodeCode}（云端订阅 parking/report/#）；报文内 edgeCode 必须与主题末段 nodeCode 一致，否则云端丢弃。',
       '连接约定：cleanSession=true、自动重连，断线重连后会自动重新订阅；Broker 不保留离线消息，云端以“恢复后补全量”兜底。',
       '停车流水按 cloudId 优先、否则 edgeCode + sessionId 幂等 upsert；云端改流水后会向同一指令主题下发 origin=CLOUD 快照，本地应用后清待同步标记。过期 cloudRevision 会被丢弃。',
-      '注意：本页保存为整表覆盖，config-sync 前缀不在本页表单中，未提供即按“不订阅云端配置同步”保存；如需要请通过 REST /api/v1/node-settings 传入 configSyncTopicPrefix。',
+      '配置同步订阅前缀默认 parking/config-sync，须与云端「配置同步发布主题前缀」完全一致；留空保存则本节点不接收车场配置。',
       '四个客户端使用不同 clientId（{mqttClientId}、{mqttClientId}-cfg、{mqttClientId}-rec、{mqttClientId}-cmd），请勿与同 Broker 下其它客户端冲突，否则会互踢。',
       '完整协议字段与 full / delta 帧格式详见本机源码仓库 docs/mqtt-integration.md。',
     ],
@@ -300,7 +301,7 @@ const mqttDocEn: MqttDocBlock[] = [
       [
         'Config sync',
         'cloud → edge',
-        { code: '{configSyncTopicPrefix}/{nodeCode}' },
+        { code: 'parking/config-sync/{nodeCode}' },
         'edge.config.sync/3 · QoS 1 · full/delta frames from cloud',
       ],
       [
@@ -334,7 +335,7 @@ const mqttDocEn: MqttDocBlock[] = [
       'Topics & subscriptions: heartbeats are published to parking/heartbeat/{nodeCode} — subscribe with parking/heartbeat/# to receive all nodes; parking sessions go to parking/report/{nodeCode} by default (subscribe parking/report/#). edgeCode inside a payload must equal the last topic segment or the message is dropped.',
       'Connection: cleanSession=true with auto-reconnect; subscriptions are restored after reconnect. The broker keeps no offline queue — the cloud compensates with a full resync after a node comes back online.',
       'Parking sessions are upserted by cloudId first, otherwise edgeCode + sessionId. Cloud writes are pushed on the same command topic with origin=CLOUD; the edge clears the pending flag after applying. Stale cloudRevision snapshots are dropped.',
-      'Note: saving this page overwrites the whole settings row. The config-sync prefix is not on this form, so an omitted value disables cloud config sync; pass configSyncTopicPrefix via REST /api/v1/node-settings to enable it.',
+      'The config-sync subscribe prefix defaults to parking/config-sync and must match the cloud “Config sync publish topic prefix”. Leave it blank to skip receiving lot configuration.',
       'Four clients use distinct clientIds ({mqttClientId}, {mqttClientId}-cfg, {mqttClientId}-rec, {mqttClientId}-cmd); never reuse them elsewhere on the same broker to avoid kicking each other off.',
       'Full protocol fields and full/delta frame format: see docs/mqtt-integration.md in the local_server source repo.',
     ],
@@ -347,6 +348,8 @@ const mqttDoc = computed<MqttDocBlock[]>(() =>
 
 /** 心跳主题前缀固定默认，与后端 NodeSettings.DEFAULT_MQTT_TOPIC_PREFIX 保持一致 */
 const DEFAULT_HEARTBEAT_PREFIX = 'parking/heartbeat'
+/** 配置同步订阅前缀默认，须与云端「配置同步发布主题前缀」一致 */
+const DEFAULT_CONFIG_SYNC_PREFIX = 'parking/config-sync'
 
 /** 心跳主题预览：本机发布主题 = parking/heartbeat/节点编号，云端订阅主题 = parking/heartbeat/# */
 const heartbeatPreview = computed<{ publish: string; subscribe: string } | null>(() => {
@@ -354,6 +357,14 @@ const heartbeatPreview = computed<{ publish: string; subscribe: string } | null>
   const code = mqttNodeCode.value.trim()
   if (!code) return null
   return { publish: `${DEFAULT_HEARTBEAT_PREFIX}/${code}`, subscribe: `${DEFAULT_HEARTBEAT_PREFIX}/#` }
+})
+
+const configSyncPreview = computed<string | null>(() => {
+  if (!isEdge.value) return null
+  const prefix = configSyncTopicPrefix.value.trim().replace(/\/+$/, '')
+  const code = mqttNodeCode.value.trim()
+  if (!prefix || !code) return null
+  return `${prefix}/${code}`
 })
 
 const passwordPlaceholder = computed(() =>
@@ -394,6 +405,7 @@ function applySettings(data: {
   mqttUsername: string
   mqttPasswordSet: boolean
   mqttTopicPrefix: string
+  configSyncTopicPrefix?: string | null
   nodeCode: string
   feeApiUrl: string
   feeMockEnabled: boolean
@@ -408,6 +420,7 @@ function applySettings(data: {
   mqttPasswordSet.value = data.mqttPasswordSet
   mqttPassword.value = ''
   mqttNodeCode.value = data.nodeCode || ''
+  configSyncTopicPrefix.value = data.configSyncTopicPrefix || DEFAULT_CONFIG_SYNC_PREFIX
   feeApiUrl.value = data.feeApiUrl || ''
   feeMockEnabled.value = data.feeMockEnabled
   feeMockAmount.value = data.feeMockAmount
@@ -450,6 +463,7 @@ async function onSubmit(): Promise<void> {
         mqttUsername: mqttUsername.value.trim(),
         mqttPassword: mqttPassword.value,
         nodeCode: mqttNodeCode.value.trim(),
+        configSyncTopicPrefix: configSyncTopicPrefix.value.trim(),
         feeApiUrl: feeApiUrl.value.trim(),
         feeMockEnabled: feeMockEnabled.value,
         feeMockAmount: feeMockEnabled.value ? mockAmount : null,
@@ -564,6 +578,21 @@ onMounted(() => {
             />
           </label>
           <p class="hint node-code-hint">{{ t('nodeConfig.nodeCodeHint') }}</p>
+          <label>
+            <span>{{ t('nodeConfig.configSyncTopicPrefix') }}</span>
+            <input
+              v-model="configSyncTopicPrefix"
+              type="text"
+              :placeholder="t('nodeConfig.configSyncTopicPrefixPlaceholder')"
+            />
+          </label>
+          <p class="hint">{{ t('nodeConfig.configSyncTopicPrefixHint') }}</p>
+          <div v-if="configSyncPreview" class="topic-preview">
+            <div class="preview-line">
+              <span class="preview-label">{{ t('nodeConfig.configSyncSubscribeLabel') }}</span>
+              <code class="preview-topic">{{ configSyncPreview }}</code>
+            </div>
+          </div>
           <div v-if="heartbeatPreview" class="topic-preview">
             <p class="hint">{{ t('nodeConfig.mqttTopicPrefixHint') }}</p>
             <div class="preview-line">

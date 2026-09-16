@@ -44,6 +44,9 @@ public class ParkingLot extends BaseEntity {
     private boolean entryInterceptBlacklist = false;
 
     @Column(nullable = false)
+    private boolean entryInterceptFull = false;
+
+    @Column(nullable = false)
     private boolean exitInterceptArrears = false;
 
     @Column(nullable = false)
@@ -110,6 +113,10 @@ public class ParkingLot extends BaseEntity {
         return entryInterceptBlacklist;
     }
 
+    public boolean isEntryInterceptFull() {
+        return entryInterceptFull;
+    }
+
     public boolean isExitInterceptArrears() {
         return exitInterceptArrears;
     }
@@ -163,6 +170,7 @@ public class ParkingLot extends BaseEntity {
     public void updateInterceptRules(java.util.List<InterceptRuleType> entryRules, java.util.List<InterceptRuleType> exitRules) {
         this.entryInterceptArrears = entryRules.contains(InterceptRuleType.ARREARS);
         this.entryInterceptBlacklist = entryRules.contains(InterceptRuleType.BLACKLIST);
+        this.entryInterceptFull = entryRules.contains(InterceptRuleType.FULL);
         this.exitInterceptArrears = exitRules.contains(InterceptRuleType.ARREARS);
         this.exitInterceptBlacklist = exitRules.contains(InterceptRuleType.BLACKLIST);
     }

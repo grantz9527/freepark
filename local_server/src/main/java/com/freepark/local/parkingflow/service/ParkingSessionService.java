@@ -38,12 +38,15 @@ public class ParkingSessionService {
 
     private final ParkingSessionRepository sessions;
     private final RecognitionRecordRepository recognitionRecords;
+    private final LotOccupancyTracker occupancy;
 
     public ParkingSessionService(
             ParkingSessionRepository sessions,
-            RecognitionRecordRepository recognitionRecords) {
+            RecognitionRecordRepository recognitionRecords,
+            LotOccupancyTracker occupancy) {
         this.sessions = sessions;
         this.recognitionRecords = recognitionRecords;
+        this.occupancy = occupancy;
     }
 
     @Transactional(readOnly = true)
@@ -89,7 +92,9 @@ public class ParkingSessionService {
                     record.getLaneName(),
                     record.getId(),
                     record.getEventImage());
-            return ParkingFlowResult.entry(ParkingSessionView.from(sessions.save(session)));
+            ParkingSession saved = sessions.save(session);
+            occupancy.onChanged(saved.getLotId(), null, ParkingSessionStatus.OPEN);
+            return ParkingFlowResult.entry(ParkingSessionView.from(saved));
         }
         if (isExit(record.getDirection())) {
             Optional<ParkingSession> open = sessions
@@ -118,13 +123,16 @@ public class ParkingSessionService {
 
     /** 将离场数据写入流水并关闭，返回匹配结果。 */
     private ParkingFlowResult exitMatched(ParkingSession session, RecognitionRecord record) {
+        ParkingSessionStatus previous = session.getStatus();
         session.closeWithExit(
                 record.getCapturedAt(),
                 record.getLaneId(),
                 record.getLaneName(),
                 record.getId(),
                 record.getEventImage());
-        return ParkingFlowResult.exitMatched(ParkingSessionView.from(sessions.save(session)));
+        ParkingSession saved = sessions.save(session);
+        occupancy.onChanged(saved.getLotId(), previous, ParkingSessionStatus.CLOSED);
+        return ParkingFlowResult.exitMatched(ParkingSessionView.from(saved));
     }
 
     /**
@@ -157,6 +165,7 @@ public class ParkingSessionService {
             }
             session.closeWithExit(at, lane.getId(), lane.getName(), recId, image);
             sessions.save(session);
+            occupancy.onChanged(lotId, ParkingSessionStatus.OPEN, ParkingSessionStatus.CLOSED);
             log.info("缴费离场已补出场 localId={} plate={} lot={} lane={}",
                     session.getId(), normalized, lotId, lane.getCode());
         }
@@ -176,6 +185,7 @@ public class ParkingSessionService {
         for (ParkingSession stale : staleOpens) {
             stale.markVoided();
             sessions.save(stale);
+            occupancy.onChanged(lotId, ParkingSessionStatus.OPEN, ParkingSessionStatus.VOIDED);
             markRecognitionVoided(stale.getEntryRecognitionId());
             markRecognitionVoided(stale.getExitRecognitionId());
         }
@@ -189,8 +199,10 @@ public class ParkingSessionService {
         ParkingSession session = sessions.findById(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         if (session.getStatus() != ParkingSessionStatus.VOIDED) {
+            ParkingSessionStatus previous = session.getStatus();
             session.markVoided();
             sessions.save(session);
+            occupancy.onChanged(session.getLotId(), previous, ParkingSessionStatus.VOIDED);
             markRecognitionVoided(session.getEntryRecognitionId());
             markRecognitionVoided(session.getExitRecognitionId());
         }

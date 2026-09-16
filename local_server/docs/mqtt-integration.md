@@ -267,7 +267,7 @@ clientId 使用规则（同 Broker 下不得冲突，否则互踢）：
 | `name` | string | 车场名称 |
 | `lotType` | string | `INTERNAL` \| `PUBLIC` |
 | `enabled` | bool | 启用 |
-| `entryInterceptArrears` / `entryInterceptBlacklist` | bool | 入场拦截开关 |
+| `entryInterceptArrears` / `entryInterceptBlacklist` / `entryInterceptFull` | bool | 入场拦截开关（满位拦截仅入口） |
 | `exitInterceptArrears` / `exitInterceptBlacklist` | bool | 出场拦截开关 |
 | `judgmentOrder` | array\<string\> | 通行判定顺序，元素取 `PATTERN_ALLOWLIST` \| `BLACKLIST` \| `WHITELIST` |
 | `updatedAt` | string | 忽略即可 |
@@ -366,6 +366,7 @@ clientId 使用规则（同 Broker 下不得冲突，否则互踢）：
   "items": [
     { "code": "P001", "name": "示范车场", "lotType": "INTERNAL", "enabled": true,
       "entryInterceptArrears": false, "entryInterceptBlacklist": true,
+      "entryInterceptFull": false,
       "exitInterceptArrears": false, "exitInterceptBlacklist": true,
       "judgmentOrder": ["BLACKLIST", "WHITELIST", "PATTERN_ALLOWLIST"] }
   ]

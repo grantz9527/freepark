@@ -20,7 +20,8 @@ interface InterceptSection {
   hintKey: string
 }
 
-const interceptRuleTypes: InterceptRuleType[] = ['ARREARS', 'BLACKLIST']
+const entryInterceptRuleTypes: InterceptRuleType[] = ['ARREARS', 'BLACKLIST', 'FULL']
+const exitInterceptRuleTypes: InterceptRuleType[] = ['ARREARS', 'BLACKLIST']
 
 const defaultSection: InterceptSection = {
   id: 'entry',
@@ -53,6 +54,10 @@ const activeSection = computed(() => {
 
 const activeRules = computed(() =>
   activeDirection.value === 'entry' ? entryRules.value : exitRules.value,
+)
+
+const displayedRuleTypes = computed(() =>
+  activeDirection.value === 'entry' ? entryInterceptRuleTypes : exitInterceptRuleTypes,
 )
 
 function ruleLabel(rule: InterceptRuleType): string {
@@ -185,7 +190,7 @@ onMounted(loadPage)
               <p class="rule-hint">{{ t('lots.interceptRulesHint') }}</p>
               <div class="tag-list">
                 <button
-                  v-for="rule in interceptRuleTypes"
+                  v-for="rule in displayedRuleTypes"
                   :key="rule"
                   type="button"
                   class="tag-btn"

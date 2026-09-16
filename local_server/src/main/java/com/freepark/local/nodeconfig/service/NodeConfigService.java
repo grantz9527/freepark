@@ -58,11 +58,13 @@ public class NodeConfigService {
             settings.setMqttTopicPrefix(trimToNull(request.mqttTopicPrefix()) != null
                     ? stripTrailingSlash(trimToNull(request.mqttTopicPrefix()))
                     : NodeSettings.DEFAULT_MQTT_TOPIC_PREFIX);
-            // 配置同步订阅前缀：可为空（空=不订阅云端配置同步）；非空时去除尾部斜杠后保存
-            settings.setConfigSyncTopicPrefix(
-                    trimToNull(request.configSyncTopicPrefix()) == null
-                            ? null
-                            : stripTrailingSlash(trimToNull(request.configSyncTopicPrefix())));
+            // 配置同步订阅前缀：请求未带该字段时保留原值（避免旧前端保存把订阅关掉）。
+            // 显式空串 = 不订阅；非空则去尾斜杠后保存。
+            if (request.configSyncTopicPrefix() != null) {
+                String prefix = trimToNull(request.configSyncTopicPrefix());
+                settings.setConfigSyncTopicPrefix(
+                        prefix == null ? null : stripTrailingSlash(prefix));
+            }
             // 停车流水上报前缀：可为空（空=默认 parking/report）；非空时去除尾部斜杠后保存
             settings.setReportTopicPrefix(
                     trimToNull(request.reportTopicPrefix()) == null

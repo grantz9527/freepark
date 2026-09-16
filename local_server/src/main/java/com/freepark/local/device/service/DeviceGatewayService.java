@@ -72,6 +72,11 @@ public class DeviceGatewayService {
     private static final String BLACKLIST_LED_ENTRANCE = "此车为黑名单车辆\n禁止入场";
     private static final String BLACKLIST_LED_EXIT = "此车为黑名单车辆\n无权出场";
 
+    /** 通行判定「满位拦截」remark：入口启用满位拦截且在场车辆数达到车位总数。 */
+    private static final String REMARK_LOT_FULL = "lot_full";
+    private static final String LOT_FULL_VOICE_ENTRANCE = "车位已满,禁止入场";
+    private static final String LOT_FULL_LED_ENTRANCE = "车位已满\n禁止入场";
+
     /** 通行判定「内部车场：非内部车入场拦截」remark（AccessDecisionService 命中 INTERNAL 车场入场校验时返回）。 */
     private static final String REMARK_NOT_INTERNAL_VEHICLE = "not_internal_vehicle";
 
@@ -351,6 +356,7 @@ public class DeviceGatewayService {
      * <ul>
      *   <li>黑名单：固定文案（入口“此车为黑名单车辆,禁止入场”、出口“此车为黑名单车辆,无权出场”，
      *       词条均匹配板卡语音库）；</li>
+     *   <li>满位拦截：入口“车位已满,禁止入场” / LED 两行“车位已满 / 禁止入场”；</li>
      *   <li>内部车场非内部车入场：语音“车牌,无权入场”、LED 两行“车牌 / 无权入场”
      *       （“无权入场”为板卡语音库 #153，车牌为变量信息自动识别播报）；</li>
      *   <li>欠费拦截：LED 两行“车牌 / 请缴费 X 元”（金额为动态数字不上屏语音），
@@ -368,6 +374,9 @@ public class DeviceGatewayService {
                 return protocol.buildPushResponse(false, BLACKLIST_VOICE_EXIT, BLACKLIST_LED_EXIT);
             }
             return protocol.buildPushResponse(false);
+        }
+        if (REMARK_LOT_FULL.equals(remark) && direction == AccessDirection.ENTRANCE) {
+            return protocol.buildPushResponse(false, LOT_FULL_VOICE_ENTRANCE, LOT_FULL_LED_ENTRANCE);
         }
         if (REMARK_NOT_INTERNAL_VEHICLE.equals(remark) && direction == AccessDirection.ENTRANCE) {
             String normalizedPlate = plate.trim();

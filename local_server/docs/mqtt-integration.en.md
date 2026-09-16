@@ -268,7 +268,7 @@ Domains (enum): `lot`, `lane`, `blacklist`, `pattern`, `whitelist`, `internal`, 
 | `name` | string | lot name |
 | `lotType` | string | `INTERNAL` \| `PUBLIC` |
 | `enabled` | bool | enabled |
-| `entryInterceptArrears` / `entryInterceptBlacklist` | bool | entry interception switches |
+| `entryInterceptArrears` / `entryInterceptBlacklist` / `entryInterceptFull` | bool | entry interception switches (full occupancy is entry-only) |
 | `exitInterceptArrears` / `exitInterceptBlacklist` | bool | exit interception switches |
 | `judgmentOrder` | array\<string\> | access-judgment order; elements: `PATTERN_ALLOWLIST` \| `BLACKLIST` \| `WHITELIST` |
 | `updatedAt` | string | ignore |
@@ -367,6 +367,7 @@ Frame 1/3 (lot domain):
   "items": [
     { "code": "P001", "name": "Demo Lot", "lotType": "INTERNAL", "enabled": true,
       "entryInterceptArrears": false, "entryInterceptBlacklist": true,
+      "entryInterceptFull": false,
       "exitInterceptArrears": false, "exitInterceptBlacklist": true,
       "judgmentOrder": ["BLACKLIST", "WHITELIST", "PATTERN_ALLOWLIST"] }
   ]

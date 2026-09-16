@@ -40,6 +40,12 @@ public class NodeSettings {
      * 同时接收开闸指令与云端停车流水快照。
      */
     public static final String DEFAULT_COMMAND_TOPIC_PREFIX = "parking/command";
+    /**
+     * 配置同步订阅主题前缀（缺省时使用）：订阅
+     * {@code {configSyncTopicPrefix}/{nodeCode}}（默认 {@code parking/config-sync/{nodeCode}}），
+     * 须与云端「配置同步发布主题前缀」一致。
+     */
+    public static final String DEFAULT_CONFIG_SYNC_TOPIC_PREFIX = "parking/config-sync";
     /** 节点编号最大长度（与云端“边缘节点管理”创建的节点编号一致，创建后不可更改） */
     public static final int MAX_NODE_CODE_LENGTH = 64;
 

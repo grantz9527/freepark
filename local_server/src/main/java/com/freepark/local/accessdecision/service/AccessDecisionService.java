@@ -5,7 +5,6 @@ import com.freepark.local.accessdecision.dto.AccessDecisionView;
 import com.freepark.local.accessdecision.dto.AccessDirection;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -21,10 +20,13 @@ import com.freepark.local.domain.ParkingLane;
 import com.freepark.local.domain.ParkingLaneRepository;
 import com.freepark.local.domain.ParkingLot;
 import com.freepark.local.domain.ParkingLotRepository;
+import com.freepark.local.domain.ParkingSessionRepository;
+import com.freepark.local.domain.ParkingSessionStatus;
 import com.freepark.local.domain.PatternAllowlist;
 import com.freepark.local.domain.PatternAllowlistRepository;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.WhitelistVehicleRepository;
+import com.freepark.local.parkingflow.service.LotOccupancyTracker;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
 
@@ -33,6 +35,9 @@ import com.freepark.local.common.exception.ErrorCode;
  *
  * <p>Evaluation order:
  * <ol>
+ *   <li>Entry full-occupancy intercept when enabled and OPEN sessions reach
+ *       totalSpaces (whitelist/pattern cannot bypass; totalSpaces=0 does not
+ *       intercept; a plate that already has an OPEN session is not blocked).</li>
  *   <li>Access judgment rules in the lot's configured order (WHITELIST /
  *       BLACKLIST / PATTERN_ALLOWLIST); the first matching rule decides.</li>
  *   <li>For INTERNAL lots on entry: the plate must be a registered internal vehicle.</li>
@@ -49,6 +54,8 @@ public class AccessDecisionService {
     private final WhitelistVehicleRepository whitelistVehicles;
     private final BlacklistVehicleRepository blacklistVehicles;
     private final PatternAllowlistRepository patternAllowlist;
+    private final ParkingSessionRepository sessions;
+    private final LotOccupancyTracker occupancy;
 
     public AccessDecisionService(
             ParkingLotRepository lots,
@@ -56,13 +63,17 @@ public class AccessDecisionService {
             InternalVehicleRepository internalVehicles,
             WhitelistVehicleRepository whitelistVehicles,
             BlacklistVehicleRepository blacklistVehicles,
-            PatternAllowlistRepository patternAllowlist) {
+            PatternAllowlistRepository patternAllowlist,
+            ParkingSessionRepository sessions,
+            LotOccupancyTracker occupancy) {
         this.lots = lots;
         this.lanes = lanes;
         this.internalVehicles = internalVehicles;
         this.whitelistVehicles = whitelistVehicles;
         this.blacklistVehicles = blacklistVehicles;
         this.patternAllowlist = patternAllowlist;
+        this.sessions = sessions;
+        this.occupancy = occupancy;
     }
 
     @Transactional(readOnly = true)
@@ -81,6 +92,10 @@ public class AccessDecisionService {
         boolean blacklisted = isListedBlack(lotId, plate, color);
         boolean interceptBlacklisted = isEntry ? lot.isEntryInterceptBlacklist() : lot.isExitInterceptBlacklist();
         boolean patternMatched = matchesPattern(lotId, plate);
+
+        if (isEntry && lot.isEntryInterceptFull() && isLotFull(lot, plate)) {
+            return AccessDecisionView.intercepted("lot_full");
+        }
 
         for (AccessJudgmentRuleType rule : lot.effectiveAccessJudgmentOrder()) {
             if (rule == AccessJudgmentRuleType.WHITELIST && whitelisted) {
@@ -119,6 +134,24 @@ public class AccessDecisionService {
         }
 
         return AccessDecisionView.allowed("");
+    }
+
+    /**
+     * Full when totalSpaces &gt; 0 and OPEN session count has reached capacity.
+     * A plate that is already in the lot is not intercepted again.
+     * Occupancy is read from {@link LotOccupancyTracker} (in-memory, reconciled periodically).
+     */
+    private boolean isLotFull(ParkingLot lot, String plate) {
+        int totalSpaces = lot.getTotalSpaces();
+        if (totalSpaces <= 0) {
+            return false;
+        }
+        long openCount = occupancy.openCount(lot.getId());
+        if (openCount < totalSpaces) {
+            return false;
+        }
+        return !sessions.existsByLotIdAndPlateNumberIgnoreCaseAndStatus(
+                lot.getId(), plate, ParkingSessionStatus.OPEN);
     }
 
     private boolean isListedBlack(UUID lotId, String plate, PlateColor color) {

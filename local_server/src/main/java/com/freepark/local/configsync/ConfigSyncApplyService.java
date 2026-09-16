@@ -812,6 +812,9 @@ public class ConfigSyncApplyService {
         if (item.path("entryInterceptBlacklist").asBoolean(false)) {
             entryRules.add(InterceptRuleType.BLACKLIST);
         }
+        if (item.path("entryInterceptFull").asBoolean(false)) {
+            entryRules.add(InterceptRuleType.FULL);
+        }
         if (item.path("exitInterceptArrears").asBoolean(false)) {
             exitRules.add(InterceptRuleType.ARREARS);
         }

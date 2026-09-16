@@ -32,14 +32,17 @@ public class CloudSessionApplyService {
     private final ParkingSessionRepository sessions;
     private final ParkingLotRepository lots;
     private final RecognitionRecordRepository recognitionRecords;
+    private final LotOccupancyTracker occupancy;
 
     public CloudSessionApplyService(
             ParkingSessionRepository sessions,
             ParkingLotRepository lots,
-            RecognitionRecordRepository recognitionRecords) {
+            RecognitionRecordRepository recognitionRecords,
+            LotOccupancyTracker occupancy) {
         this.sessions = sessions;
         this.lots = lots;
         this.recognitionRecords = recognitionRecords;
+        this.occupancy = occupancy;
     }
 
     @Transactional
@@ -88,7 +91,8 @@ public class CloudSessionApplyService {
                     null);
             created = true;
         }
-        ParkingSessionStatus previous = session.getStatus();
+        UUID previousLotId = session.getLotId();
+        ParkingSessionStatus previous = created ? null : session.getStatus();
         boolean keepLocalLifecycle = !created
                 && lifecycleRank(previous) > lifecycleRank(status);
         session.setLotId(lot.getId());
@@ -126,6 +130,7 @@ public class CloudSessionApplyService {
         session.setCloudRevision(incoming);
         session.setSyncPending(Boolean.FALSE);
         ParkingSession saved = sessions.save(session);
+        notifyOccupancy(created, previousLotId, previous, saved);
         if (status == ParkingSessionStatus.VOIDED && previous != ParkingSessionStatus.VOIDED) {
             markRecognitionVoided(saved.getEntryRecognitionId());
             markRecognitionVoided(saved.getExitRecognitionId());
@@ -150,6 +155,17 @@ public class CloudSessionApplyService {
             return sessions.findByCloudId(cloudId).orElse(null);
         }
         return null;
+    }
+
+    private void notifyOccupancy(
+            boolean created, UUID previousLotId, ParkingSessionStatus previous, ParkingSession saved) {
+        UUID newLotId = saved.getLotId();
+        if (!created && previousLotId != null && newLotId != null && !previousLotId.equals(newLotId)) {
+            occupancy.onChanged(previousLotId, previous, null);
+            occupancy.onChanged(newLotId, null, saved.getStatus());
+            return;
+        }
+        occupancy.onChanged(newLotId, previous, saved.getStatus());
     }
 
     private void markRecognitionVoided(UUID recordId) {
