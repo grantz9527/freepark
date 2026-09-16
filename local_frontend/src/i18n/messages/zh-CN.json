@@ -55,7 +55,9 @@
     "submit": "登录",
     "submitting": "正在登录…",
     "required": "请输入用户名和密码",
-    "failed": "登录失败"
+    "failed": "登录失败",
+    "expiredTitle": "登录已过期",
+    "expired": "登录已过期，请重新登录后继续。"
   },
   "dashboard": {
     "welcome": "欢迎回来，{name}",
@@ -75,7 +77,12 @@
     "moduleOperators": "管理场端员工账号",
     "moduleSettings": "个人账号与密码",
     "moduleSystemSettings": "配置场站系统参数与全局选项",
-    "modulePatternAllowlist": "管理特殊车牌放行正则规则"
+    "modulePatternAllowlist": "管理特殊车牌放行正则规则",
+    "aboutTitle": "关于本开源项目",
+    "aboutBody": "FreePark 是开源的场端停车控制系统，在车场本地完成车牌识别、通道与岗亭控制、名单通行和停车流水，让车场不依赖云端也能独立运营。",
+    "aboutOffline": "本服务可完全离线控制。",
+    "aboutOfflineBadge": "离线可用",
+    "aboutCloud": "如需云端集中管理，请自行开发相关版本，或直接使用 FreePark 云端服务。"
   },
   "page": {
     "comingSoon": "即将上线",

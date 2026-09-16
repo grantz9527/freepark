@@ -1,6 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
-import { clearSession, getToken, type UserView } from '@/auth/session'
+import { getToken, markSessionExpired, type UserView } from '@/auth/session'
 
 export interface ApiResponse<T> {
   success: boolean
@@ -57,7 +57,7 @@ async function apiCall<T>(path: string, init: RequestInit = {}, locale?: string)
   const body = (await response.json().catch(() => null)) as ApiResponse<T> | null
 
   if (response.status === 401 && !path.startsWith('/api/v1/auth/login')) {
-    clearSession()
+    markSessionExpired()
   }
 
   if (!response.ok || body == null) {
@@ -448,7 +448,7 @@ export async function openTranscodedStream(
     signal,
   })
   if (response.status === 401) {
-    clearSession()
+    markSessionExpired()
   }
   const contentType = response.headers.get('content-type') ?? ''
   if (!response.ok || contentType.includes('application/json')) {
@@ -820,7 +820,7 @@ export async function importSpaces(
   })
   const body = (await response.json().catch(() => null)) as ApiResponse<number> | null
   if (response.status === 401) {
-    clearSession()
+    markSessionExpired()
   }
   if (!response.ok || body == null) {
     throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)
@@ -881,7 +881,7 @@ async function downloadImportTemplateFile(path: string, locale: string, filename
     headers: headers(locale, { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
   })
   if (response.status === 401) {
-    clearSession()
+    markSessionExpired()
   }
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ApiResponse<unknown> | null
@@ -967,7 +967,7 @@ export async function importInternalVehicles(
   })
   const body = (await response.json().catch(() => null)) as ApiResponse<ImportInternalVehiclesResponse> | null
   if (response.status === 401) {
-    clearSession()
+    markSessionExpired()
   }
   if (!response.ok || body == null) {
     throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)
@@ -1228,7 +1228,7 @@ export async function importWhitelistVehicles(
   })
   const body = (await response.json().catch(() => null)) as ApiResponse<ImportInternalVehiclesResponse> | null
   if (response.status === 401) {
-    clearSession()
+    markSessionExpired()
   }
   if (!response.ok || body == null) {
     throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)
@@ -1348,7 +1348,7 @@ export async function importBlacklistVehicles(
   })
   const body = (await response.json().catch(() => null)) as ApiResponse<ImportInternalVehiclesResponse> | null
   if (response.status === 401) {
-    clearSession()
+    markSessionExpired()
   }
   if (!response.ok || body == null) {
     throw new ApiError(response.status, body?.code ?? 'error', body?.message ?? `HTTP ${response.status}`)

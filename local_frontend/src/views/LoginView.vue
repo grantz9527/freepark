@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { ApiError, login } from '@/api/client'
-import { setSession } from '@/auth/session'
+import { isSessionExpired, setSession } from '@/auth/session'
 import LocaleSwitcher from '@/components/LocaleSwitcher.vue'
 
 const { t, locale } = useI18n()
@@ -15,6 +15,10 @@ const username = ref('')
 const password = ref('')
 const submitting = ref(false)
 const errorMessage = ref('')
+
+const expiredNotice = computed(
+  () => route.query.expired === '1' || isSessionExpired(),
+)
 
 async function onSubmit(): Promise<void> {
   errorMessage.value = ''
@@ -55,7 +59,8 @@ async function onSubmit(): Promise<void> {
       </div>
       <form class="card" @submit.prevent="onSubmit">
         <h2>{{ t('login.title') }}</h2>
-        <p class="subtitle">{{ t('login.subtitle') }}</p>
+        <p v-if="expiredNotice" class="expired">{{ t('login.expired') }}</p>
+        <p v-else class="subtitle">{{ t('login.subtitle') }}</p>
         <label>
           <span>{{ t('login.username') }}</span>
           <input v-model="username" type="text" autocomplete="username" name="username" />
@@ -182,6 +187,17 @@ h2 {
 .subtitle {
   margin: -0.4rem 0 0.4rem;
   color: var(--muted);
+}
+
+.expired {
+  margin: -0.4rem 0 0.4rem;
+  color: #9a6700;
+  background: #fffaeb;
+  border: 1px solid #fedf89;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 label {

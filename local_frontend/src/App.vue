@@ -15,6 +15,7 @@ import pt from 'element-plus/es/locale/lang/pt'
 import ar from 'element-plus/es/locale/lang/ar'
 import type { Language } from 'element-plus/es/locale'
 
+import SessionExpiredDialog from '@/components/SessionExpiredDialog.vue'
 import { isRtl } from '@/i18n/locales'
 
 const { t, locale } = useI18n()
@@ -44,5 +45,6 @@ watchEffect(() => {
 <template>
   <ElConfigProvider :locale="elLocale">
     <RouterView />
+    <SessionExpiredDialog />
   </ElConfigProvider>
 </template>

@@ -55,7 +55,9 @@
     "submit": "Sign in",
     "submitting": "Signing in…",
     "required": "Enter username and password",
-    "failed": "Unable to sign in"
+    "failed": "Unable to sign in",
+    "expiredTitle": "Session expired",
+    "expired": "Your session has expired. Please sign in again to continue."
   },
   "dashboard": {
     "welcome": "Welcome back, {name}",
@@ -75,7 +77,12 @@
     "moduleOperators": "Manage local staff accounts",
     "moduleSettings": "Account info and password",
     "moduleSystemSettings": "Configure site-wide system parameters",
-    "modulePatternAllowlist": "Manage regex rules for special plate access"
+    "modulePatternAllowlist": "Manage regex rules for special plate access",
+    "aboutTitle": "About this open-source project",
+    "aboutBody": "FreePark is an open-source on-site parking control system. License-plate recognition, lane and booth control, access lists, and parking sessions all run locally so a lot can operate without the cloud.",
+    "aboutOffline": "This service can be operated fully offline.",
+    "aboutOfflineBadge": "Works offline",
+    "aboutCloud": "Cloud control requires your own integration, or you can use FreePark’s cloud service."
   },
   "page": {
     "comingSoon": "Coming soon",

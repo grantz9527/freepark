@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import { isAuthenticated, getUser } from '@/auth/session'
+import { isAuthenticated, isSessionExpired, getUser } from '@/auth/session'
 import { detectLocale } from '@/i18n/locales'
 import { clearSiteSettingsCache, ensureSiteSettings } from '@/site/settings'
 import AdminLayout from '@/layouts/AdminLayout.vue'
@@ -202,7 +202,13 @@ router.beforeEach(async (to) => {
     return true
   }
   if (!isAuthenticated()) {
-    return { name: 'login', query: { redirect: to.fullPath } }
+    return {
+      name: 'login',
+      query: {
+        redirect: to.fullPath,
+        ...(isSessionExpired() ? { expired: '1' } : {}),
+      },
+    }
   }
   if (to.meta.requiresAdmin && getUser()?.role !== 'ADMIN') {
     return { name: 'home' }

@@ -46,58 +46,50 @@ watch(locale, loadBackend)
 
 <template>
   <div class="dashboard">
-    <section class="intro">
-      <div>
-        <h2>{{ t('dashboard.welcome', { name: displayName }) }}</h2>
-        <p>{{ t('dashboard.subtitle') }}</p>
-      </div>
-      <button type="button" class="ghost" @click="loadBackend">{{ t('home.retry') }}</button>
-    </section>
-
-    <section class="kpis">
-      <article class="kpi">
-        <p>{{ t('dashboard.system') }}</p>
-        <strong :class="backendOk ? 'ok' : 'fail'">
-          {{ loading ? '…' : backendOk ? t('dashboard.online') : t('dashboard.offline') }}
-        </strong>
-        <span>{{ health || '—' }}</span>
-      </article>
-      <article class="kpi">
-        <p>{{ t('dashboard.user') }}</p>
-        <strong>{{ displayName }}</strong>
-        <span>{{ username }}</span>
-      </article>
-      <article class="kpi">
-        <p>{{ t('dashboard.role') }}</p>
-        <strong>{{ role }}</strong>
-        <span>{{ t('app.console') }}</span>
-      </article>
-      <article class="kpi">
-        <p>{{ t('dashboard.locale') }}</p>
-        <strong>{{ locale }}</strong>
-        <span v-if="backend">{{ backend.locale }}</span>
-      </article>
-    </section>
-
-    <section class="grid">
-      <article class="panel">
-        <div class="panel-head">
-          <h3>{{ t('home.backend') }}</h3>
-          <span class="pill" :class="backendOk ? 'ok' : 'fail'">
-            {{ backendOk ? t('home.backendOk') : t('home.backendFail') }}
-          </span>
+    <section class="card">
+      <header class="head">
+        <div>
+          <h2>{{ t('dashboard.welcome', { name: displayName }) }}</h2>
+          <p class="lede">{{ t('dashboard.subtitle') }}</p>
         </div>
-        <dl>
-          <div>
-            <dt>{{ t('home.backendLocale') }}</dt>
-            <dd>{{ backend?.locale ?? '—' }}</dd>
-          </div>
-          <div>
-            <dt>{{ t('home.backendWelcome') }}</dt>
-            <dd>{{ backend?.welcome ?? '—' }}</dd>
-          </div>
-        </dl>
-      </article>
+        <button type="button" class="ghost" @click="loadBackend">{{ t('home.retry') }}</button>
+      </header>
+
+      <div class="about">
+        <h3>{{ t('dashboard.aboutTitle') }}</h3>
+        <p class="body">{{ t('dashboard.aboutBody') }}</p>
+        <div class="meta">
+          <span class="badge">{{ t('dashboard.aboutOfflineBadge') }}</span>
+          <p>{{ t('dashboard.aboutCloud') }}</p>
+        </div>
+      </div>
+
+      <dl class="stats">
+        <div>
+          <dt>{{ t('dashboard.system') }}</dt>
+          <dd :class="backendOk ? 'ok' : 'fail'">
+            {{ loading ? '…' : backendOk ? t('dashboard.online') : t('dashboard.offline') }}
+          </dd>
+          <small>{{ health || '—' }}</small>
+        </div>
+        <div>
+          <dt>{{ t('home.backend') }}</dt>
+          <dd :class="backendOk ? 'ok' : 'fail'">
+            {{ backendOk ? t('home.backendOk') : t('home.backendFail') }}
+          </dd>
+          <small>{{ backend?.locale ?? '—' }}</small>
+        </div>
+        <div>
+          <dt>{{ t('dashboard.user') }}</dt>
+          <dd>{{ displayName }}</dd>
+          <small>{{ username }}</small>
+        </div>
+        <div>
+          <dt>{{ t('dashboard.role') }}</dt>
+          <dd>{{ role }}</dd>
+          <small>{{ t('app.console') }}</small>
+        </div>
+      </dl>
     </section>
   </div>
 </template>
@@ -105,107 +97,135 @@ watch(locale, loadBackend)
 <style scoped>
 .dashboard {
   display: grid;
-  gap: 1rem;
 }
 
-.intro {
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  padding: 1.35rem 1.5rem 0;
 }
 
-.intro h2 {
+.head h2 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.28rem;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
 }
 
-.intro p {
-  margin: 0.3rem 0 0;
+.lede {
+  margin: 0.28rem 0 0;
   color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .ghost {
+  flex-shrink: 0;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: #fff;
   color: var(--text);
   border-radius: 8px;
   padding: 0.45rem 0.8rem;
+  cursor: pointer;
 }
 
-.kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.9rem;
+.ghost:hover {
+  background: #f4f8f6;
 }
 
-.kpi,
-.panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
+.about {
+  padding: 1.15rem 1.5rem 1.35rem;
 }
 
-.kpi {
-  padding: 1rem 1.1rem;
+.about h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
-.kpi p,
-.kpi span {
+.body {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.98rem;
+  line-height: 1.75;
+  overflow-wrap: break-word;
+}
+
+.meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 0.95rem;
+}
+
+.badge {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  border-radius: 999px;
+  padding: 0.18rem 0.65rem;
+  background: #ecf8f0;
+  color: var(--ok);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.meta p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
 }
 
-.kpi strong {
-  display: block;
-  margin: 0.35rem 0 0.2rem;
-  font-size: 1.25rem;
-}
-
-.grid {
+.stats {
   display: grid;
-  gap: 0.9rem;
-}
-
-.panel {
-  padding: 1.1rem 1.2rem;
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.panel-head h3 {
+  grid-template-columns: 1fr 1fr;
   margin: 0;
-  font-size: 1rem;
+  border-top: 1px solid var(--border);
+  background: #f7faf8;
 }
 
-.pill {
-  border-radius: 999px;
-  padding: 0.15rem 0.6rem;
-  font-size: 0.78rem;
-  background: #f2f4f3;
+.stats > div {
+  padding: 0.95rem 1.25rem 1.05rem;
 }
 
-dl {
-  display: grid;
-  gap: 0.85rem;
-  margin: 0;
+.stats > div:nth-child(odd) {
+  border-right: 1px solid #e4ece8;
+}
+
+.stats > div:nth-child(-n + 2) {
+  border-bottom: 1px solid #e4ece8;
 }
 
 dt {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
 }
 
 dd {
-  margin: 0.2rem 0 0;
+  margin: 0.28rem 0 0;
+  font-size: 1.02rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 .ok {
@@ -216,9 +236,28 @@ dd {
   color: var(--danger);
 }
 
-@media (max-width: 960px) {
-  .kpis {
-    grid-template-columns: 1fr;
+@media (min-width: 1280px) {
+  .stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .stats > div {
+    border-right: 1px solid #e4ece8;
+    border-bottom: 0;
+  }
+
+  .stats > div:nth-child(odd) {
+    border-right: 1px solid #e4ece8;
+  }
+
+  .stats > div:last-child {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .meta {
+    flex-direction: column;
   }
 }
 </style>
