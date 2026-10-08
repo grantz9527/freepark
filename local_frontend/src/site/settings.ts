@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 
 import { getSystemSettings, type PlateColor, type SystemSettingsView } from '@/api/client'
-import { DEFAULT_LOCALE, isSupportedLocale, type SupportedLocale } from '@/i18n/locales'
+import { DEFAULT_LOCALE, matchLocale, type SupportedLocale } from '@/i18n/locales'
 
 export const siteTimezone = ref('Asia/Shanghai')
 export const siteDefaultLocale = ref<SupportedLocale>(DEFAULT_LOCALE)
@@ -32,15 +32,23 @@ export const hyperLpr3Settings = ref<HyperLpr3Settings>({
   connectTimeoutMs: 5000,
   readTimeoutMs: 60000,
 })
+export interface CameraWhitelistSyncSettings {
+  owner: boolean
+  monthly: boolean
+  callbackBaseUrl: string
+}
+export const siteCameraWhitelistSync = ref<CameraWhitelistSyncSettings>({
+  owner: false,
+  monthly: false,
+  callbackBaseUrl: '',
+})
 
 let loadedForSession = false
 let loadingPromise: Promise<void> | null = null
 
 export function applySiteSettings(data: SystemSettingsView): void {
   siteTimezone.value = data.timezone
-  if (isSupportedLocale(data.defaultLocale)) {
-    siteDefaultLocale.value = data.defaultLocale
-  }
+  siteDefaultLocale.value = matchLocale(data.defaultLocale)
   siteDefaultPlateColor.value = data.defaultPlateColor
   siteAllowedPlateColors.value = [...data.allowedPlateColors]
   siteImageStoragePath.value = data.imageStoragePath || './data/images'
@@ -52,6 +60,11 @@ export function applySiteSettings(data: SystemSettingsView): void {
     minConfidence: clamp01(data.hyperLpr3?.minConfidence ?? 0.6),
     connectTimeoutMs: clampInt(data.hyperLpr3?.connectTimeoutMs ?? 5000, 1000, 600000),
     readTimeoutMs: clampInt(data.hyperLpr3?.readTimeoutMs ?? 60000, 1000, 600000),
+  }
+  siteCameraWhitelistSync.value = {
+    owner: !!data.cameraWhitelistSync?.owner,
+    monthly: !!data.cameraWhitelistSync?.monthly,
+    callbackBaseUrl: data.cameraWhitelistSync?.callbackBaseUrl || '',
   }
   loadedForSession = true
 }
@@ -82,6 +95,7 @@ export function clearSiteSettingsCache(): void {
     connectTimeoutMs: 5000,
     readTimeoutMs: 60000,
   }
+  siteCameraWhitelistSync.value = { owner: false, monthly: false, callbackBaseUrl: '' }
 }
 
 export async function ensureSiteSettings(locale: string, force = false): Promise<void> {

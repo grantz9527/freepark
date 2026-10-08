@@ -162,6 +162,21 @@ public class SiteSettings {
     @Column(name = "tencent_cos_custom_domain", length = 256)
     private String tencentCosCustomDomain;
 
+    /** null 视为关闭，兼容升级前未写入该列的数据。 */
+    @Column(name = "sync_owner_to_camera")
+    private Boolean syncOwnerToRecognitionCamera;
+
+    /** null 视为关闭，兼容升级前未写入该列的数据。 */
+    @Column(name = "sync_monthly_to_camera")
+    private Boolean syncMonthlyToRecognitionCamera;
+
+    /**
+     * 设备网关对外回调基础地址（相机可访问），如 {@code http://192.168.1.10:8081}。
+     * 用于拼接臻识白名单 {@code reply_url}；为空时仍下发相对路径。
+     */
+    @Column(name = "device_gateway_callback_base_url", length = 255)
+    private String deviceGatewayCallbackBaseUrl;
+
     @LastModifiedDate
     @Column(nullable = false)
     private Instant updatedAt;
@@ -335,6 +350,34 @@ public class SiteSettings {
     public void setTencentCosPathPrefix(String tencentCosPathPrefix) { this.tencentCosPathPrefix = tencentCosPathPrefix; }
     public String getTencentCosCustomDomain() { return tencentCosCustomDomain; }
     public void setTencentCosCustomDomain(String tencentCosCustomDomain) { this.tencentCosCustomDomain = tencentCosCustomDomain; }
+
+    public boolean isSyncOwnerToRecognitionCamera() {
+        return Boolean.TRUE.equals(syncOwnerToRecognitionCamera);
+    }
+
+    public void setSyncOwnerToRecognitionCamera(boolean syncOwnerToRecognitionCamera) {
+        this.syncOwnerToRecognitionCamera = syncOwnerToRecognitionCamera;
+    }
+
+    public boolean isSyncMonthlyToRecognitionCamera() {
+        return Boolean.TRUE.equals(syncMonthlyToRecognitionCamera);
+    }
+
+    public void setSyncMonthlyToRecognitionCamera(boolean syncMonthlyToRecognitionCamera) {
+        this.syncMonthlyToRecognitionCamera = syncMonthlyToRecognitionCamera;
+    }
+
+    public String getDeviceGatewayCallbackBaseUrl() {
+        return deviceGatewayCallbackBaseUrl == null ? "" : deviceGatewayCallbackBaseUrl.trim();
+    }
+
+    public void setDeviceGatewayCallbackBaseUrl(String deviceGatewayCallbackBaseUrl) {
+        if (deviceGatewayCallbackBaseUrl == null || deviceGatewayCallbackBaseUrl.isBlank()) {
+            this.deviceGatewayCallbackBaseUrl = null;
+            return;
+        }
+        this.deviceGatewayCallbackBaseUrl = deviceGatewayCallbackBaseUrl.trim();
+    }
 
     public Instant getUpdatedAt() {
         return updatedAt;

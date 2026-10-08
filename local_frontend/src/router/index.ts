@@ -20,6 +20,7 @@ import ParkingSessionsView from '@/views/ParkingSessionsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import SystemSettingsView from '@/views/SystemSettingsView.vue'
 import NodeConfigView from '@/views/NodeConfigView.vue'
+import DatabaseConfigView from '@/views/DatabaseConfigView.vue'
 import SpacesView from '@/views/SpacesView.vue'
 import BoothsView from '@/views/BoothsView.vue'
 import BoothViewerView from '@/views/BoothViewerView.vue'
@@ -182,6 +183,12 @@ const router = createRouter({
           name: 'nodeConfig',
           component: NodeConfigView,
           meta: { titleKey: 'nav.nodeConfig', requiresAdmin: true },
+        },
+        {
+          path: 'system/database',
+          name: 'databaseConfig',
+          component: DatabaseConfigView,
+          meta: { titleKey: 'nav.databaseConfig', requiresAdmin: true },
         },
         {
           path: 'settings',

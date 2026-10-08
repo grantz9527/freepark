@@ -69,7 +69,7 @@ async function onSubmit(): Promise<void> {
       </label>
       <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
       <button type="submit" :disabled="submitting">
-        {{ submitting ? t('login.submitting') : t('login.submit') }}
+        {{ t('login.submit') }}
       </button>
     </form>
   </div>

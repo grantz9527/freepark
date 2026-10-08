@@ -25,14 +25,14 @@ Locale is resolved in this order:
 2. HTTP header `Accept-Language`
 3. Fallback: `en`
 
-Supported locales: `en`, `zh-CN`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt`, `ar`.
+Supported locales: `zh-CN`, `en`.
 
 Check it:
 
 ```bash
 curl "http://localhost:8081/api/v1/i18n"
 curl -H "Accept-Language: zh-CN" "http://localhost:8081/api/v1/i18n"
-curl "http://localhost:8081/api/v1/i18n?lang=ja"
+curl "http://localhost:8081/api/v1/i18n?lang=zh-CN"
 ```
 
 ## MySQL
@@ -45,7 +45,7 @@ docker compose up -d
 
 Default connection:
 
-- host: `localhost:3307`
+- host: `localhost:8306`
 - database: `freepark_local`
 - user / password: `freepark_local` / `freepark_local`
 

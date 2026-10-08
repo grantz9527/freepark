@@ -11,6 +11,7 @@ import {
   listLanes,
   simulateFrigateEventApi,
   testFrigateCameraApi,
+  testFrigateApi,
   testFrigateSettings,
   updateFrigateCameraApi,
   updateFrigateSettings,
@@ -62,8 +63,10 @@ const formCameraName = ref('')
 const formEnabled = ref(true)
 const formError = ref('')
 const formBusy = ref(false)
-const serverError = ref('')
-const serverBusy = ref(false)
+const apiError = ref('')
+const mqttError = ref('')
+const apiBusy = ref(false)
+const mqttBusy = ref(false)
 const debugCamera = ref<FrigateCameraView | null>(null)
 const debugBusy = ref(false)
 const debugLogs = ref<EventLog[]>([])
@@ -113,7 +116,7 @@ async function loadSettings(): Promise<void> {
     const result = await getFrigateSettings(locale.value)
     applySettings(result.data)
   } catch (error) {
-    serverError.value = error instanceof ApiError ? error.message : t('frigate.loadFailed')
+    apiError.value = error instanceof ApiError ? error.message : t('frigate.loadFailed')
   }
 }
 
@@ -122,7 +125,7 @@ async function loadCameras(): Promise<void> {
     const result = await listFrigateCamerasApi(locale.value)
     cameras.value = result.data
   } catch (error) {
-    serverError.value = error instanceof ApiError ? error.message : t('frigate.loadFailed')
+    mqttError.value = error instanceof ApiError ? error.message : t('frigate.loadFailed')
   }
 }
 
@@ -136,9 +139,19 @@ async function loadLanes(): Promise<void> {
 }
 
 function applySettings(data: FrigateSettingsView): void {
-  server.value = data
+  server.value = {
+    ...data,
+    apiHost: data.apiHost ?? '',
+    mqttHost: data.mqttHost ?? '',
+    apiLinkStatus: data.apiLinkStatus ?? 'DISCONNECTED',
+    apiLastTestAt: data.apiLastTestAt ?? null,
+  }
   mqttPasswordSet.value = data.mqttPasswordSet
   mqttPassword.value = ''
+}
+
+function validPort(port: number): boolean {
+  return Number.isInteger(port) && port >= 1 && port <= 65535
 }
 
 function laneName(camera: {
@@ -164,14 +177,14 @@ function laneName(camera: {
   return `${name} · ${directionLabel}`
 }
 
-function statusLabel(status: FrigateLinkStatus): string {
+function statusLabel(status: FrigateLinkStatus, kind: 'api' | 'mqtt' = 'mqtt'): string {
   if (status === 'CONNECTED') {
-    return t('frigate.linkConnected')
+    return kind === 'api' ? t('frigate.apiConnected') : t('frigate.linkConnected')
   }
   if (status === 'FAILED') {
-    return t('frigate.linkFailed')
+    return kind === 'api' ? t('frigate.apiFailed') : t('frigate.linkFailed')
   }
-  return t('frigate.linkDisconnected')
+  return kind === 'api' ? t('frigate.apiDisconnected') : t('frigate.linkDisconnected')
 }
 
 function statusClass(status: FrigateLinkStatus): string {
@@ -218,36 +231,25 @@ function closeForm(): void {
   resetForm()
 }
 
-async function onSaveServer(): Promise<void> {
+async function persistSettings(): Promise<boolean> {
   if (!server.value) {
-    return
+    return false
   }
-  serverError.value = ''
-  const apiHost = server.value.apiHost.trim()
-  const mqttHost = server.value.mqttHost.trim()
-  const topicPrefix = server.value.topicPrefix.trim()
-  if (!apiHost || !mqttHost || !topicPrefix) {
-    serverError.value = t('frigate.serverRequired')
-    return
+  apiError.value = ''
+  mqttError.value = ''
+  if (!validPort(server.value.apiPort) || !validPort(server.value.mqttPort)) {
+    apiError.value = t('frigate.portInvalid')
+    mqttError.value = t('frigate.portInvalid')
+    return false
   }
-  if (
-    server.value.apiPort < 1 ||
-    server.value.apiPort > 65535 ||
-    server.value.mqttPort < 1 ||
-    server.value.mqttPort > 65535
-  ) {
-    serverError.value = t('frigate.portInvalid')
-    return
-  }
-  serverBusy.value = true
   try {
     const result = await updateFrigateSettings(
       {
-        apiHost,
+        apiHost: server.value.apiHost.trim(),
         apiPort: server.value.apiPort,
-        mqttHost,
+        mqttHost: server.value.mqttHost.trim(),
         mqttPort: server.value.mqttPort,
-        topicPrefix,
+        topicPrefix: server.value.topicPrefix.trim() || 'frigate',
         mqttUsername: server.value.mqttUsername.trim(),
         mqttPassword: mqttPassword.value,
         enabled: server.value.enabled,
@@ -255,27 +257,74 @@ async function onSaveServer(): Promise<void> {
       locale.value,
     )
     applySettings(result.data)
+    return true
   } catch (error) {
-    serverError.value = error instanceof ApiError ? error.message : t('frigate.saveFailed')
-  } finally {
-    serverBusy.value = false
+    const message = error instanceof ApiError ? error.message : t('frigate.saveFailed')
+    apiError.value = message
+    mqttError.value = message
+    return false
   }
 }
 
-async function testServer(): Promise<void> {
-  await onSaveServer()
-  if (serverError.value) {
-    return
-  }
-  serverBusy.value = true
+async function onSaveApi(): Promise<void> {
+  apiBusy.value = true
   try {
+    await persistSettings()
+  } finally {
+    apiBusy.value = false
+  }
+}
+
+async function onSaveMqtt(): Promise<void> {
+  mqttBusy.value = true
+  try {
+    await persistSettings()
+  } finally {
+    mqttBusy.value = false
+  }
+}
+
+async function testApi(): Promise<void> {
+  apiBusy.value = true
+  apiError.value = ''
+  try {
+    const saved = await persistSettings()
+    if (!saved || !server.value) {
+      return
+    }
+    if (!server.value.apiHost.trim()) {
+      apiError.value = t('frigate.apiNotFilled')
+      return
+    }
+    const result = await testFrigateApi(locale.value)
+    applySettings(result.data)
+  } catch (error) {
+    apiError.value = error instanceof ApiError ? error.message : t('frigate.testFailed')
+    await loadSettings()
+  } finally {
+    apiBusy.value = false
+  }
+}
+
+async function testMqtt(): Promise<void> {
+  mqttBusy.value = true
+  mqttError.value = ''
+  try {
+    const saved = await persistSettings()
+    if (!saved || !server.value) {
+      return
+    }
+    if (!server.value.mqttHost.trim()) {
+      mqttError.value = t('frigate.mqttNotFilled')
+      return
+    }
     const result = await testFrigateSettings(locale.value)
     applySettings(result.data)
   } catch (error) {
-    serverError.value = error instanceof ApiError ? error.message : t('frigate.testFailed')
+    mqttError.value = error instanceof ApiError ? error.message : t('frigate.testFailed')
     await loadSettings()
   } finally {
-    serverBusy.value = false
+    mqttBusy.value = false
   }
 }
 
@@ -343,7 +392,7 @@ async function testCamera(): Promise<void> {
     return
   }
   if (server.value.linkStatus !== 'CONNECTED') {
-    pushLog(t('frigate.needServerConnected'))
+    pushLog(t('frigate.needMqttConnected'))
     return
   }
   debugBusy.value = true
@@ -384,10 +433,6 @@ function linkedBarriers(camera: FrigateCameraView): BarrierDevice[] {
 
 async function simulateRecognition(): Promise<void> {
   if (!debugCamera.value || !server.value) {
-    return
-  }
-  if (debugCamera.value.linkStatus !== 'CONNECTED') {
-    pushLog(t('frigate.needCameraConnected'))
     return
   }
   const plate = simulatePlate.value.trim().toUpperCase()
@@ -450,62 +495,97 @@ async function simulateRecognition(): Promise<void> {
     <p class="banner ok-hint">{{ t('frigate.planningHint') }}</p>
     <p v-if="loading" class="hint">{{ t('page.loading') }}</p>
 
-    <div v-if="server" class="card">
-      <h3>{{ t('frigate.serverTitle') }}</h3>
-      <p class="hint">{{ t('frigate.serverHint') }}</p>
-      <div class="grid two">
-        <label>
-          <span>{{ t('frigate.apiHost') }}</span>
-          <input v-model="server.apiHost" type="text" autocomplete="off" :disabled="!isAdmin" />
-        </label>
-        <label>
-          <span>{{ t('frigate.apiPort') }}</span>
-          <input v-model.number="server.apiPort" type="number" min="1" max="65535" :disabled="!isAdmin" />
-        </label>
-        <label>
-          <span>{{ t('frigate.mqttHost') }}</span>
-          <input v-model="server.mqttHost" type="text" autocomplete="off" :disabled="!isAdmin" />
-        </label>
-        <label>
-          <span>{{ t('frigate.mqttPort') }}</span>
-          <input v-model.number="server.mqttPort" type="number" min="1" max="65535" :disabled="!isAdmin" />
-        </label>
-        <label>
-          <span>{{ t('frigate.topicPrefix') }}</span>
-          <input v-model="server.topicPrefix" type="text" autocomplete="off" :disabled="!isAdmin" />
-        </label>
-        <label>
-          <span>{{ t('frigate.mqttUsername') }}</span>
-          <input v-model="server.mqttUsername" type="text" autocomplete="off" :disabled="!isAdmin" />
-        </label>
-        <label>
-          <span>{{ t('frigate.mqttPassword') }}</span>
-          <input
-            v-model="mqttPassword"
-            type="password"
-            autocomplete="new-password"
-            :placeholder="passwordPlaceholder"
-            :disabled="!isAdmin"
-          />
-        </label>
+    <div v-if="server" class="split">
+      <div class="card">
+        <h3>{{ t('frigate.apiTitle') }}</h3>
+        <p class="hint">{{ t('frigate.apiHint') }}</p>
+        <div class="grid two">
+          <label>
+            <span>{{ t('frigate.apiHost') }}</span>
+            <input
+              v-model="server.apiHost"
+              type="text"
+              autocomplete="off"
+              :placeholder="t('frigate.optionalPlaceholder')"
+              :disabled="!isAdmin"
+            />
+          </label>
+          <label>
+            <span>{{ t('frigate.apiPort') }}</span>
+            <input v-model.number="server.apiPort" type="number" min="1" max="65535" :disabled="!isAdmin" />
+          </label>
+        </div>
+        <p class="field-hint">
+          {{ t('frigate.apiStatus') }}：
+          <span class="pill" :class="statusClass(server.apiLinkStatus)">{{ statusLabel(server.apiLinkStatus, 'api') }}</span>
+          <span v-if="server.apiLastTestAt"> · {{ formatTime(server.apiLastTestAt) }}</span>
+        </p>
+        <p v-if="apiError" class="form-error">{{ apiError }}</p>
+        <div v-if="isAdmin" class="actions start">
+          <button type="button" class="ghost" :disabled="apiBusy || mqttBusy" @click="onSaveApi">
+            {{ t('frigate.saveApi') }}
+          </button>
+          <button type="button" :disabled="apiBusy || mqttBusy" @click="testApi">
+            {{ apiBusy ? t('frigate.testing') : t('frigate.testApi') }}
+          </button>
+        </div>
       </div>
-      <label class="checkbox">
-        <input v-model="server.enabled" type="checkbox" :disabled="!isAdmin" />
-        <span>{{ t('frigate.serverEnabled') }}</span>
-      </label>
-      <p class="field-hint">
-        {{ t('frigate.serverStatus') }}：
-        <span class="pill" :class="statusClass(server.linkStatus)">{{ statusLabel(server.linkStatus) }}</span>
-        <span v-if="server.lastTestAt"> · {{ formatTime(server.lastTestAt) }}</span>
-      </p>
-      <p v-if="serverError" class="form-error">{{ serverError }}</p>
-      <div v-if="isAdmin" class="actions start">
-        <button type="button" class="ghost" :disabled="serverBusy" @click="onSaveServer">
-          {{ t('frigate.saveServer') }}
-        </button>
-        <button type="button" :disabled="serverBusy" @click="testServer">
-          {{ serverBusy ? t('frigate.testing') : t('frigate.testServer') }}
-        </button>
+
+      <div class="card">
+        <h3>{{ t('frigate.mqttTitle') }}</h3>
+        <p class="hint">{{ t('frigate.mqttHint') }}</p>
+        <div class="grid two">
+          <label>
+            <span>{{ t('frigate.mqttHost') }}</span>
+            <input
+              v-model="server.mqttHost"
+              type="text"
+              autocomplete="off"
+              :placeholder="t('frigate.optionalPlaceholder')"
+              :disabled="!isAdmin"
+            />
+          </label>
+          <label>
+            <span>{{ t('frigate.mqttPort') }}</span>
+            <input v-model.number="server.mqttPort" type="number" min="1" max="65535" :disabled="!isAdmin" />
+          </label>
+          <label>
+            <span>{{ t('frigate.topicPrefix') }}</span>
+            <input v-model="server.topicPrefix" type="text" autocomplete="off" :disabled="!isAdmin" />
+          </label>
+          <label>
+            <span>{{ t('frigate.mqttUsername') }}</span>
+            <input v-model="server.mqttUsername" type="text" autocomplete="off" :disabled="!isAdmin" />
+          </label>
+          <label>
+            <span>{{ t('frigate.mqttPassword') }}</span>
+            <input
+              v-model="mqttPassword"
+              type="password"
+              autocomplete="new-password"
+              :placeholder="passwordPlaceholder"
+              :disabled="!isAdmin"
+            />
+          </label>
+        </div>
+        <label class="checkbox">
+          <input v-model="server.enabled" type="checkbox" :disabled="!isAdmin" />
+          <span>{{ t('frigate.mqttEnabled') }}</span>
+        </label>
+        <p class="field-hint">
+          {{ t('frigate.mqttStatus') }}：
+          <span class="pill" :class="statusClass(server.linkStatus)">{{ statusLabel(server.linkStatus, 'mqtt') }}</span>
+          <span v-if="server.lastTestAt"> · {{ formatTime(server.lastTestAt) }}</span>
+        </p>
+        <p v-if="mqttError" class="form-error">{{ mqttError }}</p>
+        <div v-if="isAdmin" class="actions start">
+          <button type="button" class="ghost" :disabled="apiBusy || mqttBusy" @click="onSaveMqtt">
+            {{ t('frigate.saveMqtt') }}
+          </button>
+          <button type="button" :disabled="apiBusy || mqttBusy" @click="testMqtt">
+            {{ mqttBusy ? t('frigate.testing') : t('frigate.testMqtt') }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -673,6 +753,13 @@ async function simulateRecognition(): Promise<void> {
   display: grid;
   gap: 0.75rem;
   padding: 1rem 1.1rem;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  align-items: start;
 }
 
 .card h3 {
@@ -924,7 +1011,8 @@ button:disabled,
 }
 
 @media (max-width: 760px) {
-  .grid.two {
+  .grid.two,
+  .split {
     grid-template-columns: 1fr;
   }
 

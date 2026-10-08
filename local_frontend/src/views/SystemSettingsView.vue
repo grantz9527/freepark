@@ -121,6 +121,8 @@ const hyperLpr3BaseUrl = ref('http://127.0.0.1:8715')
 const hyperLpr3MinConf = ref(0.6)
 const hyperLpr3ConnectMs = ref(5000)
 const hyperLpr3ReadMs = ref(60000)
+const syncOwnerToCamera = ref(false)
+const syncMonthlyToCamera = ref(false)
 
 // 调试面板：当前选中引擎一套状态即可（切换引擎时清掉）
 const debugTestFile = ref<File | null>(null)
@@ -320,6 +322,8 @@ async function loadSettings(): Promise<void> {
     hyperLpr3MinConf.value = data.hyperLpr3?.minConfidence ?? 0.6
     hyperLpr3ConnectMs.value = data.hyperLpr3?.connectTimeoutMs ?? 5000
     hyperLpr3ReadMs.value = data.hyperLpr3?.readTimeoutMs ?? 60000
+    syncOwnerToCamera.value = !!data.cameraWhitelistSync?.owner
+    syncMonthlyToCamera.value = !!data.cameraWhitelistSync?.monthly
     supportedLocales.value = data.supportedLocales
     supportedTimezones.value = data.supportedTimezones
     supportedPlateColors.value = data.supportedPlateColors
@@ -422,6 +426,10 @@ async function onSubmit(): Promise<void> {
           connectTimeoutMs: hyperLpr3ConnectMs.value,
           readTimeoutMs: hyperLpr3ReadMs.value,
         },
+        cameraWhitelistSync: {
+          owner: syncOwnerToCamera.value,
+          monthly: syncMonthlyToCamera.value,
+        },
         cloudStorage: {
           enabled: cloudEnabled.value,
           provider: cloudProvider.value,
@@ -467,6 +475,8 @@ async function onSubmit(): Promise<void> {
     hyperLpr3MinConf.value = data.hyperLpr3?.minConfidence ?? 0.6
     hyperLpr3ConnectMs.value = data.hyperLpr3?.connectTimeoutMs ?? 5000
     hyperLpr3ReadMs.value = data.hyperLpr3?.readTimeoutMs ?? 60000
+    syncOwnerToCamera.value = !!data.cameraWhitelistSync?.owner
+    syncMonthlyToCamera.value = !!data.cameraWhitelistSync?.monthly
     updatedAt.value = data.updatedAt
     applySiteSettings(data)
     successMessage.value = t('systemSettings.saved')
@@ -953,6 +963,27 @@ onMounted(() => {
         </div>
       </article>
 
+      <article class="card card-camera-sync">
+        <h3>{{ t('systemSettings.cameraWhitelistSync.title') }}</h3>
+        <p class="hint">{{ t('systemSettings.cameraWhitelistSync.hint') }}</p>
+        <div class="sync-grid">
+          <label class="sync-option">
+            <input v-model="syncOwnerToCamera" type="checkbox" />
+            <span class="sync-option-copy">
+              <strong>{{ t('systemSettings.cameraWhitelistSync.owner') }}</strong>
+              <em>{{ t('systemSettings.cameraWhitelistSync.ownerHint') }}</em>
+            </span>
+          </label>
+          <label class="sync-option">
+            <input v-model="syncMonthlyToCamera" type="checkbox" />
+            <span class="sync-option-copy">
+              <strong>{{ t('systemSettings.cameraWhitelistSync.monthly') }}</strong>
+              <em>{{ t('systemSettings.cameraWhitelistSync.monthlyHint') }}</em>
+            </span>
+          </label>
+        </div>
+      </article>
+
       <article class="card card-software-plate">
         <h3>{{ t('systemSettings.softwarePlate.title') }}</h3>
         <p class="hint">{{ t('systemSettings.softwarePlate.hint') }}</p>
@@ -1222,6 +1253,7 @@ onMounted(() => {
           <li>{{ t('systemSettings.usageHardware') }}</li>
           <li>{{ t('systemSettings.usagePlateColor') }}</li>
           <li>{{ t('systemSettings.usageImages') }}</li>
+          <li>{{ t('systemSettings.usageCameraWhitelist') }}</li>
         </ul>
       </article>
 
@@ -1447,7 +1479,8 @@ button:disabled {
 
 .card-software-plate,
 .card-software-plate-debug,
-.card-cloud-storage {
+.card-cloud-storage,
+.card-camera-sync {
   grid-column: 1 / -1;
 }
 
@@ -1688,6 +1721,69 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.sync-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.sync-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.sync-option input {
+  width: auto;
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.sync-option-copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.sync-option-copy strong {
+  font-size: 0.95rem;
+}
+
+.sync-option-copy em {
+  font-style: normal;
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.callback-base {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.callback-base > span {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.callback-base input {
+  width: 100%;
+}
+
+.callback-base .field-hint {
+  font-style: normal;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .engine-off-hint {
@@ -2019,6 +2115,7 @@ button.ghost:hover:not(:disabled) {
   .engine-grid,
   .cloud-grid,
   .engine-row,
+  .sync-grid,
   .debug-area,
   .debug-stats {
     grid-template-columns: 1fr;

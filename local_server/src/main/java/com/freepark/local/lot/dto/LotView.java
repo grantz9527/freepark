@@ -1,9 +1,11 @@
 package com.freepark.local.lot.dto;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import com.freepark.local.domain.ParkingLot;
+import com.freepark.local.lot.support.LotOpenTimeRules;
 
 public record LotView(
         UUID id,
@@ -14,6 +16,7 @@ public record LotView(
         int totalSpaces,
         boolean enabled,
         String mapData,
+        List<LotOpenTimeRule> openTimeRules,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -27,6 +30,12 @@ public record LotView(
                 lot.getTotalSpaces(),
                 lot.isEnabled(),
                 lot.getMapData(),
+                LotOpenTimeRules.parse(lot.getOpenTimeRules()).stream()
+                        .map(window -> new LotOpenTimeRule(
+                                window.day(),
+                                LotOpenTimeRules.formatTime(window.start()),
+                                LotOpenTimeRules.formatTime(window.end())))
+                        .toList(),
                 lot.getCreatedAt(),
                 lot.getUpdatedAt());
     }

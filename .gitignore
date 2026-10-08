@@ -32,6 +32,9 @@ docker/mosquitto/log/
 # Server local runtime data
 local_server/data/
 
+# Offline image export
+ai-build/dist/
+
 # Frontend generated declaration files
 local_frontend/src/auto-imports.d.ts
 local_frontend/src/components.d.ts

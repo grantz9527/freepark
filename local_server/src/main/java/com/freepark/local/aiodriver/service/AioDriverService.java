@@ -54,11 +54,16 @@ public class AioDriverService {
         OPEN, CLOSE, ALWAYS_ON, ALWAYS_OFF, SHOW, SPEAK, STATUS
     }
 
+    /** 某个具体型号的屏显规格（行数来自驱动工厂，不在平台侧解析型号名）。 */
+    public record ModelDisplayView(String model, int rows, boolean scrollable) {
+    }
+
     /** 已装配的驱动工厂视图。 */
     public record FactoryView(
             String brand, String model, String displayName,
             List<String> supportedModels, Set<Capability> capabilities,
-            VoiceCapability voiceCapability, DisplayCapability displayCapability) {
+            VoiceCapability voiceCapability, DisplayCapability displayCapability,
+            List<ModelDisplayView> modelDisplays) {
     }
 
     /** 一台绑定实例的运行时快照。 */
@@ -92,7 +97,13 @@ public class AioDriverService {
         return registry.factories().stream()
                 .sorted(Comparator.comparing(AIODriverFactory::brand))
                 .map(f -> new FactoryView(f.brand(), f.model(), f.displayName(),
-                        f.supportedModels(), f.capabilities(), f.voiceCapability(), f.displayCapability()))
+                        f.supportedModels(), f.capabilities(), f.voiceCapability(), f.displayCapability(),
+                        f.supportedModels().stream()
+                                .map(model -> {
+                                    DisplayCapability cap = f.displayCapability(model);
+                                    return new ModelDisplayView(model, cap.rows(), cap.scrollable());
+                                })
+                                .toList()))
                 .toList();
     }
 

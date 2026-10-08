@@ -2,6 +2,8 @@ package com.freepark.local.lot.dto;
 
 import com.freepark.local.domain.LotType;
 
+import java.util.List;
+
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -13,5 +15,6 @@ public record CreateLotRequest(
         @NotNull LotType lotType,
         @Size(max = 255) String address,
         @Min(0) Integer totalSpaces,
-        Boolean enabled) {
+        Boolean enabled,
+        List<LotOpenTimeRule> openTimeRules) {
 }

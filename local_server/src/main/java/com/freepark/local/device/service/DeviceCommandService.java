@@ -3,6 +3,7 @@ package com.freepark.local.device.service;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.data.domain.PageRequest;
@@ -102,11 +103,23 @@ public class DeviceCommandService {
      */
     @Transactional
     public Optional<DeviceCommand> dequeueForDevice(UUID deviceId) {
+        return dequeueForDevice(deviceId, Set.of());
+    }
+
+    /**
+     * 与 {@link #dequeueForDevice(UUID)} 相同，但跳过 {@code defer} 里的动作，留给空闲轮询。
+     * 识别上报不能取走默认屏显，否则会盖掉本次通行的临时文字。
+     */
+    @Transactional
+    public Optional<DeviceCommand> dequeueForDevice(UUID deviceId, Set<DeviceCommand.Action> defer) {
         Instant now = Instant.now();
         for (DeviceCommand cmd : commands.findByDevice_IdAndStatusOrderByCreatedAtAsc(
                 deviceId, DeviceCommand.Status.PENDING)) {
             if (cmd.getCreatedAt().isBefore(now.minus(COMMAND_TTL))) {
                 cmd.markExpired();
+                continue;
+            }
+            if (defer.contains(cmd.getAction())) {
                 continue;
             }
             cmd.markDelivered(now);

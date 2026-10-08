@@ -62,6 +62,12 @@ const navGroups = computed((): NavGroup[] => {
       label: t('nav.nodeConfig'),
       icon: 'nodeConfig',
     })
+    systemChildren.push({
+      to: '/system/database',
+      name: 'databaseConfig',
+      label: t('nav.databaseConfig'),
+      icon: 'databaseConfig',
+    })
   }
   systemChildren.push({
     to: '/settings',
@@ -419,6 +425,11 @@ function logout(): void {
                     stroke-linecap="round"
                   />
                   <path d="M16 14v-4a1.5 1.5 0 0 0-1.5-1.5H11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                </svg>
+                <svg v-else-if="item.icon === 'databaseConfig'" viewBox="0 0 24 24" fill="none">
+                  <ellipse cx="12" cy="6.5" rx="7" ry="2.6" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M5 6.5v11c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-11" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6" stroke="currentColor" stroke-width="1.8" />
                 </svg>
                 <svg v-else-if="item.icon === 'lanes'" viewBox="0 0 24 24" fill="none">
                   <path d="M5 20V7M19 20V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />

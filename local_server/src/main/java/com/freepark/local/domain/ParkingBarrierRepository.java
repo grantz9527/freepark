@@ -16,6 +16,25 @@ public interface ParkingBarrierRepository extends JpaRepository<ParkingBarrier, 
 
     List<ParkingBarrier> findAllByLaneIdOrderByCreatedAtDesc(UUID laneId);
 
+    List<ParkingBarrier> findAllByLaneLotIdAndEnabledTrue(UUID lotId);
+
+    /** 已启用且绑定车道/车场的设备（含 lane、lot，避免 open-in-view=false 懒加载失败）。 */
+    @Query("""
+            select distinct b from ParkingBarrier b
+            join fetch b.lane l
+            join fetch l.lot
+            where b.enabled = true
+            """)
+    List<ParkingBarrier> findAllEnabledBoundWithLot();
+
+    @Query("""
+            select b from ParkingBarrier b
+            left join fetch b.lane l
+            left join fetch l.lot
+            where b.id = :id
+            """)
+    Optional<ParkingBarrier> findByIdWithLaneLot(@Param("id") UUID id);
+
     Optional<ParkingBarrier> findByCodeIgnoreCase(String code);
 
     /** 仅更新心跳时间，避免对 detached 实体的 merge 产生额外 SELECT。 */

@@ -94,6 +94,78 @@ class ZhenshiProtocolLedTextTest {
     }
 
     @Test
+    void defaultDisplayStoresBothLinesWithStaySecondsAndNoVoice() {
+        JsonMapper json = JsonMapper.builder().build();
+        JsonNode heartbeat = json.readTree("{\"status\":\"ok\"}");
+        String payload = "{\"line1\":\"欢迎光临\",\"line2\":\"一车一杆\",\"staySeconds\":8}";
+        JsonNode resp = protocol.appendDefaultDisplay(heartbeat, payload);
+        assertEquals("no", resp.path("Response_AlarmInfoPlate").path("info").asText(), "默认屏显不能附带开闸");
+        byte[] frame = Base64.getDecoder().decode(serialDataItem(resp).path("data").asText());
+        assertEquals(0x6E, frame[4] & 0xFF);
+        assertEquals(1, frame[6] & 0xFF, "SAVE_FLAG 应为存储区");
+        assertEquals(2, frame[7] & 0xFF);
+        byte[] line1 = "欢迎光临".getBytes(GBK);
+        byte[] line2 = "一车一杆".getBytes(GBK);
+        int pos = 8;
+        assertEquals(0, frame[pos], "第一行 LID");
+        assertEquals(0x00, frame[pos + 1] & 0xFF, "未指定播放方式时立即显示");
+        assertEquals(8, frame[pos + 3] & 0xFF, "DT 为设定停留秒数");
+        assertEquals(0, frame[pos + 4] & 0xFF, "DR=0 循环显示");
+        assertArrayEquals(line1, java.util.Arrays.copyOfRange(frame, pos + 10, pos + 10 + line1.length));
+        assertEquals(0x0D, frame[pos + 10 + line1.length] & 0xFF);
+        pos += 11 + line1.length;
+        assertEquals(1, frame[pos], "第二行 LID");
+        assertEquals(0x00, frame[pos + 1] & 0xFF);
+        assertEquals(8, frame[pos + 3] & 0xFF);
+        assertArrayEquals(line2, java.util.Arrays.copyOfRange(frame, pos + 10, pos + 10 + line2.length));
+        assertEquals(0x00, frame[pos + 10 + line2.length] & 0xFF);
+        pos += 11 + line2.length;
+        assertEquals(0x0A, frame[pos] & 0xFF);
+        assertEquals(0, frame[pos + 1] & 0xFF, "默认屏显不播语音");
+        assertEquals(0x00, frame[pos + 2] & 0xFF);
+        int crc = crc16Modbus(frame, frame.length - 2);
+        assertEquals(crc & 0xFF, frame[frame.length - 2] & 0xFF);
+        assertEquals((crc >>> 8) & 0xFF, frame[frame.length - 1] & 0xFF);
+    }
+
+    @Test
+    void defaultDisplayUsesPerLinePlayMode() {
+        JsonMapper json = JsonMapper.builder().build();
+        JsonNode heartbeat = json.readTree("{\"status\":\"ok\"}");
+        String payload = "{\"line1\":\"欢迎光临\",\"line2\":\"一车一杆\",\"staySeconds\":8,\"playMode1\":21,\"playMode2\":1}";
+        JsonNode resp = protocol.appendDefaultDisplay(heartbeat, payload);
+        byte[] frame = Base64.getDecoder().decode(serialDataItem(resp).path("data").asText());
+        int pos = 8;
+        assertEquals(0x15, frame[pos + 1] & 0xFF, "第一行连续左移");
+        pos += 11 + "欢迎光临".getBytes(GBK).length;
+        assertEquals(0x01, frame[pos + 1] & 0xFF, "第二行从右向左移动");
+        JsonNode unknown = protocol.appendDefaultDisplay(
+                heartbeat, "{\"line1\":\"欢迎光临\",\"line2\":\"\",\"staySeconds\":8,\"playMode1\":99}");
+        byte[] fallback = Base64.getDecoder().decode(serialDataItem(unknown).path("data").asText());
+        assertEquals(0x00, fallback[9] & 0xFF, "未知播放方式按立即显示");
+    }
+
+    @Test
+    void defaultDisplayKeepsSecondLineIdWhenFirstIsBlank() {
+        JsonMapper json = JsonMapper.builder().build();
+        JsonNode heartbeat = json.readTree("{\"status\":\"ok\"}");
+        JsonNode resp = protocol.appendDefaultDisplay(heartbeat, "{\"line1\":\"\",\"line2\":\"一车一杆\",\"staySeconds\":300}");
+        byte[] frame = Base64.getDecoder().decode(serialDataItem(resp).path("data").asText());
+        assertEquals(1, frame[7] & 0xFF);
+        assertEquals(1, frame[8] & 0xFF, "只有第二行时仍用 LID=1");
+        assertEquals(255, frame[11] & 0xFF, "停留秒数限制在 255");
+    }
+
+    @Test
+    void defaultDisplaySkipsFrameWhenBothLinesBlank() {
+        JsonMapper json = JsonMapper.builder().build();
+        JsonNode heartbeat = json.readTree("{\"status\":\"ok\"}");
+        JsonNode resp = protocol.appendDefaultDisplay(heartbeat, "{\"line1\":\"  \",\"line2\":\"\",\"staySeconds\":10}");
+        assertFalse(resp.has("Response_AlarmInfoPlate"));
+        assertEquals("ok", resp.path("status").asText());
+    }
+
+    @Test
     void noSerialDataWhenAllTextBlank() {
         JsonNode resp = protocol.buildPushResponse(false, null, null);
         assertFalse(resp.path("Response_AlarmInfoPlate").has("serialData"));

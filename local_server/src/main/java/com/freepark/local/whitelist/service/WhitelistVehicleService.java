@@ -48,18 +48,21 @@ public class WhitelistVehicleService {
     private final InternalVehicleRepository internalVehicles;
     private final LocalUserRepository users;
     private final SystemSettingsService systemSettings;
+    private final CameraWhitelistSyncService cameraWhitelistSync;
 
     public WhitelistVehicleService(
             ParkingLotRepository lots,
             WhitelistVehicleRepository vehicles,
             InternalVehicleRepository internalVehicles,
             LocalUserRepository users,
-            SystemSettingsService systemSettings) {
+            SystemSettingsService systemSettings,
+            CameraWhitelistSyncService cameraWhitelistSync) {
         this.lots = lots;
         this.vehicles = vehicles;
         this.internalVehicles = internalVehicles;
         this.users = users;
         this.systemSettings = systemSettings;
+        this.cameraWhitelistSync = cameraWhitelistSync;
     }
 
     @Transactional(readOnly = true)
@@ -100,6 +103,7 @@ public class WhitelistVehicleService {
                 enabled);
         WhitelistVehicle saved = vehicles.save(vehicle);
         syncToInternalVehicle(lot, saved);
+        cameraWhitelistSync.onSaved(lot, saved, null);
         return WhitelistVehicleView.from(saved);
     }
 
@@ -117,6 +121,7 @@ public class WhitelistVehicleService {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
         String previousPlateNumber = vehicle.getPlateNumber();
+        VehicleType previousType = vehicle.getType();
         String plateNumber = request.plateNumber().trim();
         systemSettings.ensurePlateColorAllowed(request.plateColor());
         Instant startTime = requireTimeRange(request.startTime(), request.endTime());
@@ -133,7 +138,9 @@ public class WhitelistVehicleService {
                 request.endTime(),
                 enabled);
         WhitelistVehicle saved = vehicles.save(vehicle);
-        syncToInternalVehicle(requireLot(lotId), saved, previousPlateNumber);
+        ParkingLot lot = requireLot(lotId);
+        syncToInternalVehicle(lot, saved, previousPlateNumber);
+        cameraWhitelistSync.onSaved(lot, saved, previousType, previousPlateNumber);
         return WhitelistVehicleView.from(saved);
     }
 
@@ -146,6 +153,8 @@ public class WhitelistVehicleService {
         if (!vehicle.getLot().getId().equals(lotId)) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
+        ParkingLot lot = vehicle.getLot();
+        cameraWhitelistSync.onDeleted(lot, vehicle);
         vehicles.delete(vehicle);
     }
 
@@ -210,6 +219,7 @@ public class WhitelistVehicleService {
                     true);
             WhitelistVehicle saved = vehicles.save(vehicle);
             syncToInternalVehicle(lot, saved);
+            cameraWhitelistSync.onSaved(lot, saved, null);
             imported++;
         }
         return new ImportInternalVehiclesResponse(null, imported, skipped);

@@ -34,7 +34,7 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * 云端指令订阅：EDGE 模式下连接云端 Broker，订阅
  * {@code {commandTopicPrefix}/{nodeCode}}（默认 {@code parking/command/{nodeCode}}）。
- * 接收 {@code edge.gate.command/1}（缴费开闸）以及 {@code edge.parking.session/1}
+ * 接收 {@code edge.gate.command/1}（缴费开闸 / 远程开闸）以及 {@code edge.parking.session/1}
  *（origin=CLOUD，管理端改流水后的下行快照）。
  *
  * <p>连接生命周期与心跳/配置同步一致：周期对齐参数，变化自动重连；
@@ -48,6 +48,7 @@ public class CloudGateCommandSubscriber {
     static final String SCHEMA = "edge.gate.command/1";
     static final String COMMAND_OPEN = "OPEN";
     static final String REASON_PAYMENT = "PAYMENT";
+    static final String REASON_REMOTE = "REMOTE";
 
     private static final long TICK_INTERVAL_SECONDS = 10;
     private static final long ERROR_LOG_THROTTLE_MS = 30_000;
@@ -221,19 +222,23 @@ public class CloudGateCommandSubscriber {
                 return;
             }
             String reason = textOrNull(root.path("reason"));
-            if (reason != null && !REASON_PAYMENT.equals(reason)) {
-                log.debug("开闸指令忽略：非缴费原因 reason={}", reason);
-                return;
-            }
             String commandId = textOrNull(root.path("commandId"));
             if (commandId != null && seenCommandIds.putIfAbsent(commandId, System.currentTimeMillis()) != null) {
                 log.info("开闸指令重复，忽略 commandId={}", commandId);
                 return;
             }
+            String laneCode = textOrNull(root.path("laneCode"));
+            if (REASON_REMOTE.equals(reason)) {
+                handler.openRemote(laneCode, commandId);
+                return;
+            }
+            if (reason != null && !REASON_PAYMENT.equals(reason)) {
+                log.debug("开闸指令忽略：未知原因 reason={}", reason);
+                return;
+            }
             String plate = textOrNull(root.path("plate"));
             String plateColor = textOrNull(root.path("plateColor"));
             String lotCode = textOrNull(root.path("lotCode"));
-            String laneCode = textOrNull(root.path("laneCode"));
             handler.openAfterPayment(plate, plateColor, lotCode, laneCode, commandId);
         } catch (Exception ex) {
             throttleError("云端指令负载解析失败：{}", ex.getMessage());

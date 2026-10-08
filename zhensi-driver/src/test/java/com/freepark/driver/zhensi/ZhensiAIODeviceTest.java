@@ -1,6 +1,7 @@
 package com.freepark.driver.zhensi;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -193,6 +194,17 @@ class ZhensiAIODeviceTest {
         device.show(DisplayMessage.of(DisplayKind.WELCOME, List.of(), 0));
 
         assertTrue(t.sent.isEmpty());
+    }
+
+    @Test
+    void 型号屏显行数由工厂按型号声明() {
+        ZhensiDriverFactory factory = new ZhensiDriverFactory();
+
+        assertEquals(4, factory.displayCapability("YELLOW_CARD_LED_LINE4").rows());
+        assertEquals(4, factory.displayCapability("PURPLE_CARD_LCD_LINE4").rows());
+        assertEquals(2, factory.displayCapability("bule_card_led_line2").rows());
+        assertFalse(factory.displayCapability("YELLOW_CARD_LED_LINE4").scrollable());
+        assertEquals(2, factory.displayCapability("*").rows());
     }
 
     @Test

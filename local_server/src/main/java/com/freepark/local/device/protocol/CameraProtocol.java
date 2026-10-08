@@ -98,4 +98,14 @@ public interface CameraProtocol {
     default JsonNode appendTimeSync(JsonNode response) {
         return response;
     }
+
+    /**
+     * 把空闲默认屏显随响应一并下发（可选）。
+     * 默认忽略；臻识把 0x6E（存储区、按设定停留、不播语音）追加进轮询应答。
+     *
+     * @param payload 屏显参数 JSON：line1、line2、staySeconds、playMode1、playMode2
+     */
+    default JsonNode appendDefaultDisplay(JsonNode response, String payload) {
+        return response;
+    }
 }

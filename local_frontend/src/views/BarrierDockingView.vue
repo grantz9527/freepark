@@ -9,6 +9,7 @@ import {
   deleteAutoRegisteredDevice,
   deleteBarrierGlobal,
   enqueueDeviceCommand,
+  fullResyncBarrierCameraWhitelist,
   listAllBarriers,
   listAutoRegisteredDevices,
   listDeviceCommands,
@@ -18,14 +19,17 @@ import {
   listStreamPreviewSources,
   openTranscodedStream,
   updateBarrierGlobal,
+  updateBarrierScreen,
   type AutoRegisteredDeviceView,
   type BarrierView,
   type DriverFactoryView,
   type LaneView,
+  type ModelDisplayView,
   type StreamPreviewSourceView,
 } from '@/api/client'
 import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
+import { siteTimezone } from '@/site/settings'
 import { canPlayTranscodedFmp4, pipeFmp4ToVideo } from '@/lib/fmp4LivePlayer'
 
 const { t, locale } = useI18n()
@@ -42,6 +46,7 @@ const errorMessage = ref('')
 
 // 「同步主板时间」行操作：入队后轮询指令状态，等待设备取走（DELIVERED 即时间帧已随响应下发）
 const syncBusyId = ref<string | null>(null)
+const whitelistResyncBusyId = ref<string | null>(null)
 const syncNotice = ref<{ kind: 'ok' | 'error'; text: string } | null>(null)
 let syncNoticeTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -299,6 +304,183 @@ function openCreate(): void {
   resetForm()
   showForm.value = true
   void loadStreamSources()
+}
+
+const screenDevice = ref<BarrierView | null>(null)
+const screenLine1 = ref('')
+const screenLine2 = ref('')
+const screenLine1Kind = ref<ScreenLineKind>('TEXT')
+const screenLine2Kind = ref<ScreenLineKind>('TEXT')
+const screenStaySeconds = ref(10)
+const screenPlayMode1 = ref(0)
+const screenPlayMode2 = ref(0)
+const screenSaving = ref(false)
+const screenWaitingDevice = ref(false)
+const screenError = ref('')
+/** 控制板 0x6E 单行 GBK 上限。汉字按 2 字节计。 */
+const LED_LINE_MAX_BYTES = 32
+/** 协议 2.4：`C 固定为 20，`Y 年，`M 月，`D 日，`V 星期。控制板用自身时钟替换。 */
+const LED_LIVE_DATE = '`C`Y年`M月`D日 星期`V'
+/** 协议 0x6E 每行 DM。21 是连续左移。 */
+const SCREEN_PLAY_MODES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 13, 21] as const
+const WEEKDAY_ZH = ['日', '一', '二', '三', '四', '五', '六'] as const
+
+type ScreenLineKind = 'TEXT' | 'DATE'
+
+/** 按品牌+型号从已接入驱动读取屏显规格。行数只来自驱动，不解析型号名。 */
+function displaySpecFor(device: BarrierView): ModelDisplayView | null {
+  const model = device.model?.trim().toLowerCase()
+  if (!model) return null
+  const brand = device.brand?.trim().toLowerCase() ?? ''
+  const branded = brand
+    ? drivers.value.filter((item) => item.brand.trim().toLowerCase() === brand)
+    : []
+  const pool = branded.length > 0 ? branded : drivers.value
+  for (const driver of pool) {
+    const hit = (driver.modelDisplays ?? []).find((item) => item.model.trim().toLowerCase() === model)
+    if (hit) return hit
+  }
+  return null
+}
+
+const screenSpec = computed(() => (screenDevice.value ? displaySpecFor(screenDevice.value) : null))
+
+function ledLineBytes(text: string): number {
+  let bytes = 0
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0
+    bytes += code <= 0x7f ? 1 : 2
+  }
+  return bytes
+}
+
+function playModeOf(value: number | null | undefined): number {
+  return value != null && (SCREEN_PLAY_MODES as readonly number[]).includes(value) ? value : 0
+}
+
+function lineKindOf(text: string): ScreenLineKind {
+  return text === LED_LIVE_DATE ? 'DATE' : 'TEXT'
+}
+
+/** 预览用站点时区的当天日期。屏上实际数字由控制板时钟替换。 */
+function liveDateSample(): string {
+  const now = new Date()
+  let year = String(now.getFullYear())
+  let month = String(now.getMonth() + 1).padStart(2, '0')
+  let day = String(now.getDate()).padStart(2, '0')
+  let weekIndex = now.getDay()
+  try {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: siteTimezone.value,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+      })
+        .formatToParts(now)
+        .map((part) => [part.type, part.value]),
+    )
+    year = parts.year ?? year
+    month = parts.month ?? month
+    day = parts.day ?? day
+    const indexed = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday ?? '')
+    if (indexed >= 0) weekIndex = indexed
+  } catch {
+    // 站点时区无效时用浏览器本地日期
+  }
+  return `${year}年${month}月${day}日 星期${WEEKDAY_ZH[weekIndex]}`
+}
+
+function resolvedLine(kind: ScreenLineKind, text: string): string {
+  return kind === 'DATE' ? LED_LIVE_DATE : text.trim()
+}
+
+function previewLine(kind: ScreenLineKind, text: string): string {
+  if (kind === 'DATE') return liveDateSample()
+  return text.trim() || t('barriers.screenLineBlank')
+}
+
+function openScreenConfig(device: BarrierView): void {
+  if (!device.model) return
+  screenError.value = ''
+  const line1 = device.screenLine1 ?? ''
+  const line2 = device.screenLine2 ?? ''
+  screenLine1Kind.value = lineKindOf(line1)
+  screenLine2Kind.value = lineKindOf(line2)
+  screenLine1.value = screenLine1Kind.value === 'DATE' ? '' : line1
+  screenLine2.value = screenLine2Kind.value === 'DATE' ? '' : line2
+  screenStaySeconds.value = device.screenStaySeconds ?? 10
+  screenPlayMode1.value = playModeOf(device.screenPlayMode1)
+  screenPlayMode2.value = playModeOf(device.screenPlayMode2)
+  screenDevice.value = device
+}
+
+function closeScreenConfig(): void {
+  if (screenSaving.value) return
+  screenDevice.value = null
+  screenLine1.value = ''
+  screenLine2.value = ''
+  screenLine1Kind.value = 'TEXT'
+  screenLine2Kind.value = 'TEXT'
+  screenStaySeconds.value = 10
+  screenPlayMode1.value = 0
+  screenPlayMode2.value = 0
+  screenError.value = ''
+}
+
+async function saveScreenConfig(): Promise<void> {
+  const device = screenDevice.value
+  if (!device || !isAdmin.value) return
+  const line1 = resolvedLine(screenLine1Kind.value, screenLine1.value)
+  const line2 = resolvedLine(screenLine2Kind.value, screenLine2.value)
+  const staySeconds = screenStaySeconds.value
+  if (!Number.isInteger(staySeconds) || staySeconds < 0 || staySeconds > 255) {
+    screenError.value = t('barriers.screenStayInvalid')
+    return
+  }
+  if (ledLineBytes(line1) > LED_LINE_MAX_BYTES) {
+    screenError.value = t('barriers.screenLineTooLong', { line: 1 })
+    return
+  }
+  if (ledLineBytes(line2) > LED_LINE_MAX_BYTES) {
+    screenError.value = t('barriers.screenLineTooLong', { line: 2 })
+    return
+  }
+  screenSaving.value = true
+  screenWaitingDevice.value = false
+  screenError.value = ''
+  try {
+    const result = await updateBarrierScreen(
+      device.id,
+      { line1, line2, staySeconds, playMode1: screenPlayMode1.value, playMode2: screenPlayMode2.value },
+      locale.value,
+    )
+    const saved = result.data.device
+    devices.value = devices.value.map((item) => (item.id === saved.id ? saved : item))
+    const commandId = result.data.commandId
+    if (!commandId) {
+      screenDevice.value = null
+      showSyncNotice(
+        line1 || line2 ? 'error' : 'ok',
+        t(line1 || line2 ? 'barriers.screenSavedNotSent' : 'barriers.screenSavedNoPush'),
+      )
+      return
+    }
+    screenWaitingDevice.value = true
+    const status = await waitForDeviceCommand(device.id, commandId)
+    screenDevice.value = null
+    if (status === 'DELIVERED') {
+      showSyncNotice('ok', t('barriers.screenPushed'))
+    } else {
+      showSyncNotice('error', t('barriers.screenPushPending'))
+    }
+  } catch (error) {
+    screenError.value = error instanceof ApiError ? error.message : t('barriers.screenSaveFailed')
+  } finally {
+    screenSaving.value = false
+    screenWaitingDevice.value = false
+  }
 }
 
 function openEdit(device: BarrierView): void {
@@ -615,6 +797,18 @@ function onStreamVideoError(): void {
 const SYNC_POLL_INTERVAL_MS = 1000
 const SYNC_POLL_TIMEOUT_MS = 12000
 
+async function waitForDeviceCommand(deviceId: string, commandId: string): Promise<string> {
+  let status = 'PENDING'
+  const deadline = Date.now() + SYNC_POLL_TIMEOUT_MS
+  while (status === 'PENDING' && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, SYNC_POLL_INTERVAL_MS))
+    const recent = await listDeviceCommands(deviceId, 20, locale.value)
+    const found = recent.data.find((cmd) => cmd.id === commandId)
+    if (found) status = found.status
+  }
+  return status
+}
+
 function showSyncNotice(kind: 'ok' | 'error', text: string): void {
   syncNotice.value = { kind, text }
   if (syncNoticeTimer !== null) {
@@ -658,6 +852,29 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
     showSyncNotice('error', t('barriers.syncTimeQueueFailed', { name, reason }))
   } finally {
     syncBusyId.value = null
+  }
+}
+
+async function fullResyncWhitelist(device: BarrierView): Promise<void> {
+  if (whitelistResyncBusyId.value !== null) return
+  const name = device.name || device.code
+  if (!window.confirm(t('barriers.fullResyncConfirm', { name }))) return
+  whitelistResyncBusyId.value = device.id
+  syncNotice.value = null
+  try {
+    const res = await fullResyncBarrierCameraWhitelist(device.id, locale.value)
+    const cameras = res.data?.cameras ?? 0
+    const plates = res.data?.plates ?? 0
+    if (cameras === 0) {
+      showSyncNotice('ok', t('barriers.fullResyncNone', { name }))
+    } else {
+      showSyncNotice('ok', t('barriers.fullResyncDone', { name, plates }))
+    }
+  } catch (error) {
+    const reason = error instanceof ApiError ? error.message : t('barriers.fullResyncFailed')
+    showSyncNotice('error', reason)
+  } finally {
+    whitelistResyncBusyId.value = null
   }
 }
 </script>
@@ -709,6 +926,7 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
           <tr>
             <th>{{ t('barriers.colName') }}</th>
             <th>{{ t('barriers.colCode') }}</th>
+            <th>{{ t('barriers.model') }}</th>
             <th>{{ t('page.colStatus') }}</th>
             <th>{{ t('barriers.colBoundLane') }}</th>
             <th>{{ t('page.colUpdated') }}</th>
@@ -719,6 +937,17 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
           <tr v-for="item in filteredDevices" :key="item.id">
             <td>{{ item.name }}</td>
             <td>{{ item.code }}</td>
+            <td>
+              <button
+                v-if="item.model"
+                type="button"
+                class="link-btn model-link"
+                @click="openScreenConfig(item)"
+              >
+                {{ item.model }}
+              </button>
+              <span v-else>—</span>
+            </td>
             <td>
               <span v-if="!item.enabled" class="pill fail">
                 {{ t('lanes.statusDisabled') }}
@@ -751,6 +980,19 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
                   @click="syncDeviceTime(item)"
                 >
                   {{ syncBusyId === item.id ? t('barriers.syncTimeSyncing') : t('barriers.syncTime') }}
+                </button>
+                <button
+                  v-if="isAdmin && item.enabled && item.laneId"
+                  type="button"
+                  class="link-btn"
+                  :disabled="whitelistResyncBusyId !== null"
+                  @click="fullResyncWhitelist(item)"
+                >
+                  {{
+                    whitelistResyncBusyId === item.id
+                      ? t('barriers.fullResyncing')
+                      : t('barriers.fullResync')
+                  }}
                 </button>
                 <button
                   v-if="isAdmin"
@@ -852,6 +1094,142 @@ async function syncDeviceTime(device: BarrierView): Promise<void> {
           </button>
         </div>
       </div>
+    </div>
+
+    <div v-if="screenDevice" class="modal-backdrop" @click.self="closeScreenConfig">
+      <form class="modal" novalidate @submit.prevent="saveScreenConfig">
+        <h3>{{ t('barriers.screenTitle') }}</h3>
+        <p class="hint">{{ t('barriers.screenHint') }}</p>
+        <p class="remove-meta">
+          <span><b>{{ t('barriers.name') }}:</b> {{ screenDevice.name }}</span>
+          <span><b>{{ t('barriers.model') }}:</b> {{ screenDevice.model }}</span>
+        </p>
+        <div class="screen-rows">
+          <span>{{ t('barriers.screenRows') }}</span>
+          <strong v-if="screenSpec">{{ t('barriers.screenRowsValue', { count: screenSpec.rows }) }}</strong>
+          <strong v-else>{{ t('barriers.screenRowsUnknown') }}</strong>
+        </div>
+        <p v-if="screenSpec?.scrollable" class="field-hint">{{ t('barriers.screenScrollable') }}</p>
+        <div class="line-block">
+          <span>{{ t('barriers.screenLine1') }}</span>
+          <div class="orient-options">
+            <label class="orient-option" :class="{ active: screenLine1Kind === 'TEXT' }">
+              <input
+                v-model="screenLine1Kind"
+                type="radio"
+                value="TEXT"
+                :disabled="!isAdmin || screenSaving"
+              />
+              <span>{{ t('barriers.screenLineKindText') }}</span>
+            </label>
+            <label class="orient-option" :class="{ active: screenLine1Kind === 'DATE' }">
+              <input
+                v-model="screenLine1Kind"
+                type="radio"
+                value="DATE"
+                :disabled="!isAdmin || screenSaving"
+              />
+              <span>{{ t('barriers.screenLineKindDate') }}</span>
+            </label>
+          </div>
+          <input
+            v-if="screenLine1Kind === 'TEXT'"
+            v-model="screenLine1"
+            type="text"
+            autocomplete="off"
+            :placeholder="t('barriers.screenLine1Placeholder')"
+            :disabled="!isAdmin || screenSaving"
+          />
+          <label class="play-mode">
+            <span>{{ t('barriers.screenPlayMode') }}</span>
+            <select v-model.number="screenPlayMode1" :disabled="!isAdmin || screenSaving">
+              <option v-for="mode in SCREEN_PLAY_MODES" :key="mode" :value="mode">
+                {{ t(`barriers.screenPlay.${mode}`) }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <div class="line-block">
+          <span>{{ t('barriers.screenLine2') }}</span>
+          <div class="orient-options">
+            <label class="orient-option" :class="{ active: screenLine2Kind === 'TEXT' }">
+              <input
+                v-model="screenLine2Kind"
+                type="radio"
+                value="TEXT"
+                :disabled="!isAdmin || screenSaving"
+              />
+              <span>{{ t('barriers.screenLineKindText') }}</span>
+            </label>
+            <label class="orient-option" :class="{ active: screenLine2Kind === 'DATE' }">
+              <input
+                v-model="screenLine2Kind"
+                type="radio"
+                value="DATE"
+                :disabled="!isAdmin || screenSaving"
+              />
+              <span>{{ t('barriers.screenLineKindDate') }}</span>
+            </label>
+          </div>
+          <input
+            v-if="screenLine2Kind === 'TEXT'"
+            v-model="screenLine2"
+            type="text"
+            autocomplete="off"
+            :placeholder="t('barriers.screenLine2Placeholder')"
+            :disabled="!isAdmin || screenSaving"
+          />
+          <label class="play-mode">
+            <span>{{ t('barriers.screenPlayMode') }}</span>
+            <select v-model.number="screenPlayMode2" :disabled="!isAdmin || screenSaving">
+              <option v-for="mode in SCREEN_PLAY_MODES" :key="mode" :value="mode">
+                {{ t(`barriers.screenPlay.${mode}`) }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <label>
+          <span>{{ t('barriers.screenStay') }}</span>
+          <input
+            v-model.number="screenStaySeconds"
+            type="number"
+            min="0"
+            max="255"
+            step="1"
+            :disabled="!isAdmin || screenSaving"
+          />
+        </label>
+        <p class="field-hint">{{ t('barriers.screenStayHint') }}</p>
+        <div class="led-preview" aria-hidden="true">
+          <span :class="{ blank: screenLine1Kind === 'TEXT' && !screenLine1.trim() }">
+            {{ previewLine(screenLine1Kind, screenLine1) }}
+          </span>
+          <span :class="{ blank: screenLine2Kind === 'TEXT' && !screenLine2.trim() }">
+            {{ previewLine(screenLine2Kind, screenLine2) }}
+          </span>
+        </div>
+        <p class="field-hint">{{ t('barriers.screenLineHint') }}</p>
+        <p class="field-hint">{{ t('barriers.screenPlayHint') }}</p>
+        <p v-if="screenLine1Kind === 'DATE' || screenLine2Kind === 'DATE'" class="field-hint">
+          {{ t('barriers.screenLineDateHint') }}
+        </p>
+        <p v-if="!isAdmin" class="field-hint">{{ t('barriers.screenViewOnly') }}</p>
+        <p v-if="screenError" class="form-error">{{ screenError }}</p>
+        <div class="actions">
+          <button type="button" class="ghost" :disabled="screenSaving" @click="closeScreenConfig">
+            {{ t('barriers.cancel') }}
+          </button>
+          <button v-if="isAdmin" type="submit" :disabled="screenSaving">
+            {{
+              screenWaitingDevice
+                ? t('barriers.screenPushing')
+                : screenSaving
+                  ? t('lanes.saving')
+                  : t('barriers.save')
+            }}
+          </button>
+        </div>
+      </form>
     </div>
 
     <div v-if="showForm" class="modal-backdrop">
@@ -1168,6 +1546,81 @@ tbody tr:last-child td {
   font-weight: 600;
   padding: 0;
   cursor: pointer;
+}
+
+.model-link {
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.line-block {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.play-mode {
+  margin-top: 0.15rem;
+}
+
+.screen-rows {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 8px;
+  background: #f7faf8;
+}
+
+.led-preview {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 0.6rem;
+  border-radius: 8px;
+  background: #1a1f1c;
+  color: #ff5a5a;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.led-preview span {
+  min-height: 1.35rem;
+  line-height: 1.35rem;
+}
+
+.led-preview .blank {
+  color: #6d5648;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.orient-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.orient-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.orient-option.active {
+  border-color: var(--accent);
+  background: #e8f5ef;
+}
+
+.orient-option input {
+  width: auto;
 }
 
 .link-btn.danger {

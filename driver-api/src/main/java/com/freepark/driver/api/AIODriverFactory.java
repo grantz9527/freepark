@@ -72,6 +72,16 @@ public interface AIODriverFactory {
     }
 
     /**
+     * 指定型号的屏显规格。对接页按型号展示行数；创建实例时应使用同一规格。
+     *
+     * <p>默认与 {@link #displayCapability()} 相同，即整条产品线共用一种屏幕。
+     * 同一工厂接管多种屏幕时，按型号返回对应行数。
+     */
+    default DisplayCapability displayCapability(String model) {
+        return displayCapability();
+    }
+
+    /**
      * 对外展示的受支持设备型号清单（对接页「支持哪些型号的设备」）。
      *
      * <p>约定：

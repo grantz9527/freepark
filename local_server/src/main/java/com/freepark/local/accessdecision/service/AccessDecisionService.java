@@ -5,6 +5,7 @@ import com.freepark.local.accessdecision.dto.AccessDecisionView;
 import com.freepark.local.accessdecision.dto.AccessDirection;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -26,7 +27,9 @@ import com.freepark.local.domain.PatternAllowlist;
 import com.freepark.local.domain.PatternAllowlistRepository;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.WhitelistVehicleRepository;
+import com.freepark.local.lot.support.LotOpenTimeRules;
 import com.freepark.local.parkingflow.service.LotOccupancyTracker;
+import com.freepark.local.sitesettings.service.SystemSettingsService;
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
 
@@ -40,7 +43,9 @@ import com.freepark.local.common.exception.ErrorCode;
  *       intercept; a plate that already has an OPEN session is not blocked).</li>
  *   <li>Access judgment rules in the lot's configured order (WHITELIST /
  *       BLACKLIST / PATTERN_ALLOWLIST); the first matching rule decides.</li>
- *   <li>For INTERNAL lots on entry: the plate must be a registered internal vehicle.</li>
+ *   <li>For INTERNAL lots on entry: the plate must be a registered internal vehicle,
+ *       unless the lot is currently within its configured open hours (non-internal
+ *       vehicles are then allowed as well).</li>
  *   <li>Lane plate-color intercept (provided by the caller when available).</li>
  *   <li>Exit without an open in-lot session: still allowed, flagged in remark.</li>
  * </ol>
@@ -56,6 +61,7 @@ public class AccessDecisionService {
     private final PatternAllowlistRepository patternAllowlist;
     private final ParkingSessionRepository sessions;
     private final LotOccupancyTracker occupancy;
+    private final SystemSettingsService systemSettings;
 
     public AccessDecisionService(
             ParkingLotRepository lots,
@@ -65,7 +71,8 @@ public class AccessDecisionService {
             BlacklistVehicleRepository blacklistVehicles,
             PatternAllowlistRepository patternAllowlist,
             ParkingSessionRepository sessions,
-            LotOccupancyTracker occupancy) {
+            LotOccupancyTracker occupancy,
+            SystemSettingsService systemSettings) {
         this.lots = lots;
         this.lanes = lanes;
         this.internalVehicles = internalVehicles;
@@ -74,6 +81,7 @@ public class AccessDecisionService {
         this.patternAllowlist = patternAllowlist;
         this.sessions = sessions;
         this.occupancy = occupancy;
+        this.systemSettings = systemSettings;
     }
 
     @Transactional(readOnly = true)
@@ -109,10 +117,15 @@ public class AccessDecisionService {
             }
         }
 
-        // 2. Internal lot entry requires a registered internal vehicle.
+        // 2. Internal lot entry requires a registered internal vehicle; during the lot's
+        //    open hours non-internal vehicles are allowed as well.
         if (isEntry
                 && lot.getLotType() == LotType.INTERNAL
                 && !isListedInternal(lotId, plate, color)) {
+            if (LotOpenTimeRules.isOpenAt(lot.getOpenTimeRules(),
+                    LocalDateTime.ofInstant(Instant.now(), systemSettings.getTimezone()))) {
+                return AccessDecisionView.allowed("open_time_window");
+            }
             return AccessDecisionView.intercepted("not_internal_vehicle");
         }
 

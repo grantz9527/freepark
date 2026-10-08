@@ -80,7 +80,7 @@ public class StreamPreviewService {
     public List<StreamPreviewSourceView> listSources() {
         Map<String, String> labelsByName = new LinkedHashMap<>();
         FrigateSettings settings = frigateSettings.findById(FrigateSettings.SINGLETON_ID).orElse(null);
-        if (settings != null) {
+        if (settings != null && settings.hasApiHost()) {
             mergeGo2rtcStreams(settings, labelsByName);
             mergeFrigateConfigCameras(settings, labelsByName);
         }
@@ -207,6 +207,9 @@ public class StreamPreviewService {
     private PreviewPipe openGo2rtc(String streamUrl) {
         FrigateSettings settings = frigateSettings.findById(FrigateSettings.SINGLETON_ID)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STREAM_PREVIEW_FAILED, "frigate settings"));
+        if (!settings.hasApiHost()) {
+            throw new BusinessException(ErrorCode.STREAM_PREVIEW_FAILED, "frigate api not configured");
+        }
         FreeparkProperties.Preview preview = properties.preview();
         List<URI> candidates = new ArrayList<>();
         // 本机 Docker 已映射 Frigate 5000，/api/go2rtc 可直达内置 go2rtc；1984 作为兜底

@@ -1,5 +1,6 @@
 package com.freepark.local.web;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -46,8 +47,10 @@ class SystemSettingsControllerTest {
                 .andExpect(jsonPath("$.data.timezone").exists())
                 .andExpect(jsonPath("$.data.imageStoragePath").exists())
                 .andExpect(jsonPath("$.data.imageStorageEnabled").value(true))
-                .andExpect(jsonPath("$.data.supportedLocales").isArray())
-                .andExpect(jsonPath("$.data.supportedTimezones").isArray());
+                .andExpect(jsonPath("$.data.supportedLocales", containsInAnyOrder("en", "zh-CN")))
+                .andExpect(jsonPath("$.data.supportedTimezones").isArray())
+                .andExpect(jsonPath("$.data.cameraWhitelistSync.owner").value(false))
+                .andExpect(jsonPath("$.data.cameraWhitelistSync.monthly").value(false));
     }
 
     @Test
@@ -168,5 +171,35 @@ class SystemSettingsControllerTest {
         mockMvc.perform(get("/api/v1/system-settings").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.imageStorageEnabled").value(false));
+    }
+
+    @Test
+    void adminCanToggleCameraWhitelistSync() throws Exception {
+        String token = adminToken();
+        String body = """
+                {
+                  "defaultLocale":"zh-CN",
+                  "timezone":"Asia/Shanghai",
+                  "defaultPlateColor":"BLUE",
+                  "allowedPlateColors":["BLUE"],
+                  "imageStoragePath":"./data/images",
+                  "softwarePlateProvider":"HYPER_LPR3",
+                  "hyperLpr3":{"enabled":false},
+                  "cameraWhitelistSync":{"owner":true,"monthly":false}
+                }
+                """;
+
+        mockMvc.perform(put("/api/v1/system-settings")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cameraWhitelistSync.owner").value(true))
+                .andExpect(jsonPath("$.data.cameraWhitelistSync.monthly").value(false));
+
+        mockMvc.perform(get("/api/v1/system-settings").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cameraWhitelistSync.owner").value(true))
+                .andExpect(jsonPath("$.data.cameraWhitelistSync.monthly").value(false));
     }
 }

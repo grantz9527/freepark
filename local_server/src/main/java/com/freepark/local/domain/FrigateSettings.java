@@ -35,6 +35,13 @@ public class FrigateSettings {
     @Column(name = "api_port", nullable = false)
     private int apiPort = DEFAULT_API_PORT;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "api_link_status", length = 16)
+    private FrigateLinkStatus apiLinkStatus = FrigateLinkStatus.DISCONNECTED;
+
+    @Column(name = "api_last_test_at")
+    private Instant apiLastTestAt;
+
     @Column(name = "mqtt_host", nullable = false, length = 255)
     private String mqttHost = DEFAULT_MQTT_HOST;
 
@@ -95,12 +102,36 @@ public class FrigateSettings {
         this.apiPort = apiPort;
     }
 
+    public boolean hasApiHost() {
+        return apiHost != null && !apiHost.isBlank();
+    }
+
+    public FrigateLinkStatus getApiLinkStatus() {
+        return apiLinkStatus == null ? FrigateLinkStatus.DISCONNECTED : apiLinkStatus;
+    }
+
+    public void setApiLinkStatus(FrigateLinkStatus apiLinkStatus) {
+        this.apiLinkStatus = apiLinkStatus;
+    }
+
+    public Instant getApiLastTestAt() {
+        return apiLastTestAt;
+    }
+
+    public void setApiLastTestAt(Instant apiLastTestAt) {
+        this.apiLastTestAt = apiLastTestAt;
+    }
+
     public String getMqttHost() {
         return mqttHost;
     }
 
     public void setMqttHost(String mqttHost) {
         this.mqttHost = mqttHost;
+    }
+
+    public boolean hasMqttHost() {
+        return mqttHost != null && !mqttHost.isBlank();
     }
 
     public int getMqttPort() {

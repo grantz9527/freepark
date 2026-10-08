@@ -26,7 +26,8 @@ public record UpdateSystemSettingsRequest(
         SoftwarePlateProvider softwarePlateProvider,
         @Valid Yolo26Update yolo26Plate,
         @NotNull @Valid HyperLpr3Update hyperLpr3,
-        @Valid CloudStorageUpdate cloudStorage) {
+        @Valid CloudStorageUpdate cloudStorage,
+        @Valid CameraWhitelistSyncUpdate cameraWhitelistSync) {
 
     public record Yolo26Update(
             boolean enabled,
@@ -42,6 +43,12 @@ public record UpdateSystemSettingsRequest(
             @DecimalMin(value = "0.0") @DecimalMax(value = "1.0") Double minConfidence,
             @Min(500) @Max(600_000) Integer connectTimeoutMs,
             @Min(1000) @Max(600_000) Integer readTimeoutMs) {
+    }
+
+    public record CameraWhitelistSyncUpdate(
+            Boolean owner,
+            Boolean monthly,
+            @Size(max = 255) String callbackBaseUrl) {
     }
 
     public record CloudStorageUpdate(

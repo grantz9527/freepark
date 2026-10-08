@@ -96,8 +96,8 @@ public class FrigateMqttSubscriber {
     public synchronized void reconnect() {
         disconnectQuietly();
         FrigateSettings settings = settingsRepository.findById(FrigateSettings.SINGLETON_ID).orElse(null);
-        if (settings == null || !settings.isEnabled()) {
-            log.info("Frigate MQTT subscriber idle (disabled or missing settings)");
+        if (settings == null || !settings.isEnabled() || !settings.hasMqttHost()) {
+            log.info("Frigate MQTT subscriber idle (disabled or MQTT not configured)");
             return;
         }
         try {
@@ -588,6 +588,9 @@ public class FrigateMqttSubscriber {
     }
 
     private byte[] downloadSnapshot(String path, FrigateSettings settings) {
+        if (settings == null || !settings.hasApiHost()) {
+            return null;
+        }
         String base = "http://" + settings.getApiHost().trim() + ":" + settings.getApiPort();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(base + path))

@@ -130,6 +130,13 @@ export function createOperator(
 
 export type LotType = 'INTERNAL' | 'PUBLIC'
 
+/** 内部车场对外开放时段；day 为 ISO 周几（1=周一 … 7=周日），start/end 为 HH:mm。 */
+export interface LotOpenTimeRule {
+  day: number
+  start: string
+  end: string
+}
+
 export type InterceptRuleType = 'ARREARS' | 'BLACKLIST' | 'FULL'
 
 export type AccessJudgmentRuleType = 'BLACKLIST' | 'WHITELIST' | 'PATTERN_ALLOWLIST'
@@ -152,6 +159,7 @@ export interface LotView {
   totalSpaces: number
   enabled: boolean
   mapData: string | null
+  openTimeRules: LotOpenTimeRule[]
   createdAt: string
   updatedAt: string
 }
@@ -168,6 +176,7 @@ export function createLot(
     address?: string
     totalSpaces?: number
     enabled?: boolean
+    openTimeRules?: LotOpenTimeRule[]
   },
   locale: string,
 ): Promise<ApiResponse<LotView>> {
@@ -268,6 +277,24 @@ export interface BarrierView {
   online: boolean
   createdAt: string
   updatedAt: string
+  /** 显示屏安装方向；未配置时为空。 */
+  screenOrientation?: ScreenOrientation | null
+  /** 空闲时显示屏第一行。 */
+  screenLine1?: string | null
+  /** 空闲时显示屏第二行。 */
+  screenLine2?: string | null
+  /** 默认屏显每轮停留秒数，0–255。 */
+  screenStaySeconds?: number | null
+  /** 第一行播放方式，对应控制板显示模式。空为立即显示。 */
+  screenPlayMode1?: number | null
+  /** 第二行播放方式。 */
+  screenPlayMode2?: number | null
+}
+
+/** 显示屏配置保存结果。commandId 为空表示已保存但没有排队下发。 */
+export interface UpdateScreenResult {
+  device: BarrierView
+  commandId: string | null
 }
 
 /** 设备档案写入字段（品牌/型号/连接参数均可选，缺省则档案暂无驱动命令通道）。 */
@@ -282,8 +309,18 @@ export interface BarrierWritePayload {
   enabled?: boolean
 }
 
+/** 显示屏安装方向（现场配置，行数不在此字段）。 */
+export type ScreenOrientation = 'LANDSCAPE' | 'PORTRAIT'
+
 /** 一体机驱动能力（与后端 Capability 枚举对齐）。 */
 export type DriverCapability = 'PLATE_RECOGNITION' | 'GATE_CONTROL' | 'DISPLAY' | 'VOICE'
+
+/** 某个具体型号的屏显规格，行数由 freepark-driver-api 按型号上报。 */
+export interface ModelDisplayView {
+  model: string
+  rows: number
+  scrollable: boolean
+}
 
 /** 驱动工厂目录视图：来自平台启动时自动发现的驱动模块。 */
 export interface DriverFactoryView {
@@ -293,6 +330,8 @@ export interface DriverFactoryView {
   /** 对外展示的受支持设备型号清单；空数组表示覆盖整条产品线（model 通配）。 */
   supportedModels: string[]
   capabilities: DriverCapability[]
+  /** 各具体型号的屏显行数。旧接口可能缺省。 */
+  modelDisplays?: ModelDisplayView[]
 }
 
 /** 列出当前构建已接入的全部一体机驱动（多个驱动一并返回）。 */
@@ -399,7 +438,29 @@ export function createBarrierGlobal(
   )
 }
 
-/** 全局更新设备信息。 */
+/** 保存默认两行、停留秒数和每行播放方式。有文字时服务端会排队下发到控制板。 */
+export function updateBarrierScreen(
+  barrierId: string,
+  payload: {
+    line1: string
+    line2: string
+    staySeconds: number
+    playMode1: number
+    playMode2: number
+  },
+  locale: string,
+): Promise<ApiResponse<UpdateScreenResult>> {
+  return apiCall(
+    `/api/v1/barriers/${barrierId}/screen`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
 export function updateBarrierGlobal(
   barrierId: string,
   payload: BarrierWritePayload,
@@ -576,6 +637,7 @@ export function updateLot(
     totalSpaces?: number
     enabled?: boolean
     mapData?: string
+    openTimeRules?: LotOpenTimeRule[]
   },
   locale: string,
 ): Promise<ApiResponse<LotView>> {
@@ -1121,6 +1183,13 @@ export function deleteBooth(
   return apiCall(`/api/v1/lots/${lotId}/booths/${boothId}`, { method: 'DELETE' }, locale)
 }
 
+export type CameraWhitelistSyncStatus =
+  | 'DELIVERED'
+  | 'PENDING_DELIVER'
+  | 'EXPIRED_REMOVED'
+  | 'EXPIRED_PENDING_REMOVE'
+  | 'NOT_EFFECTIVE'
+
 export interface WhitelistVehicleView {
   id: string
   lotId: string
@@ -1134,6 +1203,7 @@ export interface WhitelistVehicleView {
   startTime: string | null
   endTime: string | null
   enabled: boolean
+  cameraWhitelistSyncStatus?: CameraWhitelistSyncStatus | null
   createdAt: string
   updatedAt: string
 }
@@ -1463,6 +1533,12 @@ export interface HyperLpr3SettingsView {
   readTimeoutMs: number
 }
 
+export interface CameraWhitelistSyncSettingsView {
+  owner: boolean
+  monthly: boolean
+  callbackBaseUrl?: string | null
+}
+
 export type CloudStorageProvider = 'ALIYUN_OSS' | 'HUAWEI_OBS' | 'TENCENT_COS'
 
 export interface AliyunOssSettingsView {
@@ -1547,6 +1623,7 @@ export interface SystemSettingsView {
   softwarePlateProvider: SoftwarePlateProvider
   hyperLpr3: HyperLpr3SettingsView
   cloudStorage?: CloudStorageSettingsView | null
+  cameraWhitelistSync?: CameraWhitelistSyncSettingsView | null
   supportedLocales: string[]
   supportedTimezones: string[]
   supportedPlateColors: PlateColor[]
@@ -1572,6 +1649,10 @@ export function updateSystemSettings(
       minConfidence?: number | null
       connectTimeoutMs?: number | null
       readTimeoutMs?: number | null
+    }
+    cameraWhitelistSync?: {
+      owner: boolean
+      monthly: boolean
     }
     cloudStorage?: {
       enabled: boolean
@@ -1612,6 +1693,35 @@ export function updateSystemSettings(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     },
+    locale,
+  )
+}
+
+export interface CameraWhitelistFullResyncView {
+  cameras: number
+  plates: number
+}
+
+/** 车场一键重同步：该车场已绑定臻识识别一体机清空并重写机内白名单。 */
+export function fullResyncLotCameraWhitelist(
+  lotId: string,
+  locale: string,
+): Promise<ApiResponse<CameraWhitelistFullResyncView>> {
+  return apiCall(
+    `/api/v1/lots/${encodeURIComponent(lotId)}/camera-whitelist/full-resync`,
+    { method: 'POST' },
+    locale,
+  )
+}
+
+/** 单台识别一体机一键重同步。 */
+export function fullResyncBarrierCameraWhitelist(
+  barrierId: string,
+  locale: string,
+): Promise<ApiResponse<CameraWhitelistFullResyncView>> {
+  return apiCall(
+    `/api/v1/barriers/${encodeURIComponent(barrierId)}/camera-whitelist/full-resync`,
+    { method: 'POST' },
     locale,
   )
 }
@@ -1716,12 +1826,74 @@ export function quoteFee(
   )
 }
 
+export type DatabaseSettingsSource = 'FILE' | 'ENVIRONMENT' | 'DEFAULT'
+
+export interface DatabaseSettingsView {
+  host: string
+  port: number
+  database: string
+  username: string
+  passwordSet: boolean
+  source: DatabaseSettingsSource
+  filePresent: boolean
+  connected: boolean
+  updatedAt: string | null
+}
+
+export interface UpdateDatabaseSettingsPayload {
+  host: string
+  port: number
+  database: string
+  username: string
+  password: string
+}
+
+export function getDatabaseSettings(locale: string): Promise<ApiResponse<DatabaseSettingsView>> {
+  return apiCall('/api/v1/database-settings', { method: 'GET' }, locale)
+}
+
+export function updateDatabaseSettings(
+  payload: UpdateDatabaseSettingsPayload,
+  locale: string,
+): Promise<ApiResponse<DatabaseSettingsView>> {
+  return apiCall(
+    '/api/v1/database-settings',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function testDatabaseSettings(
+  payload: UpdateDatabaseSettingsPayload,
+  locale: string,
+): Promise<ApiResponse<DatabaseSettingsView>> {
+  return apiCall(
+    '/api/v1/database-settings/test',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    locale,
+  )
+}
+
+export function restoreDatabaseSettings(locale: string): Promise<ApiResponse<DatabaseSettingsView>> {
+  return apiCall('/api/v1/database-settings', { method: 'DELETE' }, locale)
+}
+
 export type FrigateLinkStatus = 'DISCONNECTED' | 'CONNECTED' | 'FAILED'
 export type FrigateBindDirection = 'ENTRANCE' | 'EXIT'
 
 export interface FrigateSettingsView {
   apiHost: string
   apiPort: number
+  apiLinkStatus: FrigateLinkStatus
+  apiLastTestAt: string | null
   mqttHost: string
   mqttPort: number
   topicPrefix: string
@@ -1780,6 +1952,10 @@ export function updateFrigateSettings(
 
 export function testFrigateSettings(locale: string): Promise<ApiResponse<FrigateSettingsView>> {
   return apiCall('/api/v1/frigate/settings/test', { method: 'POST' }, locale)
+}
+
+export function testFrigateApi(locale: string): Promise<ApiResponse<FrigateSettingsView>> {
+  return apiCall('/api/v1/frigate/settings/test-api', { method: 'POST' }, locale)
 }
 
 export function listFrigateCamerasApi(locale: string): Promise<ApiResponse<FrigateCameraView[]>> {

@@ -17,7 +17,7 @@ spring:
   jackson:
     time-zone: UTC
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3307}/${MYSQL_DATABASE:freepark_local}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&rewriteBatchedStatements=true
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:8306}/${MYSQL_DATABASE:freepark_local}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&rewriteBatchedStatements=true
     username: ${MYSQL_USER:freepark_local}
     password: ${MYSQL_PASSWORD:freepark_local}
     hikari:
@@ -52,6 +52,10 @@ management:
         enabled: true
 
 freepark:
+  camera-whitelist-sync:
+    # 定时对账：到点写入、过期移除；未生效创建时不预下发（与手动保存/删除同一入队路径）
+    initial-delay-ms: ${CAMERA_WHITELIST_SYNC_INITIAL_DELAY_MS:5000}
+    interval-ms: ${CAMERA_WHITELIST_SYNC_INTERVAL_MS:30000}
   preview:
     # Frigate 内置 go2rtc 端口；拉流失败时再试 Frigate API 上的 /api/go2rtc 反代
     go2rtc-port: ${GO2RTC_PORT:1984}
@@ -59,6 +63,8 @@ freepark:
     max-sessions: ${PREVIEW_MAX_SESSIONS:2}
     connect-timeout: ${PREVIEW_CONNECT_TIMEOUT:20s}
   frigate:
+    api-host: ${FRIGATE_API_HOST:127.0.0.1}
+    mqtt-host: ${FRIGATE_MQTT_HOST:127.0.0.1}
     # 同一相机识别出同一合法车牌后的入库去重窗口（毫秒）
     plate-dedup-window-ms: ${FRIGATE_PLATE_DEDUP_WINDOW_MS:30000}
   jwt:

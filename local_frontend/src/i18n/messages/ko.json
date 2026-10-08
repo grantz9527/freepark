@@ -143,7 +143,19 @@
     "interceptLotNotFound": "Parking lot not found",
     "backToLots": "Back to parking lots",
     "map": "주차장 맵",
-    "mapEdit": "맵 편집"
+    "mapEdit": "맵 편집",
+    "openTime": "개방 시간",
+    "openTimeHint": "내부 주차장에만 적용: 해당 시간대에는 내부 차량이 아니어도 입차할 수 있습니다.",
+    "addOpenTime": "시간대 추가",
+    "removeOpenTime": "삭제",
+    "openTimeInvalid": "개방 시간이 올바르지 않습니다: 시작 시간이 종료 시간보다 빨라야 합니다",
+    "weekday1": "월",
+    "weekday2": "화",
+    "weekday3": "수",
+    "weekday4": "목",
+    "weekday5": "금",
+    "weekday6": "토",
+    "weekday7": "일"
   },
   "lotMap": {
     "title": "주차장 맵",

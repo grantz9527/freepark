@@ -52,8 +52,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/i18n").permitAll()
                         .requestMatchers("/api/v1/device-gateway/**").permitAll()
+                        .requestMatchers("/whitelist_replay", "/whitelist_reply").permitAll()
                         .requestMatchers("/api/v1/images/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers("/api/**", "/actuator/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
                 .exceptionHandling(ex -> ex

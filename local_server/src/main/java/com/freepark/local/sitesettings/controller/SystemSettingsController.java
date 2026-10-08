@@ -12,9 +12,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.freepark.local.common.api.ApiResponse;
 import com.freepark.local.common.i18n.MessageService;
-import com.freepark.local.sitesettings.service.SystemSettingsService;
 import com.freepark.local.sitesettings.dto.SystemSettingsView;
 import com.freepark.local.sitesettings.dto.UpdateSystemSettingsRequest;
+import com.freepark.local.sitesettings.service.SystemSettingsService;
 
 import jakarta.validation.Valid;
 

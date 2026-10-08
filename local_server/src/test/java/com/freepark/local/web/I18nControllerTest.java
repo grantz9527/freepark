@@ -36,8 +36,15 @@ class I18nControllerTest {
 
     @Test
     void usesLangQueryParameter() throws Exception {
+        mockMvc.perform(get("/api/v1/i18n").param("lang", "zh-CN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.welcome").value("欢迎使用 FreePark 本地服务"));
+    }
+
+    @Test
+    void unsupportedLangFallsBackToEnglish() throws Exception {
         mockMvc.perform(get("/api/v1/i18n").param("lang", "ja"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.welcome").value("FreePark ローカルへようこそ"));
+                .andExpect(jsonPath("$.data.welcome").value("Welcome to FreePark Local"));
     }
 }

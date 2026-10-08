@@ -143,7 +143,19 @@
     "interceptLotNotFound": "Parking lot not found",
     "backToLots": "Back to parking lots",
     "map": "Mapa do estacionamento",
-    "mapEdit": "Editar mapa"
+    "mapEdit": "Editar mapa",
+    "openTime": "Horário de abertura",
+    "openTimeHint": "Apenas para estacionamentos internos: nestes horários, veículos externos também podem entrar.",
+    "addOpenTime": "Adicionar período",
+    "removeOpenTime": "Remover",
+    "openTimeInvalid": "Horário inválido: a hora de início deve ser anterior à de fim",
+    "weekday1": "Seg",
+    "weekday2": "Ter",
+    "weekday3": "Qua",
+    "weekday4": "Qui",
+    "weekday5": "Sex",
+    "weekday6": "Sáb",
+    "weekday7": "Dom"
   },
   "lotMap": {
     "title": "Mapa do estacionamento",

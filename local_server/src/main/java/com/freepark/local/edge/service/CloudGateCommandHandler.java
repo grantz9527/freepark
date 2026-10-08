@@ -25,8 +25,7 @@ import com.freepark.local.domain.RecognitionRecordRepository;
 import com.freepark.local.parkingflow.service.ParkingSessionService;
 
 /**
- * 执行云端缴费开闸：匹配通道最新一次欠费拦截识别（15 分钟内、车牌一致、未被新识别覆盖），
- * 再向识别一体机主动 HTTP 下发开闸并播报；无驱动/地址时入队 OPEN 供轮询设备取走。
+ * 执行云端开闸：缴费开闸匹配通道最新欠费拦截识别；远程开闸直接打开通道绑定道闸。
  */
 @Service
 public class CloudGateCommandHandler {
@@ -86,34 +85,68 @@ public class CloudGateCommandHandler {
             return;
         }
         String source = "cloud-pay:" + (commandId == null || commandId.isBlank() ? normalizedPlate : commandId);
-        int opened = 0;
-        for (UUID deviceId : deviceIds) {
-            ParkingBarrier device = barriers.findById(deviceId).orElse(null);
-            if (device == null || !device.isEnabled()) {
-                log.warn("缴费开闸跳过：设备不存在或已停用 deviceId={} plate={}", deviceId, normalizedPlate);
-                continue;
-            }
-            String voiceText = passVoice(normalizedPlate, device);
-            String ledText = passLed(normalizedPlate, device);
-            boolean pushed = aioDrivers.openGateSystem(device, source, voiceText, ledText);
-            if (!pushed) {
-                try {
-                    commands.enqueueSystemDetached(device.getId(), DeviceCommand.Action.OPEN, source);
-                    log.info("缴费开闸已入队（等待设备轮询） device={} plate={} commandId={}",
-                            device.getCode(), normalizedPlate, commandId);
-                } catch (Exception ex) {
-                    log.warn("缴费开闸入队失败 device={} plate={}：{}",
-                            device.getCode(), normalizedPlate, ex.getMessage());
-                    continue;
-                }
-            }
-            opened++;
-        }
+        int opened = openDevices(deviceIds, source, normalizedPlate, commandId, "缴费");
         log.info("缴费开闸完成 plate={} lot={} lane={} devices={} opened={} commandId={}",
                 normalizedPlate, lotCode, laneCode, deviceIds.size(), opened, commandId);
         if (opened > 0) {
             closeOpenSessions(deviceIds, normalizedPlate);
         }
+    }
+
+    /**
+     * 云端岗亭远程开闸：按通道编码打开该通道全部启用道闸，不依赖缴费拦截记录。
+     */
+    @Transactional
+    public void openRemote(String laneCode, String commandId) {
+        if (laneCode == null || laneCode.isBlank()) {
+            log.warn("远程开闸忽略：通道编码为空 commandId={}", commandId);
+            return;
+        }
+        ParkingLane lane = lanes.findByCodeIgnoreCase(laneCode.trim()).orElse(null);
+        if (lane == null || !lane.isEnabled()) {
+            log.warn("远程开闸跳过：通道不存在或已停用 lane={} commandId={}", laneCode, commandId);
+            return;
+        }
+        Set<UUID> deviceIds = new LinkedHashSet<>();
+        for (ParkingBarrier barrier : barriers.findAllByLaneIdOrderByCreatedAtDesc(lane.getId())) {
+            if (barrier.isEnabled()) {
+                deviceIds.add(barrier.getId());
+            }
+        }
+        if (deviceIds.isEmpty()) {
+            log.info("远程开闸无可用道闸 lane={} commandId={}", laneCode, commandId);
+            return;
+        }
+        String source = "cloud-remote:" + (commandId == null || commandId.isBlank() ? laneCode.trim() : commandId);
+        int opened = openDevices(deviceIds, source, null, commandId, "远程");
+        log.info("远程开闸完成 lane={} devices={} opened={} commandId={}",
+                laneCode, deviceIds.size(), opened, commandId);
+    }
+
+    private int openDevices(Set<UUID> deviceIds, String source, String plate, String commandId, String kind) {
+        int opened = 0;
+        for (UUID deviceId : deviceIds) {
+            ParkingBarrier device = barriers.findById(deviceId).orElse(null);
+            if (device == null || !device.isEnabled()) {
+                log.warn("{}开闸跳过：设备不存在或已停用 deviceId={}", kind, deviceId);
+                continue;
+            }
+            String voiceText = plate == null ? null : passVoice(plate, device);
+            String ledText = plate == null ? null : passLed(plate, device);
+            boolean pushed = aioDrivers.openGateSystem(device, source, voiceText, ledText);
+            if (!pushed) {
+                try {
+                    commands.enqueueSystemDetached(device.getId(), DeviceCommand.Action.OPEN, source);
+                    log.info("{}开闸已入队（等待设备轮询） device={} commandId={}",
+                            kind, device.getCode(), commandId);
+                } catch (Exception ex) {
+                    log.warn("{}开闸入队失败 device={}：{}", kind, device.getCode(), ex.getMessage());
+                    continue;
+                }
+            }
+            opened++;
+        }
+        return opened;
     }
 
     private List<UUID> devicesOnPayableLane(String laneCode, String plate, String plateColor, Instant since) {

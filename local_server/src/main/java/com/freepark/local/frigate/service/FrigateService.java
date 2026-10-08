@@ -1,5 +1,10 @@
 package com.freepark.local.frigate.service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -37,6 +42,9 @@ public class FrigateService {
     private final LocalUserRepository users;
     private final FrigateMqttSubscriber mqttSubscriber;
     private final FrigateEventHandler eventHandler;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
 
     public FrigateService(
             FrigateSettingsRepository settingsRepository,
@@ -62,9 +70,12 @@ public class FrigateService {
     public FrigateSettingsView updateSettings(UUID requesterId, UpdateFrigateSettingsRequest request) {
         requireAdmin(requesterId);
         FrigateSettings settings = requireSettings();
-        String apiHost = trimRequired(request.apiHost());
-        String mqttHost = trimRequired(request.mqttHost());
-        String topicPrefix = stripTrailingSlash(trimRequired(request.topicPrefix()));
+        String apiHost = trimToEmpty(request.apiHost());
+        String mqttHost = trimToEmpty(request.mqttHost());
+        String topicPrefix = stripTrailingSlash(trimToEmpty(request.topicPrefix()));
+        if (topicPrefix.isEmpty()) {
+            topicPrefix = FrigateSettings.DEFAULT_TOPIC_PREFIX;
+        }
         settings.setApiHost(apiHost);
         settings.setApiPort(request.apiPort());
         settings.setMqttHost(mqttHost);
@@ -75,8 +86,14 @@ public class FrigateService {
         if (!isBlank(request.mqttPassword())) {
             settings.setMqttPassword(request.mqttPassword());
         }
-        settings.setLinkStatus(FrigateLinkStatus.DISCONNECTED);
-        settings.setLastTestAt(null);
+        if (!settings.hasApiHost()) {
+            settings.setApiLinkStatus(FrigateLinkStatus.DISCONNECTED);
+            settings.setApiLastTestAt(null);
+        }
+        if (!settings.hasMqttHost() || !settings.isEnabled()) {
+            settings.setLinkStatus(FrigateLinkStatus.DISCONNECTED);
+            settings.setLastTestAt(null);
+        }
         FrigateSettings saved = settingsRepository.save(settings);
         mqttSubscriber.reconnect();
         return toSettingsView(saved);
@@ -86,6 +103,12 @@ public class FrigateService {
     public FrigateSettingsView testSettings(UUID requesterId) {
         requireAdmin(requesterId);
         FrigateSettings settings = requireSettings();
+        if (!settings.hasMqttHost()) {
+            settings.setLinkStatus(FrigateLinkStatus.DISCONNECTED);
+            settings.setLastTestAt(null);
+            settingsRepository.save(settings);
+            throw new BusinessException(ErrorCode.FRIGATE_MQTT_NOT_CONFIGURED);
+        }
         Instant now = Instant.now();
         try {
             boolean ok = mqttSubscriber.testConnect(settings);
@@ -104,6 +127,36 @@ public class FrigateService {
             settings.setLastTestAt(now);
             settingsRepository.save(settings);
             throw new BusinessException(ErrorCode.FRIGATE_MQTT_CONNECT_FAILED);
+        }
+    }
+
+    @Transactional
+    public FrigateSettingsView testApi(UUID requesterId) {
+        requireAdmin(requesterId);
+        FrigateSettings settings = requireSettings();
+        if (!settings.hasApiHost()) {
+            settings.setApiLinkStatus(FrigateLinkStatus.DISCONNECTED);
+            settings.setApiLastTestAt(null);
+            settingsRepository.save(settings);
+            throw new BusinessException(ErrorCode.FRIGATE_API_NOT_CONFIGURED);
+        }
+        Instant now = Instant.now();
+        try {
+            boolean ok = probeFrigateApi(settings);
+            settings.setApiLinkStatus(ok ? FrigateLinkStatus.CONNECTED : FrigateLinkStatus.FAILED);
+            settings.setApiLastTestAt(now);
+            settingsRepository.save(settings);
+            if (!ok) {
+                throw new BusinessException(ErrorCode.FRIGATE_API_CONNECT_FAILED);
+            }
+            return toSettingsView(settings);
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            settings.setApiLinkStatus(FrigateLinkStatus.FAILED);
+            settings.setApiLastTestAt(now);
+            settingsRepository.save(settings);
+            throw new BusinessException(ErrorCode.FRIGATE_API_CONNECT_FAILED);
         }
     }
 
@@ -146,6 +199,9 @@ public class FrigateService {
     public FrigateCameraView testCamera(UUID requesterId, UUID cameraId) {
         requireAdmin(requesterId);
         FrigateSettings settings = requireSettings();
+        if (!settings.hasMqttHost() || !settings.isEnabled()) {
+            throw new BusinessException(ErrorCode.FRIGATE_MQTT_NOT_CONFIGURED);
+        }
         if (settings.getLinkStatus() != FrigateLinkStatus.CONNECTED && !mqttSubscriber.isConnected()) {
             throw new BusinessException(ErrorCode.FRIGATE_MQTT_CONNECT_FAILED);
         }
@@ -159,9 +215,6 @@ public class FrigateService {
     public FrigateCameraView bindCamera(UUID requesterId, UUID cameraId, BindFrigateCameraRequest request) {
         requireAdmin(requesterId);
         FrigateCamera camera = requireCamera(cameraId);
-        if (camera.getLinkStatus() != FrigateLinkStatus.CONNECTED) {
-            throw new BusinessException(ErrorCode.INVALID_FRIGATE_CONFIG);
-        }
         if (!laneRepository.existsById(request.laneId())) {
             throw new BusinessException(ErrorCode.NOT_FOUND);
         }
@@ -184,9 +237,6 @@ public class FrigateService {
     public FrigateCameraView simulateEvent(UUID requesterId, UUID cameraId, SimulateFrigateEventRequest request) {
         requireAdmin(requesterId);
         FrigateCamera camera = requireCamera(cameraId);
-        if (camera.getLinkStatus() != FrigateLinkStatus.CONNECTED) {
-            throw new BusinessException(ErrorCode.INVALID_FRIGATE_CONFIG);
-        }
         String plate = trimRequired(request.plate()).toUpperCase();
         eventHandler.onPlateRecognized(camera.getCameraName(), plate, request.plateColor());
         return toCameraView(requireCamera(cameraId));
@@ -207,6 +257,8 @@ public class FrigateService {
         return new FrigateSettingsView(
                 settings.getApiHost(),
                 settings.getApiPort(),
+                settings.getApiLinkStatus(),
+                settings.getApiLastTestAt(),
                 settings.getMqttHost(),
                 settings.getMqttPort(),
                 settings.getTopicPrefix(),
@@ -262,6 +314,20 @@ public class FrigateService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private String trimToEmpty(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private boolean probeFrigateApi(FrigateSettings settings) throws Exception {
+        URI uri = URI.create("http://" + settings.getApiHost().trim() + ":" + settings.getApiPort() + "/api/version");
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofSeconds(8))
+                .GET()
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        return response.statusCode() >= 200 && response.statusCode() < 300;
     }
 
     private String stripTrailingSlash(String value) {

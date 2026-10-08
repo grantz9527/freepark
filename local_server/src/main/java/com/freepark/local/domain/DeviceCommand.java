@@ -29,6 +29,8 @@ public class DeviceCommand extends BaseEntity {
         HOLD_OPEN,
         /** 同步主板时间：设备下次轮询/推送时，服务器在响应中带回当前时间供出入口控制主板（显示屏控制板）校准 RTC。 */
         SYNC_TIME,
+        /** 空闲默认屏显：只在相机轮询时下发，识别上报不能取走，以免盖掉本次通行的临时文字。 */
+        SHOW_DEFAULT,
         QUERY
     }
 

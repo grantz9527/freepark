@@ -62,6 +62,14 @@ public class ParkingLot extends BaseEntity {
     @Column(name = "map_data", columnDefinition = "TEXT")
     private String mapData;
 
+    /**
+     * 对外开放时段（仅内部车场生效）：JSON 数组，元素形如 {"day":1,"start":"08:00","end":"20:00"}，
+     * day 为 ISO 周几（1=周一 … 7=周日）。处于任一时段内时，非内部车辆也可入场；
+     * 为空表示内部车场不对外开放。
+     */
+    @Column(name = "open_time_rules", columnDefinition = "TEXT")
+    private String openTimeRules;
+
     protected ParkingLot() {
     }
 
@@ -165,6 +173,14 @@ public class ParkingLot extends BaseEntity {
 
     public void updateMapData(String mapData) {
         this.mapData = mapData;
+    }
+
+    public String getOpenTimeRules() {
+        return openTimeRules;
+    }
+
+    public void updateOpenTimeRules(String openTimeRules) {
+        this.openTimeRules = openTimeRules;
     }
 
     public void updateInterceptRules(java.util.List<InterceptRuleType> entryRules, java.util.List<InterceptRuleType> exitRules) {

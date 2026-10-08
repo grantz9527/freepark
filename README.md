@@ -119,9 +119,9 @@ Override via environment variables `FREEPARK_ADMIN_USERNAME` and `FREEPARK_ADMIN
 
 ## Status / 当前状态
 
-FreePark is **still under active development**. A runnable on-premise prototype is already in place, covering: plate recognition (Frigate + HyperLPR3), whitelist / blacklist / pattern allowlist access control, lane and booth control, barrier open / close, parking flow and recognition records, a multi-floor parking map editor (lanes, spaces, entrances / exits), and a 10-language I18N web console. Features and fixes are landing continuously; no stable release yet.
+FreePark is **still under active development**. A runnable on-premise prototype is already in place, covering: plate recognition (Frigate + HyperLPR3), whitelist / blacklist / pattern allowlist access control, lane and booth control, barrier open / close, parking flow and recognition records, a multi-floor parking map editor (lanes, spaces, entrances / exits), and a Chinese / English I18N web console. Features and fixes are landing continuously; no stable release yet.
 
-FreePark **仍在积极开发中**。目前已具备可运行的本地部署雏形，涵盖：车牌识别（Frigate + HyperLPR3）、白名单 / 黑名单 / 正则名单通行控制、通道 / 岗亭控制与道闸开关、停车流水与识别记录、多楼层停车场地图编辑器（通道、车位、出入口），以及 10 种语言的国际化 Web 控制台。功能与修复持续更新中，尚未发布稳定版本。
+FreePark **仍在积极开发中**。目前已具备可运行的本地部署雏形，涵盖：车牌识别（Frigate + HyperLPR3）、白名单 / 黑名单 / 正则名单通行控制、通道 / 岗亭控制与道闸开关、停车流水与识别记录、多楼层停车场地图编辑器（通道、车位、出入口），以及中英双语 Web 控制台。功能与修复持续更新中，尚未发布稳定版本。
 
 ## Support / 支持
 

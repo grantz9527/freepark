@@ -3,9 +3,12 @@ package com.freepark.local.barrier.service;
 import com.freepark.local.barrier.dto.BarrierView;
 import com.freepark.local.barrier.dto.CreateBarrierRequest;
 import com.freepark.local.barrier.dto.UpdateBarrierRequest;
+import com.freepark.local.barrier.dto.UpdateScreenOrientationRequest;
+import com.freepark.local.barrier.dto.UpdateScreenResult;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -13,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
+import com.freepark.local.device.service.DeviceCommandService;
 import com.freepark.local.device.service.DeviceHeartbeatTracker;
 import com.freepark.local.domain.LocalUser;
 import com.freepark.local.domain.LocalUserRepository;
@@ -20,25 +24,34 @@ import com.freepark.local.domain.ParkingBarrier;
 import com.freepark.local.domain.ParkingBarrierRepository;
 import com.freepark.local.domain.ParkingLane;
 import com.freepark.local.domain.ParkingLaneRepository;
+import com.freepark.local.domain.DeviceCommand;
 import com.freepark.local.domain.UserRole;
+
+import tools.jackson.databind.json.JsonMapper;
 
 @Service
 public class ParkingBarrierService {
+
+    private static final int LED_LINE_MAX_BYTES = 32;
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final ParkingLaneRepository lanes;
     private final ParkingBarrierRepository barriers;
     private final LocalUserRepository users;
     private final DeviceHeartbeatTracker heartbeats;
+    private final DeviceCommandService commands;
 
     public ParkingBarrierService(
             ParkingLaneRepository lanes,
             ParkingBarrierRepository barriers,
             LocalUserRepository users,
-            DeviceHeartbeatTracker heartbeats) {
+            DeviceHeartbeatTracker heartbeats,
+            DeviceCommandService commands) {
         this.lanes = lanes;
         this.barriers = barriers;
         this.users = users;
         this.heartbeats = heartbeats;
+        this.commands = commands;
     }
 
     @Transactional(readOnly = true)
@@ -90,6 +103,70 @@ public class ParkingBarrierService {
         barrier.updateDetails(request.name(), enabled);
         applyConnectionUpdate(barrier, request);
         return toLiveView(barriers.save(barrier));
+    }
+
+    /**
+     * 保存默认两行、停留秒数和每行播放方式。
+     * 至少一行有字时排队 SHOW_DEFAULT，由相机下次轮询把 0x6E 带到控制板。两行都空则只清档案，不下发。
+     */
+    @Transactional
+    public UpdateScreenResult updateScreenOrientation(
+            UUID requesterId, UUID barrierId, UpdateScreenOrientationRequest request) {
+        requireAdmin(requesterId);
+        ParkingBarrier barrier = requireBarrier(barrierId);
+        String line1 = normalizeLine(request.line1());
+        String line2 = normalizeLine(request.line2());
+        int stay = request.staySeconds() == null ? 10 : request.staySeconds();
+        int playMode1 = playMode(request.playMode1());
+        int playMode2 = playMode(request.playMode2());
+        if (stay < 0 || stay > 255 || gbkBytes(line1) > LED_LINE_MAX_BYTES || gbkBytes(line2) > LED_LINE_MAX_BYTES) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        barrier.setScreenLine1(line1.isEmpty() ? null : line1);
+        barrier.setScreenLine2(line2.isEmpty() ? null : line2);
+        barrier.setScreenStaySeconds(stay);
+        barrier.setScreenPlayMode1(playMode1);
+        barrier.setScreenPlayMode2(playMode2);
+        ParkingBarrier saved = barriers.save(barrier);
+        UUID commandId = null;
+        if (saved.isEnabled() && (!line1.isEmpty() || !line2.isEmpty())) {
+            String payload = JSON.writeValueAsString(JSON.createObjectNode()
+                    .put("line1", line1)
+                    .put("line2", line2)
+                    .put("staySeconds", stay)
+                    .put("playMode1", playMode1)
+                    .put("playMode2", playMode2));
+            commandId = commands.enqueueSystem(
+                    saved.getId(), DeviceCommand.Action.SHOW_DEFAULT, "SCREEN", payload).id();
+        }
+        return new UpdateScreenResult(toLiveView(saved), commandId);
+    }
+
+    /** 0x6E 每行 DM。未传按立即显示。协议之外的取值拒绝保存。 */
+    private static final Set<Integer> LED_PLAY_MODES = Set.of(
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0D, 0x15);
+
+    private static int playMode(Integer raw) {
+        int mode = raw == null ? 0x00 : raw;
+        if (!LED_PLAY_MODES.contains(mode)) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+        }
+        return mode;
+    }
+
+    private static String normalizeLine(String raw) {
+        return raw == null ? "" : raw.trim();
+    }
+
+    /** 与页面一致：ASCII 计 1 字节，其余字符计 2 字节。 */
+    private static int gbkBytes(String text) {
+        int bytes = 0;
+        for (int i = 0; i < text.length(); ) {
+            int cp = text.codePointAt(i);
+            bytes += cp <= 0x7F ? 1 : 2;
+            i += Character.charCount(cp);
+        }
+        return bytes;
     }
 
     /** 全局删除设备。 */

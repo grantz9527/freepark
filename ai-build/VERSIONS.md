@@ -8,9 +8,10 @@ Local deploy is **only** these five services. Do not add MQTT (or any other cont
 | --- | --- | --- | --- |
 | `local_server` | JDK 21 process (`mvnw`) | Spring Boot **4.1.1**, Java **21** | Port `8081` |
 | `local_frontend` | Node process (`npm run dev`) | Vue **3** + Vite, Node **22+** | Port `5173` |
-| MySQL | Docker | **`mysql:8.4.11`** | Host port `3307`. 8.4 LTS; do not use `mysql:8` / `8.0` / `9` / `latest`. |
+| MySQL | Docker | **`mysql:8.4.11`** | Host port `8306` (container `3306`). 8.4 LTS; do not use `mysql:8` / `8.0` / `9` / `latest`. |
 | Frigate | Docker | **`ghcr.io/blakeblackshear/frigate:0.17.2`** | Config schema `version: 0.17-0`. Do **not** use `:stable` (it moves). |
 | HyperLPR3 | Docker build from `docker/hyperlpr3` | PyPI **`hyperlpr3==0.1.3`** on **`python:3.10.21-slim-bookworm`** | Image tag `freepark-hyperlpr3:0.1.3`. Port `8715`. |
+| Console+API image (optional) | `docker/local/Dockerfile` | **`freepark-local:0.0.1`** | Vue dist + Spring Boot jar. Port `8081`. See `docker/local/README.md`. |
 
 HyperLPR3 runtime pins (from the working image, 2026-09-15):
 

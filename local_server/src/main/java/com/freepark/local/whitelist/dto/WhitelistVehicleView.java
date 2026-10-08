@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.freepark.driver.api.model.VehicleType;
+import com.freepark.local.domain.CameraWhitelistSyncStatus;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.WhitelistVehicle;
 
@@ -20,6 +21,8 @@ public record WhitelistVehicleView(
         Instant startTime,
         Instant endTime,
         boolean enabled,
+        /** 臻识机内白名单同步状态（本地，只读）。 */
+        CameraWhitelistSyncStatus cameraWhitelistSyncStatus,
         Instant createdAt,
         Instant updatedAt) {
 
@@ -37,6 +40,7 @@ public record WhitelistVehicleView(
                 vehicle.getStartTime(),
                 vehicle.getEndTime(),
                 vehicle.isEnabled(),
+                vehicle.getCameraWhitelistSyncStatus(),
                 vehicle.getCreatedAt(),
                 vehicle.getUpdatedAt());
     }

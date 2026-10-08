@@ -62,6 +62,15 @@ public class WhitelistVehicle extends CloudSyncedEntity {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    /**
+     * 本地臻识机内白名单同步状态（<strong>不参与云端协同</strong>）。
+     * 由本地保存、云端下发应用、定时对账按时间窗与下发结果刷新。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "camera_whitelist_sync_status", nullable = false, length = 32)
+    @ColumnDefault("'NOT_EFFECTIVE'")
+    private CameraWhitelistSyncStatus cameraWhitelistSyncStatus = CameraWhitelistSyncStatus.NOT_EFFECTIVE;
+
     protected WhitelistVehicle() {
     }
 
@@ -88,6 +97,7 @@ public class WhitelistVehicle extends CloudSyncedEntity {
         this.startTime = startTime;
         this.endTime = endTime;
         this.enabled = enabled;
+        refreshCameraWhitelistSyncStatus(Instant.now());
     }
 
     public ParkingLot getLot() {
@@ -134,6 +144,84 @@ public class WhitelistVehicle extends CloudSyncedEntity {
         return enabled;
     }
 
+    public CameraWhitelistSyncStatus getCameraWhitelistSyncStatus() {
+        return cameraWhitelistSyncStatus == null
+                ? CameraWhitelistSyncStatus.NOT_EFFECTIVE
+                : cameraWhitelistSyncStatus;
+    }
+
+    /**
+     * 按时间窗/启用/类型推进状态机（保留「已下发 / 过期已移除」等交付结果）；返回是否变化。
+     */
+    public boolean refreshCameraWhitelistSyncStatus(Instant now) {
+        CameraWhitelistSyncStatus next = computeNextSyncStatus(now);
+        if (next == getCameraWhitelistSyncStatus()) {
+            return false;
+        }
+        this.cameraWhitelistSyncStatus = next;
+        return true;
+    }
+
+    /** 仅更新内存中的机内状态（CAS 落库成功后回写实体）。 */
+    public void applyCameraWhitelistSyncStatus(CameraWhitelistSyncStatus status) {
+        this.cameraWhitelistSyncStatus = status == null
+                ? CameraWhitelistSyncStatus.NOT_EFFECTIVE
+                : status;
+    }
+
+    /** 下发成功后标记为已下发（仅对待下发）。 */
+    public boolean markCameraDelivered() {
+        if (getCameraWhitelistSyncStatus() != CameraWhitelistSyncStatus.PENDING_DELIVER) {
+            return false;
+        }
+        this.cameraWhitelistSyncStatus = CameraWhitelistSyncStatus.DELIVERED;
+        return true;
+    }
+
+    /** 过期删除成功后标记为过期已移除（仅对过期待移除）。 */
+    public boolean markCameraExpiredRemoved() {
+        if (getCameraWhitelistSyncStatus() != CameraWhitelistSyncStatus.EXPIRED_PENDING_REMOVE) {
+            return false;
+        }
+        this.cameraWhitelistSyncStatus = CameraWhitelistSyncStatus.EXPIRED_REMOVED;
+        return true;
+    }
+
+    public CameraWhitelistSyncStatus computeNextSyncStatus(Instant now) {
+        Instant at = now == null ? Instant.now() : now;
+        CameraWhitelistSyncStatus current = getCameraWhitelistSyncStatus();
+        TimePhase phase = resolveTimePhase(at);
+        return switch (phase) {
+            case INELIGIBLE, NOT_STARTED -> CameraWhitelistSyncStatus.NOT_EFFECTIVE;
+            case ACTIVE -> current == CameraWhitelistSyncStatus.DELIVERED
+                    ? CameraWhitelistSyncStatus.DELIVERED
+                    : CameraWhitelistSyncStatus.PENDING_DELIVER;
+            case EXPIRED -> current == CameraWhitelistSyncStatus.EXPIRED_REMOVED
+                    ? CameraWhitelistSyncStatus.EXPIRED_REMOVED
+                    : CameraWhitelistSyncStatus.EXPIRED_PENDING_REMOVE;
+        };
+    }
+
+    private TimePhase resolveTimePhase(Instant at) {
+        if (!enabled || (type != VehicleType.OWNER && type != VehicleType.MONTHLY)) {
+            return TimePhase.INELIGIBLE;
+        }
+        if (startTime != null && at.isBefore(startTime)) {
+            return TimePhase.NOT_STARTED;
+        }
+        if (endTime != null && at.isAfter(endTime)) {
+            return TimePhase.EXPIRED;
+        }
+        return TimePhase.ACTIVE;
+    }
+
+    private enum TimePhase {
+        INELIGIBLE,
+        NOT_STARTED,
+        ACTIVE,
+        EXPIRED
+    }
+
     public void updateDetails(
             String plateNumber,
             PlateColor plateColor,
@@ -155,5 +243,6 @@ public class WhitelistVehicle extends CloudSyncedEntity {
         this.startTime = startTime;
         this.endTime = endTime;
         this.enabled = enabled;
+        refreshCameraWhitelistSyncStatus(Instant.now());
     }
 }

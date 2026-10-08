@@ -1,0 +1,97 @@
+name: freepark-local-stack
+
+# 一条命令起场端：本项目镜像 + MySQL 8.4.11 + Frigate 0.17.2 + HyperLPR3 0.1.3
+# 仓库根目录：
+#   docker compose -f docker/local/docker-compose.yml up -d --build
+# 控制台：http://127.0.0.1:8081  admin / admin123
+
+services:
+  mysql:
+    image: mysql:8.4.11
+    container_name: freepark-local-mysql
+    environment:
+      MYSQL_DATABASE: freepark_local
+      MYSQL_USER: freepark_local
+      MYSQL_PASSWORD: freepark_local
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "8306:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+00:00
+    volumes:
+      - freepark-local-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  hyperlpr3:
+    build:
+      context: ../hyperlpr3
+      dockerfile: Dockerfile
+    image: freepark-hyperlpr3:0.1.3
+    container_name: freepark-hyperlpr3
+    restart: unless-stopped
+    ports:
+      - "8715:8715"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8715/api/v1/docs"]
+      interval: 30s
+      timeout: 6s
+      retries: 8
+      start_period: 60s
+
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:0.17.2
+    container_name: frigate
+    restart: unless-stopped
+    shm_size: "128mb"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../frigate/config:/config
+      - frigate-storage:/media/frigate
+    ports:
+      - "5000:5000"
+      - "1935:1935"
+      - "8554:8554"
+      - "8555:8555"
+      - "8555:8555/udp"
+      - "1984:1984"
+    environment:
+      TZ: Asia/Shanghai
+
+  local:
+    build:
+      context: ../..
+      dockerfile: docker/local/Dockerfile
+    image: freepark-local:0.0.1
+    container_name: freepark-local
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: freepark_local
+      MYSQL_USER: freepark_local
+      MYSQL_PASSWORD: freepark_local
+      FREEPARK_DB_CONFIG: /app/data/database.json
+      # 容器内 127.0.0.1 不是宿主机；走已发布端口访问同机 Frigate / MQTT
+      FRIGATE_API_HOST: host.docker.internal
+      FRIGATE_MQTT_HOST: host.docker.internal
+    ports:
+      - "8081:8081"
+    volumes:
+      - freepark-local-data:/app/data
+
+volumes:
+  freepark-local-mysql:
+  freepark-local-data:
+  frigate-storage:
+    name: frigate-storage

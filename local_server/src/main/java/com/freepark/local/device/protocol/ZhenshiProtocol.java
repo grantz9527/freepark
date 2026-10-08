@@ -437,6 +437,202 @@ public class ZhenshiProtocol implements CameraProtocol {
     }
 
     /**
+     * 空闲默认屏显：0x6E 写入控制板存储区（SAVE_FLAG=1），按设定秒数停留并循环（DR=0），不附语音。
+     * 心跳应答会改写成不开闸 + serialData，避免把默认文字当成开闸。
+     */
+    @Override
+    public JsonNode appendDefaultDisplay(JsonNode response, String payload) {
+        if (payload == null || payload.isBlank() || jsonMapper == null) {
+            return response;
+        }
+        String line1;
+        String line2;
+        int stay;
+        int play1;
+        int play2;
+        try {
+            JsonNode node = jsonMapper.readTree(payload);
+            line1 = node.path("line1").asText("");
+            line2 = node.path("line2").asText("");
+            stay = node.path("staySeconds").asInt(LED_STAY_SECONDS);
+            play1 = node.path("playMode1").asInt(LED_DISPLAY_MODE);
+            play2 = node.path("playMode2").asInt(LED_DISPLAY_MODE);
+        } catch (Exception e) {
+            log.warn("默认屏显参数无法解析 payload={}：{}", payload, e.getMessage());
+            return response;
+        }
+        byte[] frame = defaultDisplayFrame(line1, line2, stay, play1, play2);
+        if (frame == null) {
+            return response;
+        }
+        JsonNode wrap = response == null ? null : response.path("Response_AlarmInfoPlate");
+        if (wrap != null && wrap.isObject()) {
+            appendSerialData((ObjectNode) wrap, frame);
+            return response;
+        }
+        ObjectNode root = JsonNodeFactory.instance.objectNode();
+        ObjectNode resp = root.putObject("Response_AlarmInfoPlate");
+        resp.put("info", "no");
+        resp.put("channelNum", 0);
+        resp.put("is_pay", "true");
+        appendSerialData(resp, frame);
+        return root;
+    }
+
+    /**
+     * 默认屏显帧。空行不占位，但保留原行号（第一行 LID=0，第二行 LID=1）。两行都空则不下发。
+     */
+    private byte[] defaultDisplayFrame(String line1, String line2, int staySeconds, int playMode1, int playMode2) {
+        int stay = Math.max(0, Math.min(255, staySeconds));
+        List<byte[]> lines = new ArrayList<>(2);
+        List<Integer> lids = new ArrayList<>(2);
+        List<Integer> modes = new ArrayList<>(2);
+        if (!appendDefaultLine(lines, lids, modes, 0, line1, playMode1)
+                || !appendDefaultLine(lines, lids, modes, 1, line2, playMode2)) {
+            return null;
+        }
+        if (lines.isEmpty()) {
+            return null;
+        }
+        int textBytes = lines.stream().mapToInt(line -> line.length).sum();
+        // SAVE_FLAG + 行数 + 各行(LID DM DS DT DR + TC4 + TL + 文本 + 终止) + VF + VTL + 00
+        int bodyLen = 2 + lines.size() * 11 + textBytes + 3;
+        if (bodyLen > 255) {
+            log.warn("默认屏显 0x6E 单包超长（{} 字节）", bodyLen);
+            return null;
+        }
+        byte[] frame = new byte[5 + 1 + bodyLen + 2];
+        int i = 0;
+        frame[i++] = (byte) LED_BOARD_ADDRESS;
+        frame[i++] = (byte) LED_PROTOCOL_VERSION;
+        frame[i++] = (byte) 0xFF;
+        frame[i++] = (byte) 0xFF;
+        frame[i++] = (byte) CMD_LED_TEXT_AND_VOICE;
+        frame[i++] = (byte) bodyLen;
+        frame[i++] = 1; // SAVE_FLAG：存储区，作为空闲时的默认显示
+        frame[i++] = (byte) lines.size();
+        for (int n = 0; n < lines.size(); n++) {
+            byte[] line = lines.get(n);
+            frame[i++] = (byte) lids.get(n).intValue();
+            frame[i++] = (byte) modes.get(n).intValue();
+            frame[i++] = 0;
+            frame[i++] = (byte) stay;
+            frame[i++] = 0; // DR=0：循环，空闲时保持显示
+            System.arraycopy(LED_RED_RGBA, 0, frame, i, 4);
+            i += 4;
+            frame[i++] = (byte) line.length;
+            System.arraycopy(line, 0, frame, i, line.length);
+            i += line.length;
+            frame[i++] = (byte) (n == lines.size() - 1 ? 0x00 : 0x0D);
+        }
+        frame[i++] = (byte) 0x0A;
+        frame[i++] = 0; // 不播语音
+        frame[i++] = 0;
+        int crc = crc16Modbus(frame, i);
+        frame[i++] = (byte) (crc & 0xFF);
+        frame[i] = (byte) ((crc >>> 8) & 0xFF);
+        log.info("组装默认屏显 485 帧 rows={} stay={}s frame={}", lines.size(), stay, toHex(frame));
+        return frame;
+    }
+
+    /** @return false 表示该行无法编码或超长，整帧放弃 */
+    private boolean appendDefaultLine(
+            List<byte[]> lines, List<Integer> lids, List<Integer> modes, int lid, String raw, int playMode) {
+        if (raw == null || raw.isBlank()) {
+            return true;
+        }
+        String line = raw.trim();
+        byte[] gbk;
+        try {
+            gbk = line.getBytes(GBK);
+        } catch (Exception e) {
+            log.warn("默认屏显 GBK 编码失败 line={}：{}", line, e.getMessage());
+            return false;
+        }
+        if (gbk.length > LED_MAX_LINE_BYTES) {
+            log.warn("默认屏显单行超长（GBK {} 字节，上限 {}）line={}", gbk.length, LED_MAX_LINE_BYTES, line);
+            return false;
+        }
+        lines.add(gbk);
+        lids.add(lid);
+        modes.add(ledPlayMode(playMode));
+        return true;
+    }
+
+    /** 协议之外的 DM 按立即显示，避免把未知字节写进控制板。 */
+    private static int ledPlayMode(int mode) {
+        return switch (mode) {
+            case 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0D, 0x15 -> mode;
+            default -> LED_DISPLAY_MODE;
+        };
+    }
+
+    /**
+     * 按臻识 HTTP 推送协议 3.7.5，把白名单增删捎进本次识别推送 / comet 轮询应答。
+     *
+     * <p>同一报文只能带一种 {@code operate_type}（0 增加 / 1 删除），最多 5 条。
+     * 原响应为心跳 {@code {"status":"ok"}} 时改写为「不开闸」识别应答以承载该字段。
+     */
+    public JsonNode appendWhitelistOperate(JsonNode response, ZhenshiWhitelistBatch batch) {
+        if (batch == null || batch.isEmpty()) {
+            return response;
+        }
+        ObjectNode resp = ensureAlarmResponse(response);
+        ObjectNode op = resp.putObject("white_list_operate");
+        op.put("operate_type", batch.operateType());
+        // reply_url 协议可选；多数机型不回调，且 HTTP 推送无拉取机内名单接口，故不下发该字段。
+        op.put("msg_id", batch.msgId());
+        ArrayNode data = op.putArray("white_list_data");
+        for (ZhenshiWhitelistBatch.Item item : batch.items()) {
+            if (item == null || item.plate() == null) {
+                continue;
+            }
+            String plate = item.plate().trim();
+            // 空车牌仅允许删除：协议约定表示清空机内全部白名单
+            if (plate.isEmpty() && batch.operateType() != ZhenshiWhitelistBatch.DELETE) {
+                continue;
+            }
+            ObjectNode row = data.addObject();
+            row.put("plate", plate);
+            if (batch.operateType() == ZhenshiWhitelistBatch.ADD) {
+                row.put("enable", 1);
+                row.put("need_alarm", 0);
+                if (item.enableTime() != null && !item.enableTime().isBlank()) {
+                    row.put("enable_time", item.enableTime());
+                }
+                if (item.overdueTime() != null && !item.overdueTime().isBlank()) {
+                    row.put("overdue_time", item.overdueTime());
+                }
+            }
+        }
+        if (data.isEmpty()) {
+            resp.remove("white_list_operate");
+        }
+        JsonNode wrap = response == null ? null : response.path("Response_AlarmInfoPlate");
+        if (wrap.isObject()) {
+            return response;
+        }
+        ObjectNode root = JsonNodeFactory.instance.objectNode();
+        root.set("Response_AlarmInfoPlate", resp);
+        return root;
+    }
+
+    /** 已有识别应答则复用；心跳等无业务报文则新建不开闸应答。 */
+    private static ObjectNode ensureAlarmResponse(JsonNode response) {
+        if (response != null) {
+            JsonNode wrap = response.path("Response_AlarmInfoPlate");
+            if (wrap instanceof ObjectNode object) {
+                return object;
+            }
+        }
+        ObjectNode resp = JsonNodeFactory.instance.objectNode();
+        resp.put("info", "no");
+        resp.put("channelNum", 0);
+        resp.put("is_pay", "true");
+        return resp;
+    }
+
+    /**
      * 组装「同步主板时间」485 帧（控制板 0x05 指令）：取站点时区下的服务器当前墙钟时间，
      * 站点设置缺失/时间异常时放弃下发（返回 null），不阻断业务响应。
      */

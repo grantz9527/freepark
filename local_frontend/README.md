@@ -9,7 +9,7 @@ FreePark 场端控制台前端，基于 Vue 3 + vue-i18n，对接 `local_server`
 - Vue 3 + Vite + TypeScript
 - Vue Router
 - vue-i18n (Composition API)
-- Locales: `en`, `zh-CN`, `zh-TW`, `ja`, `ko`, `es`, `fr`, `de`, `pt`, `ar`
+- Locales: `zh-CN`, `en`
 
 ## Setup
 
@@ -34,10 +34,9 @@ Open [http://localhost:5173](http://localhost:5173) and sign in. First-run defau
 
 ## I18N
 
-- UI strings live in `src/i18n/messages/*.json`
-- The language switcher stores the choice in `localStorage`
+- UI strings live in `src/i18n/messages/zh-CN.json` and `en.json`
+- The language switcher stores the choice in `localStorage` (`zh-CN` or `en`)
 - API calls send `Accept-Language` and `?lang=`
-- Arabic (`ar`) switches the page to `dir="rtl"`
 
 ## Scripts
 

@@ -1,6 +1,8 @@
 package com.freepark.driver.zhensi;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import com.freepark.driver.api.AIODriverFactory;
@@ -20,6 +22,12 @@ import com.freepark.driver.zhensi.transport.HttpZhensiCommandTransport;
 public final class ZhensiDriverFactory implements AIODriverFactory {
 
     public static final String BRAND = "ZHENSHI";
+
+    /** 各具体型号的静态屏行数。名称里的 LINE2 / LINE4 与这里的声明保持一致。 */
+    private static final Map<String, DisplayCapability> MODEL_DISPLAYS = Map.of(
+            "YELLOW_CARD_LED_LINE4", DisplayCapability.fixed(4),
+            "PURPLE_CARD_LCD_LINE4", DisplayCapability.fixed(4),
+            "BULE_CARD_LED_LINE2", DisplayCapability.fixed(2));
 
     @Override
     public String brand() {
@@ -53,10 +61,17 @@ public final class ZhensiDriverFactory implements AIODriverFactory {
 
     @Override
     public DisplayCapability displayCapability() {
-        // DEMO 一体机为 2 行静态屏：平台下发的有序建议行只取前 2 行显示。
-        // 真实厂商按产品线声明，如 4 行屏 DisplayCapability.fixed(4)，
-        // 单行 LED 滚动条 DisplayCapability.scrolling()。
+        // 未标明型号（产品线通配）时按 2 行静态屏。具体型号见 displayCapability(String)。
         return DisplayCapability.fixed(2);
+    }
+
+    @Override
+    public DisplayCapability displayCapability(String model) {
+        if (model == null || model.isBlank() || "*".equals(model.trim())) {
+            return displayCapability();
+        }
+        DisplayCapability spec = MODEL_DISPLAYS.get(model.trim().toUpperCase(Locale.ROOT));
+        return spec != null ? spec : displayCapability();
     }
 
     @Override
@@ -69,7 +84,11 @@ public final class ZhensiDriverFactory implements AIODriverFactory {
 
     @Override
     public ParkingAIODevice create(DeviceConfig config) {
-        // 每台物理设备 = 一个独立实例：自带连接配置 + 独立本地状态
-        return new ZhensiAIODevice(config, new HttpZhensiCommandTransport(config));
+        // 每台物理设备 = 一个独立实例：自带连接配置 + 该型号的屏显行数
+        return new ZhensiAIODevice(
+                config,
+                new HttpZhensiCommandTransport(config),
+                voiceCapability(),
+                displayCapability(config.model()));
     }
 }

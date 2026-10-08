@@ -571,9 +571,7 @@ function boundFrigateNames(laneId: string): string {
 }
 
 function availableFrigateCameras(): FrigateCameraView[] {
-  return frigateCameras.value.filter(
-    (item) => item.enabled && item.linkStatus === 'CONNECTED' && !item.laneId,
-  )
+  return frigateCameras.value.filter((item) => item.enabled && !item.laneId)
 }
 
 function frigateDirectionOf(
@@ -622,8 +620,8 @@ async function onBindFrigate(): Promise<void> {
     return
   }
   const camera = frigateCameras.value.find((item) => item.id === bindCameraId.value)
-  if (!camera || camera.linkStatus !== 'CONNECTED') {
-    bindFrigateError.value = t('frigate.needConnected')
+  if (!camera) {
+    bindFrigateError.value = t('frigate.bindRequired')
     return
   }
   let direction: FrigateBindDirection

@@ -34,8 +34,9 @@ import tools.jackson.databind.node.ObjectNode;
  * 算费接口地址在节点配置（NodeSettings.feeApiUrl）中维护，本机为调用方。
  * {@code lotCode} 用于让云端定位“请求来自哪个车场”并按车场的欠费统计范围计算。
  *
- * <p>识别放行走 {@link #quoteForAccess}：后台探活用在停车辆或随机车牌打算费接口，
- * 15 秒无响应则 30 秒内跳过识别路径上的算费。节点配置页试算仍走 {@link #quoteTimed}。
+ * <p>识别放行走 {@link #quoteForAccess}（{@code quoteSource=GATE_RECOGNITION}，云端自动抵扣优惠券）；
+ * 后台探活用在停车辆或随机车牌走 {@link #probeHealth}（{@code HEALTH_PROBE}，不算券），
+ * 15 秒无响应则 30 秒内跳过识别路径上的算费。节点配置页试算仍走 {@link #quoteTimed}（{@code ADMIN_TRIAL}）。
  */
 @Service
 public class FeeQuoteClient {
@@ -112,7 +113,7 @@ public class FeeQuoteClient {
 
     /**
      * 识别放行算费。{@code laneCode} 有值时随请求带给云端，用于记下该通道欠费拦截等待；
-     * 探活/试算不传通道。
+     * 探活/试算不传通道。请求带 {@code quoteSource=GATE_RECOGNITION}，云端会自动抵扣优惠券。
      */
     public Optional<BigDecimal> quoteForAccess(String lotCode, String plateNumber, String plateColor, String laneCode) {
         NodeSettings settings = settingsRepository.findById(NodeSettings.SINGLETON_ID).orElse(null);
@@ -135,7 +136,7 @@ public class FeeQuoteClient {
         }
         try {
             BigDecimal amount = requestRemote(settings, lotCode, plateNumber, plateColor, laneCode,
-                    accessHttpClient, accessRequestTimeout);
+                    QuoteSource.GATE_RECOGNITION, accessHttpClient, accessRequestTimeout);
             closeCircuit();
             return Optional.of(amount);
         } catch (RuntimeException ex) {
@@ -149,6 +150,7 @@ public class FeeQuoteClient {
     /**
      * 后台网络探活：用在场车或随机车牌打一次算费接口。
      * 15 秒无响应则打开 30 秒熔断，识别路径在熔断期内直接跳过算费。
+     * 请求带 {@code quoteSource=HEALTH_PROBE}，云端不算优惠券。
      */
     public void probeHealth(String lotCode, String plateNumber, String plateColor) {
         probeHealth(lotCode, plateNumber, plateColor, PROBE_TIMEOUT);
@@ -165,7 +167,8 @@ public class FeeQuoteClient {
         }
         noteRemoteUrl(apiUrl.trim());
         try {
-            BigDecimal amount = requestRemote(settings, lotCode, plateNumber, plateColor, null, probeHttpClient, timeout);
+            BigDecimal amount = requestRemote(settings, lotCode, plateNumber, plateColor, null,
+                    QuoteSource.HEALTH_PROBE, probeHttpClient, timeout);
             closeCircuit();
             log.info("算费探活成功 lot={} plate={} amount={}", lotCode, plateNumber, amount);
         } catch (RuntimeException ex) {
@@ -224,7 +227,8 @@ public class FeeQuoteClient {
             throw new BusinessException(ErrorCode.FEE_API_NOT_CONFIGURED);
         }
         noteRemoteUrl(settings.getFeeApiUrl().trim());
-        return requestRemote(settings, lotCode, plateNumber, plateColor, null, adminHttpClient, ADMIN_REQUEST_TIMEOUT);
+        return requestRemote(settings, lotCode, plateNumber, plateColor, null,
+                QuoteSource.ADMIN_TRIAL, adminHttpClient, ADMIN_REQUEST_TIMEOUT);
     }
 
     private BigDecimal requestRemote(
@@ -233,6 +237,7 @@ public class FeeQuoteClient {
             String plateNumber,
             String plateColor,
             String laneCode,
+            QuoteSource quoteSource,
             HttpClient httpClient,
             Duration requestTimeout) {
         String url = settings.getFeeApiUrl().trim();
@@ -248,12 +253,16 @@ public class FeeQuoteClient {
         if (laneCode != null && !laneCode.isBlank()) {
             body.put("laneCode", laneCode.trim());
         }
+        if (quoteSource != null) {
+            body.put("quoteSource", quoteSource.name());
+        }
         String nodeCode = settings.getNodeCode();
         if (nodeCode != null && !nodeCode.isBlank()) {
             body.put("edgeCode", nodeCode.trim());
         }
         String json = jsonMapper.writeValueAsString(body);
-        log.info("算费请求 {} lot={} plate={} color={} lane={}", url, lotCode, plateNumber, plateColor, laneCode);
+        log.info("算费请求 {} lot={} plate={} color={} lane={} source={}",
+                url, lotCode, plateNumber, plateColor, laneCode, quoteSource);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -287,6 +296,13 @@ public class FeeQuoteClient {
             throw new BusinessException(ErrorCode.FEE_API_CALL_FAILED,
                     "bad amount response: " + (hint.isBlank() ? e.getMessage() : hint));
         }
+    }
+
+    /** 与云端 {@code EdgeFeeQuoteSource} 对齐：道闸识别才自动抵扣优惠券。 */
+    private enum QuoteSource {
+        GATE_RECOGNITION,
+        HEALTH_PROBE,
+        ADMIN_TRIAL
     }
 
     private void noteRemoteUrl(String url) {

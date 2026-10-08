@@ -16,13 +16,14 @@ import {
   type VehicleType,
   type LotView,
   type PlateColor,
+  type CameraWhitelistSyncStatus,
 } from '@/api/client'
 import VehicleListImportModal from '@/components/VehicleListImportModal.vue'
 import { getUser } from '@/auth/session'
 import PlateBadge from '@/components/PlateBadge.vue'
 import { usePlateColorLabel } from '@/composables/usePlateColorLabel'
 import { useSiteTime } from '@/composables/useSiteTime'
-import { siteAllowedPlateColors, siteDefaultPlateColor } from '@/site/settings'
+import { siteAllowedPlateColors, siteDefaultPlateColor, siteCameraWhitelistSync, ensureSiteSettings } from '@/site/settings'
 
 const LOT_STORAGE_KEY = 'freepark.whitelist.lotId'
 
@@ -37,6 +38,36 @@ const vehicleTypeOptions: VehicleType[] = ['TEMPORARY', 'RESERVED', 'VIP', 'OWNE
 function vehicleTypeLabel(type: VehicleType): string {
   return t(`whitelist.type${type}`)
 }
+
+function cameraSyncStatusLabel(status: CameraWhitelistSyncStatus | null | undefined): string {
+  if (!status) return '—'
+  return t(`whitelist.cameraSync${status}`)
+}
+
+function cameraSyncStatusClass(status: CameraWhitelistSyncStatus | null | undefined): string {
+  switch (status) {
+    case 'DELIVERED':
+      return 'ok'
+    case 'PENDING_DELIVER':
+    case 'EXPIRED_PENDING_REMOVE':
+      return 'warn'
+    case 'EXPIRED_REMOVED':
+      return 'muted'
+    case 'NOT_EFFECTIVE':
+    default:
+      return 'fail'
+  }
+}
+
+const cameraSyncHint = computed(() => {
+  if (formType.value === 'OWNER') {
+    return siteCameraWhitelistSync.value.owner ? t('whitelist.cameraSyncOn') : t('whitelist.cameraSyncOff')
+  }
+  if (formType.value === 'MONTHLY') {
+    return siteCameraWhitelistSync.value.monthly ? t('whitelist.cameraSyncOn') : t('whitelist.cameraSyncOff')
+  }
+  return ''
+})
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -151,6 +182,7 @@ async function reload(): Promise<void> {
   loading.value = true
   errorMessage.value = ''
   try {
+    await ensureSiteSettings(locale.value)
     await loadLots()
     page.value = 0
     await loadVehicles()
@@ -479,6 +511,7 @@ onMounted(reload)
               <th>{{ t('whitelist.colStartTime') }}</th>
               <th>{{ t('whitelist.colEndTime') }}</th>
               <th>{{ t('page.colStatus') }}</th>
+              <th>{{ t('whitelist.colCameraSync') }}</th>
               <th>{{ t('page.colUpdated') }}</th>
               <th v-if="isAdmin" class="col-actions">{{ t('whitelist.colActions') }}</th>
             </tr>
@@ -498,6 +531,11 @@ onMounted(reload)
               <td>
                 <span class="pill" :class="item.enabled ? 'ok' : 'fail'">
                   {{ item.enabled ? t('whitelist.statusActive') : t('whitelist.statusDisabled') }}
+                </span>
+              </td>
+              <td>
+                <span class="pill" :class="cameraSyncStatusClass(item.cameraWhitelistSyncStatus)">
+                  {{ cameraSyncStatusLabel(item.cameraWhitelistSyncStatus) }}
                 </span>
               </td>
               <td>{{ formatTime(item.updatedAt) }}</td>
@@ -560,6 +598,7 @@ onMounted(reload)
               {{ vehicleTypeLabel(type) }}
             </option>
           </select>
+          <p v-if="cameraSyncHint" class="sync-hint">{{ cameraSyncHint }}</p>
         </label>
         <label>
           <span>{{ t('whitelist.colOwner') }} <em class="req">*</em></span>
@@ -785,6 +824,16 @@ th {
   background: #e8f5ef;
 }
 
+.pill.warn {
+  color: #b45309;
+  background: #fff7ed;
+}
+
+.pill.muted {
+  color: var(--muted);
+  background: #f2f4f3;
+}
+
 .pill.fail {
   color: var(--danger);
   background: #fdecec;
@@ -916,6 +965,13 @@ select {
 .form-error {
   margin: 0;
   color: var(--danger);
+}
+
+.sync-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .actions {

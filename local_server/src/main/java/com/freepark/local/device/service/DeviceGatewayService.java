@@ -3,12 +3,10 @@ package com.freepark.local.device.service;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -33,6 +31,8 @@ import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
 import com.freepark.local.device.protocol.CameraProtocol;
 import com.freepark.local.device.protocol.ZhenshiProtocol;
+import com.freepark.local.device.protocol.ZhenshiWhitelistBatch;
+import com.freepark.local.device.protocol.ZhenshiWhitelistPendingStore;
 import com.freepark.local.domain.DeviceCommand;
 import com.freepark.local.domain.LaneType;
 import com.freepark.local.domain.ParkingBarrier;
@@ -44,6 +44,7 @@ import com.freepark.local.domain.WhitelistVehicleRepository;
 import com.freepark.local.edge.service.PendingGateOpenService;
 import com.freepark.local.parkingflow.service.ParkingSessionService;
 import com.freepark.local.recognition.service.RecognitionRecordService;
+import com.freepark.local.whitelist.support.WhitelistTimeContinuity;
 import com.freepark.local.nodeconfig.service.FeeQuoteClient;
 
 /**
@@ -97,6 +98,7 @@ public class DeviceGatewayService {
     private final FeeQuoteClient feeQuoteClient;
     private final WhitelistVehicleRepository whitelistVehicles;
     private final PendingGateOpenService pendingGateOpens;
+    private final ZhenshiWhitelistPendingStore whitelistPending;
     private final ZhenshiProtocol defaultProtocol;
     private final Map<String, CameraProtocol> protocolsByBrand;
 
@@ -130,6 +132,7 @@ public class DeviceGatewayService {
             FeeQuoteClient feeQuoteClient,
             WhitelistVehicleRepository whitelistVehicles,
             PendingGateOpenService pendingGateOpens,
+            ZhenshiWhitelistPendingStore whitelistPending,
             ZhenshiProtocol defaultProtocol,
             List<CameraProtocol> protocols) {
         this.barriers = barriers;
@@ -143,6 +146,7 @@ public class DeviceGatewayService {
         this.feeQuoteClient = feeQuoteClient;
         this.whitelistVehicles = whitelistVehicles;
         this.pendingGateOpens = pendingGateOpens;
+        this.whitelistPending = whitelistPending;
         this.defaultProtocol = defaultProtocol;
         this.protocolsByBrand = protocols.stream()
                 .collect(Collectors.toMap(CameraProtocol::brand, Function.identity(), (a, b) -> a));
@@ -173,7 +177,11 @@ public class DeviceGatewayService {
             // 时间同步不参与开/关闸：按心跳应答后，在响应中附带 0x05 主板时间同步帧
             response = protocol.appendTimeSync(response);
         }
-        return response;
+        if (cmd != null && cmd.getAction() == DeviceCommand.Action.SHOW_DEFAULT) {
+            // 默认屏显只走空闲轮询：心跳应答里附带 0x6E，文字来自指令参数而不是设备缓存
+            response = protocol.appendDefaultDisplay(response, cmd.getPayload());
+        }
+        return withWhitelist(device, protocol, response);
     }
 
     /** 心跳/注册确认应答：臻识官方 demo 对设备注册的标准回复，相机收到即继续下一轮询，不触发任何动作。 */
@@ -230,26 +238,30 @@ public class DeviceGatewayService {
         RecognitionRecord record = protocol.parsePush(device, pushData);
 
         // 1) 先消费预排命令（管理员/规则显式开/关闸优先，沿用原队列语义）
-        Optional<DeviceCommand> pending = commandService.dequeueForDevice(device.getId());
+        Optional<DeviceCommand> pending = commandService.dequeueForDevice(
+                device.getId(), Set.of(DeviceCommand.Action.SHOW_DEFAULT));
+        JsonNode response;
         if (pending.isPresent()) {
             DeviceCommand cmd = pending.get();
             if (cmd.getAction() == DeviceCommand.Action.SYNC_TIME) {
                 // 时间同步为“附加”指令，不参与识别放行决策：消费后继续常规通行判定，最终响应附带 485 同步时间帧
                 log.info("识别 device={} plate={}：消费预排指令 SYNC_TIME，继续常规通行判定并附带时间同步",
                         device.getCode(), record.getPlate());
-                return protocol.appendTimeSync(decideAndOpen(device, record, protocol));
+                response = protocol.appendTimeSync(decideAndOpen(device, record, protocol));
+            } else {
+                boolean open = cmd.getAction() == DeviceCommand.Action.OPEN;
+                log.info("识别 device={} plate={}：命中预排命令 {}，开闸={}", device.getCode(), record.getPlate(),
+                        cmd.getAction(), open);
+                // 手动开/关闸：管理员显式意图优先于通行判定；车辆按指令通行，识别记录照常入库并联动停车流水
+                recognitionRecordService.saveDeviceRecord(record);
+                // 预排开闸按行进方向附欢迎/欢送语音；CLOSE 由协议层转译为 ivs_ioctrl（落闸）等设备控制报文
+                response = protocol.buildPushResponse(cmd, welcomeVoice(toAccessDirection(record.getDirection())));
             }
-            boolean open = cmd.getAction() == DeviceCommand.Action.OPEN;
-            log.info("识别 device={} plate={}：命中预排命令 {}，开闸={}", device.getCode(), record.getPlate(),
-                    cmd.getAction(), open);
-            // 手动开/关闸：管理员显式意图优先于通行判定；车辆按指令通行，识别记录照常入库并联动停车流水
-            recognitionRecordService.saveDeviceRecord(record);
-            // 预排开闸按行进方向附欢迎/欢送语音；CLOSE 由协议层转译为 ivs_ioctrl（落闸）等设备控制报文
-            return protocol.buildPushResponse(cmd, welcomeVoice(toAccessDirection(record.getDirection())));
+        } else {
+            // 2) 无预排命令：先按车场通行判定规则决定放行，放行才入库联动流水并向识别一体机下发开闸指令
+            response = decideAndOpen(device, record, protocol);
         }
-
-        // 2) 无预排命令：先按车场通行判定规则决定放行，放行才入库联动流水并向识别一体机下发开闸指令
-        return decideAndOpen(device, record, protocol);
+        return withWhitelist(device, protocol, response);
     }
 
     /**
@@ -412,7 +424,7 @@ public class DeviceGatewayService {
                 .map(v -> {
                     String typeName = vehicleTypeName(v.getType());
                     Integer daysLeft = remainingDays(
-                            continuousEffectiveEnd(
+                            WhitelistTimeContinuity.continuousEffectiveEnd(
                                     whitelistVehicles.findAllEnabledByLotAndPlate(lotId, plate, plateColor), now));
                     if (daysLeft == null) {
                         return new WhitelistAnnouncement(typeName, typeName);
@@ -425,56 +437,11 @@ public class DeviceGatewayService {
     }
 
     /**
-     * 计算停车卡"连续有效段"终点：把同一车场同一车牌的启用卡按时间区间排序并合并，
-     * 下一张卡与当前段"接续"即并入一段；接续判定按天粒度：下一张的开始日期不晚于
-     * 当前段结束日期的次日（上一张 23:59:59 到期、下一张次日 00:00:00 生效的续费场景视为连续，
-     * 提前续期重叠同理；相差超过一天的断档则不再并入）。返回覆盖 now 的连续段的结束时间。
-     * 返回 null 表示覆盖 now 的连续段无结束时间（存在长期有效卡并入，即"长期有效"）。
+     * @deprecated 逻辑已迁至 {@link WhitelistTimeContinuity#continuousEffectiveEnd}。
      */
+    @Deprecated
     static Instant continuousEffectiveEnd(List<WhitelistVehicle> cards, Instant now) {
-        if (cards == null || cards.isEmpty()) {
-            return null;
-        }
-        List<WhitelistVehicle> sorted = new ArrayList<>(cards);
-        sorted.sort(Comparator.comparing(WhitelistVehicle::getStartTime,
-                Comparator.nullsFirst(Comparator.naturalOrder())));
-        Instant segmentStart = null; // null 视为无限早（无开始时间限制）
-        Instant segmentEnd = null;   // null 视为无限远（长期有效）
-        boolean segmentOpen = false;
-        for (WhitelistVehicle card : sorted) {
-            Instant start = card.getStartTime(); // null 视为无限早
-            Instant end = card.getEndTime();     // null 视为无限远
-            if (!segmentOpen) {
-                segmentStart = start;
-                segmentEnd = end;
-                segmentOpen = true;
-                continue;
-            }
-            boolean breaks = segmentEnd != null && start != null
-                    && start.atZone(ZoneOffset.UTC).toLocalDate()
-                            .isAfter(segmentEnd.atZone(ZoneOffset.UTC).toLocalDate().plusDays(1));
-            if (breaks) {
-                // 断档：若上一段覆盖 now，则终点即上一段结束时间（断口处截断）
-                if (covers(segmentStart, segmentEnd, now)) {
-                    return segmentEnd;
-                }
-                segmentStart = start;
-                segmentEnd = end;
-                continue;
-            }
-            // 接续（重叠、首尾同天或次日续上）：并入，终点取较晚者；无结束时间的并入后整段为长期
-            if (segmentEnd != null && (end == null || end.isAfter(segmentEnd))) {
-                segmentEnd = end;
-            }
-        }
-        return covers(segmentStart, segmentEnd, now) ? segmentEnd : null;
-    }
-
-    private static boolean covers(Instant segmentStart, Instant segmentEnd, Instant now) {
-        if (segmentStart != null && now.isBefore(segmentStart)) {
-            return false;
-        }
-        return segmentEnd == null || !now.isAfter(segmentEnd);
+        return WhitelistTimeContinuity.continuousEffectiveEnd(cards, now);
     }
 
     /**
@@ -575,5 +542,34 @@ public class DeviceGatewayService {
             return defaultProtocol;
         }
         return protocolsByBrand.getOrDefault(brand.toUpperCase(), defaultProtocol);
+    }
+
+    /**
+     * 把待下发的臻识机内白名单捎进本次应答（协议 3.7.5，单次最多 5 条同一操作）。
+     * 下发即确认：抽出后附带进应答即清队列。不依赖 reply_url 回执（多数机型不回调；
+     * HTTP 推送协议亦无拉取机内全量名单接口）。
+     * 非臻识协议忽略队列中的批次，避免误抽走。
+     */
+    private JsonNode withWhitelist(ParkingBarrier device, CameraProtocol protocol, JsonNode response) {
+        if (device == null || !(protocol instanceof ZhenshiProtocol zhenshi)) {
+            return response;
+        }
+        ZhenshiWhitelistBatch batch = whitelistPending.drain(device.getId());
+        if (batch == null || batch.isEmpty()) {
+            return response;
+        }
+        log.info("识别应答附带臻识白名单 device={} type={} plates={} msgId={}",
+                device.getCode(),
+                batch.operateType() == ZhenshiWhitelistBatch.ADD ? "add" : "delete",
+                batch.items().size(),
+                batch.msgId());
+        return zhenshi.appendWhitelistOperate(response, batch);
+    }
+
+    /**
+     * 兼容旧相机偶发的白名单回执：本系统已改为下发即确认，此处仅记日志。
+     */
+    public void ackWhitelistReplay(JsonNode body) {
+        log.info("臻识白名单回执（已忽略，下发即确认） body={}", body == null ? "null" : body);
     }
 }

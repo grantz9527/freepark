@@ -7,6 +7,8 @@ import com.freepark.local.domain.FrigateLinkStatus;
 public record FrigateSettingsView(
         String apiHost,
         int apiPort,
+        FrigateLinkStatus apiLinkStatus,
+        Instant apiLastTestAt,
         String mqttHost,
         int mqttPort,
         String topicPrefix,

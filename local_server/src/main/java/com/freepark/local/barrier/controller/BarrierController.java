@@ -18,9 +18,13 @@ import com.freepark.local.barrier.dto.BarrierView;
 import com.freepark.local.barrier.dto.BindBarrierRequest;
 import com.freepark.local.barrier.dto.CreateBarrierRequest;
 import com.freepark.local.barrier.dto.UpdateBarrierRequest;
+import com.freepark.local.barrier.dto.UpdateScreenOrientationRequest;
+import com.freepark.local.barrier.dto.UpdateScreenResult;
 import com.freepark.local.barrier.service.ParkingBarrierService;
 import com.freepark.local.common.api.ApiResponse;
 import com.freepark.local.common.i18n.MessageService;
+import com.freepark.local.whitelist.dto.CameraWhitelistFullResyncView;
+import com.freepark.local.whitelist.service.CameraWhitelistSyncService;
 
 import jakarta.validation.Valid;
 
@@ -29,19 +33,26 @@ import jakarta.validation.Valid;
  * - GET  /                      全部设备（含未绑定车道）
  * - POST /                      创建设备（暂不绑定车道）
  * - PUT  /{barrierId}           更新名称/启用状态
+ * - PUT  /{barrierId}/screen    更新显示屏方向（行数由驱动按型号上报）
  * - DELETE /{barrierId}         删除设备
  * - POST /{barrierId}/bind      绑定车道（{laneId}）
  * - DELETE /{barrierId}/bind    解绑车道
+ * - POST /{barrierId}/camera-whitelist/full-resync  单机清空并重写机内白名单
  */
 @RestController
 @RequestMapping("/api/v1/barriers")
 public class BarrierController {
 
     private final ParkingBarrierService parkingBarrierService;
+    private final CameraWhitelistSyncService cameraWhitelistSync;
     private final MessageService messages;
 
-    public BarrierController(ParkingBarrierService parkingBarrierService, MessageService messages) {
+    public BarrierController(
+            ParkingBarrierService parkingBarrierService,
+            CameraWhitelistSyncService cameraWhitelistSync,
+            MessageService messages) {
         this.parkingBarrierService = parkingBarrierService;
+        this.cameraWhitelistSync = cameraWhitelistSync;
         this.messages = messages;
     }
 
@@ -67,6 +78,17 @@ public class BarrierController {
         return ApiResponse.ok(
                 messages,
                 parkingBarrierService.updateBarrier(
+                        UUID.fromString(jwt.getSubject()), barrierId, request));
+    }
+
+    @PutMapping("/{barrierId}/screen")
+    public ApiResponse<UpdateScreenResult> updateScreen(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID barrierId,
+            @Valid @RequestBody UpdateScreenOrientationRequest request) {
+        return ApiResponse.ok(
+                messages,
+                parkingBarrierService.updateScreenOrientation(
                         UUID.fromString(jwt.getSubject()), barrierId, request));
     }
 
@@ -96,5 +118,14 @@ public class BarrierController {
         return ApiResponse.ok(
                 messages,
                 parkingBarrierService.unbind(UUID.fromString(jwt.getSubject()), barrierId));
+    }
+
+    /**
+     * 单台识别一体机一键重同步：清空该机机内白名单后，按所属车场应同步车牌重新排队写入。
+     */
+    @PostMapping("/{barrierId}/camera-whitelist/full-resync")
+    public ApiResponse<CameraWhitelistFullResyncView> fullResyncCameraWhitelist(
+            @PathVariable UUID barrierId) {
+        return ApiResponse.ok(messages, cameraWhitelistSync.fullResyncForDevice(barrierId));
     }
 }

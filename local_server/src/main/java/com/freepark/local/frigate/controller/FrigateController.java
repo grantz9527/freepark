@@ -56,6 +56,11 @@ public class FrigateController {
         return ApiResponse.ok(messages, frigateService.testSettings(UUID.fromString(jwt.getSubject())));
     }
 
+    @PostMapping("/settings/test-api")
+    public ApiResponse<FrigateSettingsView> testApi(@AuthenticationPrincipal Jwt jwt) {
+        return ApiResponse.ok(messages, frigateService.testApi(UUID.fromString(jwt.getSubject())));
+    }
+
     @GetMapping("/cameras")
     public ApiResponse<List<FrigateCameraView>> listCameras() {
         return ApiResponse.ok(messages, frigateService.listCameras());

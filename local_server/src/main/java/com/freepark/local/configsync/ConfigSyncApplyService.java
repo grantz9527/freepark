@@ -41,7 +41,9 @@ import com.freepark.local.domain.PatternAllowlistRepository;
 import com.freepark.local.domain.PlateColor;
 import com.freepark.local.domain.WhitelistVehicle;
 import com.freepark.local.domain.WhitelistVehicleRepository;
+import com.freepark.local.lot.support.LotOpenTimeRules;
 import com.freepark.local.sitesettings.service.SystemSettingsService;
+import com.freepark.local.whitelist.service.CameraWhitelistSyncService;
 
 import tools.jackson.databind.JsonNode;
 
@@ -98,6 +100,7 @@ public class ConfigSyncApplyService {
     private final ParkingAreaRepository areas;
     private final ParkingLocationRepository locations;
     private final SystemSettingsService systemSettings;
+    private final CameraWhitelistSyncService cameraWhitelistSync;
     private final TransactionTemplate tx;
 
     public ConfigSyncApplyService(
@@ -111,6 +114,7 @@ public class ConfigSyncApplyService {
             ParkingAreaRepository areas,
             ParkingLocationRepository locations,
             SystemSettingsService systemSettings,
+            CameraWhitelistSyncService cameraWhitelistSync,
             PlatformTransactionManager txManager) {
         this.lots = lots;
         this.lanes = lanes;
@@ -122,6 +126,7 @@ public class ConfigSyncApplyService {
         this.areas = areas;
         this.locations = locations;
         this.systemSettings = systemSettings;
+        this.cameraWhitelistSync = cameraWhitelistSync;
         this.tx = new TransactionTemplate(txManager);
     }
 
@@ -290,7 +295,9 @@ public class ConfigSyncApplyService {
                 List<WhitelistVehicle> rows = whitelists.findAllByLotId(lot.getId());
                 rows.removeIf(r -> retained.contains(r.getCloudId()));
                 if (!rows.isEmpty()) {
+                    List<String> plates = rows.stream().map(WhitelistVehicle::getPlateNumber).distinct().toList();
                     whitelists.deleteAll(rows);
+                    plates.forEach(plate -> cameraWhitelistSync.refreshPlate(lot, plate));
                 }
             }
             case DOMAIN_INTERNAL -> {
@@ -447,7 +454,12 @@ public class ConfigSyncApplyService {
             case DOMAIN_BLACKLIST -> blacklists.findByCloudId(id).ifPresent(blacklists::delete);
             case DOMAIN_LANE -> lanes.findByCloudId(id).ifPresent(lanes::delete);
             case DOMAIN_PATTERN -> patterns.findByCloudId(id).ifPresent(patterns::delete);
-            case DOMAIN_WHITELIST -> whitelists.findByCloudId(id).ifPresent(whitelists::delete);
+            case DOMAIN_WHITELIST -> whitelists.findByCloudId(id).ifPresent(vehicle -> {
+                String plate = vehicle.getPlateNumber();
+                ParkingLot ownedLot = vehicle.getLot();
+                whitelists.delete(vehicle);
+                cameraWhitelistSync.refreshPlate(ownedLot != null ? ownedLot : lot, plate);
+            });
             case DOMAIN_INTERNAL -> internals.findByCloudId(id).ifPresent(internals::delete);
             case DOMAIN_SPACE -> {
                 ParkingSpace space = spaces.findByCloudId(id).orElse(null);
@@ -575,7 +587,9 @@ public class ConfigSyncApplyService {
         }
         List<WhitelistVehicle> wl = whitelists.findAllByLotId(lotId);
         if (!wl.isEmpty()) {
+            List<String> plates = wl.stream().map(WhitelistVehicle::getPlateNumber).distinct().toList();
             whitelists.deleteAll(wl);
+            plates.forEach(plate -> cameraWhitelistSync.refreshPlate(lot, plate));
         }
         List<InternalVehicle> iv = internals.findAllByLotId(lotId);
         if (!iv.isEmpty()) {
@@ -696,6 +710,7 @@ public class ConfigSyncApplyService {
         Instant end = parseInstant(textOrNull(item.path("endTime")), zone);
         boolean enabled = item.path("enabled").asBoolean(true);
         WhitelistVehicle vehicle = whitelists.findByCloudId(id).orElse(null);
+        String previousPlate = vehicle == null ? null : vehicle.getPlateNumber();
         if (vehicle == null) {
             vehicle = new WhitelistVehicle(lot, plateNumber, color, ownerName, type, phone,
                     department, remark, start, end, enabled);
@@ -705,6 +720,10 @@ public class ConfigSyncApplyService {
                     remark, start, end, enabled);
         }
         whitelists.save(vehicle);
+        cameraWhitelistSync.refreshPlate(lot, plateNumber);
+        if (previousPlate != null && !previousPlate.equalsIgnoreCase(plateNumber)) {
+            cameraWhitelistSync.refreshPlate(lot, previousPlate);
+        }
     }
 
     private void upsertInternal(ParkingLot lot, Long id, JsonNode item) {
@@ -834,6 +853,11 @@ public class ConfigSyncApplyService {
             if (!order.isEmpty()) {
                 lot.updateAccessJudgmentOrder(order);
             }
+        }
+        JsonNode openTimeRules = item.path("openTimeRules");
+        if (openTimeRules.isArray()) {
+            // 云端条目始终带该字段：空数组表示内部车场不对外开放（或非内部车场），据此清空本地时段。
+            lot.updateOpenTimeRules(LotOpenTimeRules.serialize(LotOpenTimeRules.parse(openTimeRules)));
         }
     }
 

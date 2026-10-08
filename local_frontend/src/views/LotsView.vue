@@ -3,7 +3,16 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
-import { ApiError, createLot, listLots, updateLot, type LotType, type LotView } from '@/api/client'
+import {
+  ApiError,
+  createLot,
+  fullResyncLotCameraWhitelist,
+  listLots,
+  updateLot,
+  type LotOpenTimeRule,
+  type LotType,
+  type LotView,
+} from '@/api/client'
 import { getUser } from '@/auth/session'
 import { useSiteTime } from '@/composables/useSiteTime'
 
@@ -23,8 +32,13 @@ const formAddress = ref('')
 const formTotalSpaces = ref('')
 const formLotType = ref<LotType>('INTERNAL')
 const formEnabled = ref(true)
+const formOpenTimeRules = ref<LotOpenTimeRule[]>([])
 const formError = ref('')
 const searchQuery = ref('')
+const fullResyncLotId = ref<string | null>(null)
+const successMessage = ref('')
+
+const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7]
 
 const lotTypeOptions: LotType[] = ['INTERNAL', 'PUBLIC']
 
@@ -40,6 +54,28 @@ const filteredLots = computed(() => {
   )
 })
 const isSearching = computed(() => searchQuery.value.trim().length > 0)
+
+/** 某天的开放时段（元素与 formOpenTimeRules 同一引用，可直接双向绑定）。 */
+function openTimeRulesOfDay(day: number): LotOpenTimeRule[] {
+  return formOpenTimeRules.value.filter((rule) => rule.day === day)
+}
+
+function addOpenTimeWindow(day: number): void {
+  formOpenTimeRules.value.push({ day, start: '', end: '' })
+}
+
+function removeOpenTimeWindow(target: LotOpenTimeRule): void {
+  const index = formOpenTimeRules.value.indexOf(target)
+  if (index >= 0) {
+    formOpenTimeRules.value.splice(index, 1)
+  }
+}
+
+function weekdayLabel(day: number): string {
+  const key = `lots.weekday${day}`
+  const label = t(key)
+  return label === key ? String(day) : label
+}
 
 async function loadLots(): Promise<void> {
   loading.value = true
@@ -62,6 +98,7 @@ function resetForm(): void {
   formTotalSpaces.value = ''
   formLotType.value = 'INTERNAL'
   formEnabled.value = true
+  formOpenTimeRules.value = []
   formError.value = ''
 }
 
@@ -78,6 +115,7 @@ function openEditForm(lot: LotView): void {
   formTotalSpaces.value = String(lot.totalSpaces)
   formLotType.value = lot.lotType
   formEnabled.value = lot.enabled
+  formOpenTimeRules.value = (lot.openTimeRules ?? []).map((rule) => ({ ...rule }))
   formError.value = ''
   showForm.value = true
 }
@@ -132,6 +170,18 @@ async function onSubmit(): Promise<void> {
     return
   }
 
+  const isInternal = formLotType.value === 'INTERNAL'
+  if (
+    isInternal &&
+    formOpenTimeRules.value.some((rule) => !rule.start || !rule.end || rule.start >= rule.end)
+  ) {
+    formError.value = t('lots.openTimeInvalid')
+    return
+  }
+  const openTimeRules = isInternal
+    ? formOpenTimeRules.value.map((rule) => ({ day: rule.day, start: rule.start, end: rule.end }))
+    : undefined
+
   submitting.value = true
   try {
     if (isEditing.value && editingLotId.value) {
@@ -143,6 +193,7 @@ async function onSubmit(): Promise<void> {
           totalSpaces,
           lotType: formLotType.value,
           enabled: formEnabled.value,
+          openTimeRules,
         },
         locale.value,
       )
@@ -156,6 +207,7 @@ async function onSubmit(): Promise<void> {
           address: formAddress.value.trim() || undefined,
           totalSpaces,
           enabled: formEnabled.value,
+          openTimeRules,
         },
         locale.value,
       )
@@ -186,6 +238,27 @@ function openMap(lot: LotView): void {
   void router.push({ name: 'lotMap', params: { lotId: lot.id } })
 }
 
+async function runFullResync(lot: LotView): Promise<void> {
+  if (fullResyncLotId.value !== null) return
+  if (!window.confirm(t('lots.fullResyncConfirm'))) return
+  errorMessage.value = ''
+  successMessage.value = ''
+  fullResyncLotId.value = lot.id
+  try {
+    const res = await fullResyncLotCameraWhitelist(lot.id, locale.value)
+    const cameras = res.data?.cameras ?? 0
+    const plates = res.data?.plates ?? 0
+    successMessage.value =
+      cameras === 0
+        ? t('lots.fullResyncNone')
+        : t('lots.fullResyncDone', { cameras, plates })
+  } catch (error) {
+    errorMessage.value = error instanceof ApiError ? error.message : t('lots.fullResyncFailed')
+  } finally {
+    fullResyncLotId.value = null
+  }
+}
+
 function lotTypeLabel(type: LotType): string {
   const key = `lotTypes.${type}`
   const label = t(key)
@@ -210,6 +283,7 @@ onMounted(loadLots)
     </div>
 
     <p v-if="errorMessage" class="banner error">{{ errorMessage }}</p>
+    <p v-if="successMessage" class="banner ok">{{ successMessage }}</p>
 
     <div class="table-card">
       <table v-if="filteredLots.length > 0">
@@ -251,6 +325,18 @@ onMounted(loadLots)
                 </button>
                 <button type="button" class="link-btn" @click="openLaneConfig(item)">
                   {{ t('lots.laneConfig') }}
+                </button>
+                <button
+                  type="button"
+                  class="link-btn"
+                  :disabled="fullResyncLotId !== null"
+                  @click="runFullResync(item)"
+                >
+                  {{
+                    fullResyncLotId === item.id
+                      ? t('lots.fullResyncing')
+                      : t('lots.fullResync')
+                  }}
                 </button>
               </div>
             </td>
@@ -308,6 +394,30 @@ onMounted(loadLots)
           <input v-model="formEnabled" type="checkbox" />
           <span>{{ t('lots.enabled') }}</span>
         </label>
+        <div v-if="formLotType === 'INTERNAL'" class="open-time-editor">
+          <span class="open-time-title">{{ t('lots.openTime') }}</span>
+          <div v-for="day in WEEKDAYS" :key="day" class="open-time-row">
+            <span class="open-time-day">{{ weekdayLabel(day) }}</span>
+            <div class="open-time-windows">
+              <div
+                v-for="(rule, index) in openTimeRulesOfDay(day)"
+                :key="index"
+                class="open-time-window"
+              >
+                <input v-model="rule.start" type="time" class="open-time-input" />
+                <span class="open-time-sep">-</span>
+                <input v-model="rule.end" type="time" class="open-time-input" />
+                <button type="button" class="link-btn" @click="removeOpenTimeWindow(rule)">
+                  {{ t('lots.removeOpenTime') }}
+                </button>
+              </div>
+              <button type="button" class="link-btn open-time-add" @click="addOpenTimeWindow(day)">
+                + {{ t('lots.addOpenTime') }}
+              </button>
+            </div>
+          </div>
+          <span class="field-hint">{{ t('lots.openTimeHint') }}</span>
+        </div>
         <p v-if="formError" class="form-error">{{ formError }}</p>
         <div class="actions">
           <button type="button" class="ghost" @click="closeForm">{{ t('lots.cancel') }}</button>
@@ -463,6 +573,14 @@ tbody tr:last-child td {
   background: #fdecec;
 }
 
+.banner.ok {
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: 8px;
+  color: #0f5132;
+  background: #d1e7dd;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -474,7 +592,7 @@ tbody tr:last-child td {
 }
 
 .modal {
-  width: min(420px, 100%);
+  width: min(520px, 100%);
   display: grid;
   gap: 0.75rem;
   background: var(--surface);
@@ -563,6 +681,62 @@ select {
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
+}
+
+.open-time-editor {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.open-time-title {
+  font-weight: 600;
+}
+
+.open-time-row {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.open-time-day {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding-top: 0.5rem;
+}
+
+.open-time-windows {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.open-time-window {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.open-time-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  min-height: 2rem;
+}
+
+.open-time-add {
+  justify-self: start;
+}
+
+.open-time-editor .link-btn {
+  white-space: nowrap;
+}
+
+.open-time-sep {
+  color: var(--muted);
 }
 
 .sr-only {

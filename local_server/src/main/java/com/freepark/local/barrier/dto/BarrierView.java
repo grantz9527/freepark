@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import com.freepark.local.domain.ParkingBarrier;
 import com.freepark.local.domain.ParkingLane;
+import com.freepark.local.domain.ScreenOrientation;
 
 public record BarrierView(
         UUID id,
@@ -22,7 +23,13 @@ public record BarrierView(
         Instant lastPollAt,
         boolean online,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        ScreenOrientation screenOrientation,
+        String screenLine1,
+        String screenLine2,
+        Integer screenStaySeconds,
+        Integer screenPlayMode1,
+        Integer screenPlayMode2) {
 
     /**
      * 档案视图（不计算在线状态）：仅作即时写操作的返回，lastPollAt 取实体落库值。
@@ -52,6 +59,12 @@ public record BarrierView(
                 lastPollAt,
                 online,
                 barrier.getCreatedAt(),
-                barrier.getUpdatedAt());
+                barrier.getUpdatedAt(),
+                barrier.getScreenOrientation(),
+                barrier.getScreenLine1(),
+                barrier.getScreenLine2(),
+                barrier.getScreenStaySeconds(),
+                barrier.getScreenPlayMode1(),
+                barrier.getScreenPlayMode2());
     }
 }

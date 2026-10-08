@@ -39,7 +39,7 @@ Wait-Healthy "freepark-local-mysql" 90
 Wait-Healthy "freepark-hyperlpr3" 180
 Wait-Healthy "frigate" 180 -AllowRunning
 
-Write-Host "OK  MySQL :3307  (8.4.11)"
+Write-Host "OK  MySQL :8306  (8.4.11)"
 Write-Host "OK  HyperLPR3 :8715  (0.1.3)"
 Write-Host "OK  Frigate :5000  go2rtc :1984  (0.17.2)"
 Write-Host "Next: powershell -File ai-build/windows/install.ps1"

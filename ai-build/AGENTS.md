@@ -27,13 +27,13 @@ Required on the host:
 
 | Service | Version | Port |
 | --- | --- | --- |
-| MySQL | `mysql:8.4.11` | 3307 |
+| MySQL | `mysql:8.4.11` | 8306 |
 | Frigate | `ghcr.io/blakeblackshear/frigate:0.17.2` | 5000 / 1984 |
 | HyperLPR3 | `hyperlpr3==0.1.3` (`python:3.10.21-slim-bookworm`) | 8715 |
 | `local_server` | Spring Boot 4.1.1, Java 21 | 8081 |
 | `local_frontend` | Vue 3 + Vite, Node 22+ | 5173 |
 
-Do not use `local_server/src/main/resources/application-dev.yml` (different MySQL port/password). Default `application.yml` expects MySQL at `localhost:3307`.
+Do not use `local_server/src/main/resources/application-dev.yml` (different MySQL port/password). Default `application.yml` expects MySQL at `localhost:8306`.
 
 ## 0. Repo root
 
@@ -55,7 +55,7 @@ sh ai-build/linux/up.sh
 
 Wait until the script prints `OK`. Confirm:
 
-- `127.0.0.1:3307` — MySQL 8.4.11 (`freepark-local-mysql`)
+- `127.0.0.1:8306` — MySQL 8.4.11 (`freepark-local-mysql`)
 - `http://127.0.0.1:8715/api/v1/docs` — HyperLPR3 0.1.3
 - `http://127.0.0.1:5000` — Frigate 0.17.2 (go2rtc `1984`)
 
@@ -140,7 +140,7 @@ Console: **http://localhost:5173** (or the Vite port). Default login: `admin` / 
 - Do not deploy Mosquitto or any MQTT broker on the site.
 - Do not pull `frigate:stable` or `mysql:latest` — use the pins in [`VERSIONS.md`](VERSIONS.md).
 - Do not put video on MQTT. MQTT is control/state only (cloud broker).
-- Do not change i18n locales beyond zh-CN / zh-TW / en when editing product copy.
+- Do not change i18n locales beyond zh-CN / en when editing product copy.
 - Do not implement backend features unless the operator asked; this repo is frontend-first for product work.
 - Do not commit `local_server/data/`.
 
@@ -154,11 +154,21 @@ In the running console:
 
 Frigate needs working RTSP in that config. If cameras are unreachable, the container may still run; the console and MySQL still work.
 
+## Optional: one image for the console + API
+
+Bake Vue + `local_server` (and Maven drivers) into `freepark-local:0.0.1`. MySQL / Frigate / HyperLPR3 stay their own images. See [`docker/local/README.md`](../docker/local/README.md).
+
+Windows: `powershell -File ai-build/windows/build-image.ps1`
+
+Linux / macOS: `sh ai-build/linux/build-image.sh`
+
+Then `docker compose -f docker/local/docker-compose.yml up -d`. Console is **http://127.0.0.1:8081** (no Vite `5173`).
+
 ## Ports (do not remap unless asked)
 
 | Port | Service |
 | --- | --- |
-| 3307 | MySQL 8.4.11 |
+| 8306 | MySQL 8.4.11 |
 | 8081 | local_server |
 | 5173 | local_frontend (Vite; +1 if busy) |
 | 8715 | HyperLPR3 0.1.3 |

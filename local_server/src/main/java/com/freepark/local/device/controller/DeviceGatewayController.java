@@ -22,6 +22,7 @@ import com.freepark.local.device.service.DeviceGatewayService;
  *                        每次调用刷新 lastPollAt 心跳，用于推导在线状态。
  * - POST /{brand}/plate  设备识别到车牌后推送识别结果（如臻识500的 AlarmInfoPlate）。
  *                        服务器保存识别记录，并在 HTTP 响应中返回开闸/不开闸指令。
+ * 白名单回执见 {@link ZhenshiWhitelistReplayController}（/whitelist_replay 与网关路径）。
  */
 @RestController
 @RequestMapping("/api/v1/device-gateway")

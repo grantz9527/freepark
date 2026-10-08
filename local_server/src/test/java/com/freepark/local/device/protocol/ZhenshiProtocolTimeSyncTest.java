@@ -32,7 +32,7 @@ class ZhenshiProtocolTimeSyncTest {
         private final ZoneId zone;
 
         FixedZoneSettings(String zoneId) {
-            super(null, null);
+            super(null, null, null);
             this.zone = ZoneId.of(zoneId);
         }
 

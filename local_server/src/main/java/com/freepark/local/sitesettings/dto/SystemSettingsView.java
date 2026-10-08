@@ -17,6 +17,7 @@ public record SystemSettingsView(
         SoftwarePlateProvider softwarePlateProvider,
         HyperLpr3Settings hyperLpr3,
         CloudStorageSettings cloudStorage,
+        CameraWhitelistSyncSettings cameraWhitelistSync,
         List<String> supportedLocales,
         List<String> supportedTimezones,
         List<PlateColor> supportedPlateColors,

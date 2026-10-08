@@ -26,6 +26,8 @@ import com.freepark.local.lot.service.ParkingLotService;
 import com.freepark.local.lot.dto.UpdateAccessJudgmentRequest;
 import com.freepark.local.lot.dto.UpdateLotInterceptRequest;
 import com.freepark.local.lot.dto.UpdateLotRequest;
+import com.freepark.local.whitelist.dto.CameraWhitelistFullResyncView;
+import com.freepark.local.whitelist.service.CameraWhitelistSyncService;
 
 import jakarta.validation.Valid;
 
@@ -35,14 +37,17 @@ public class ParkingLotController {
 
     private final ParkingLotService parkingLotService;
     private final AccessDecisionService accessDecisionService;
+    private final CameraWhitelistSyncService cameraWhitelistSync;
     private final MessageService messages;
 
     public ParkingLotController(
             ParkingLotService parkingLotService,
             AccessDecisionService accessDecisionService,
+            CameraWhitelistSyncService cameraWhitelistSync,
             MessageService messages) {
         this.parkingLotService = parkingLotService;
         this.accessDecisionService = accessDecisionService;
+        this.cameraWhitelistSync = cameraWhitelistSync;
         this.messages = messages;
     }
 
@@ -101,5 +106,13 @@ public class ParkingLotController {
             @PathVariable UUID lotId,
             @Valid @RequestBody AccessDecisionRequest request) {
         return ApiResponse.ok(messages, accessDecisionService.decide(lotId, request));
+    }
+
+    /**
+     * 车场一键重同步：该车场已绑定的臻识识别一体机先清空机内白名单，再按系统开关重新排队写入。
+     */
+    @PostMapping("/{lotId}/camera-whitelist/full-resync")
+    public ApiResponse<CameraWhitelistFullResyncView> fullResyncCameraWhitelist(@PathVariable UUID lotId) {
+        return ApiResponse.ok(messages, cameraWhitelistSync.fullResyncForLot(lotId));
     }
 }

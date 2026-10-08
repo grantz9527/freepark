@@ -1,8 +1,10 @@
 package com.freepark.local.sitesettings.service;
 
+import com.freepark.local.sitesettings.dto.CameraWhitelistSyncSettings;
 import com.freepark.local.sitesettings.dto.CloudStorageSettings;
 import com.freepark.local.sitesettings.dto.SystemSettingsView;
 import com.freepark.local.sitesettings.dto.UpdateSystemSettingsRequest;
+import com.freepark.driver.api.model.VehicleType;
 import com.freepark.local.softwareplate.SoftwarePlateProvider;
 import com.freepark.local.softwareplate.dto.HyperLpr3Settings;
 import com.freepark.local.storage.CloudObjectKeys;
@@ -18,8 +20,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.freepark.local.common.exception.BusinessException;
 import com.freepark.local.common.exception.ErrorCode;
@@ -32,6 +37,8 @@ import com.freepark.local.domain.PlateColorSupport;
 import com.freepark.local.domain.SiteSettings;
 import com.freepark.local.domain.SiteSettingsRepository;
 import com.freepark.local.domain.UserRole;
+import com.freepark.local.whitelist.service.CameraWhitelistSyncService;
+import com.freepark.local.device.protocol.ZhenshiWhitelistBatch;
 
 @Service
 public class SystemSettingsService {
@@ -41,10 +48,15 @@ public class SystemSettingsService {
 
     private final SiteSettingsRepository settingsRepository;
     private final LocalUserRepository users;
+    private final ObjectProvider<CameraWhitelistSyncService> cameraWhitelistSync;
 
-    public SystemSettingsService(SiteSettingsRepository settingsRepository, LocalUserRepository users) {
+    public SystemSettingsService(
+            SiteSettingsRepository settingsRepository,
+            LocalUserRepository users,
+            ObjectProvider<CameraWhitelistSyncService> cameraWhitelistSync) {
         this.settingsRepository = settingsRepository;
         this.users = users;
+        this.cameraWhitelistSync = cameraWhitelistSync;
     }
 
     @Transactional(readOnly = true)
@@ -73,9 +85,17 @@ public class SystemSettingsService {
         settings.setYolo26PlateEnabled(false);
         applyHyperLpr3(settings, request.hyperLpr3());
         applyCloudStorage(settings, request.cloudStorage());
+        applyCameraWhitelistSync(settings, request.cameraWhitelistSync());
         // 保证同一时刻最多只有当前选中的 provider 被启用
         enforceSingleSoftwarePlateEnabled(settings);
-        return toView(settingsRepository.save(settings));
+        SystemSettingsView view = toView(settingsRepository.save(settings));
+        if (request.cameraWhitelistSync() != null) {
+            CameraWhitelistSyncService sync = cameraWhitelistSync.getIfAvailable();
+            if (sync != null) {
+                afterCommit(sync::resyncOwnerAndMonthly);
+            }
+        }
+        return view;
     }
 
     @Transactional(readOnly = true)
@@ -274,7 +294,7 @@ public class SystemSettingsService {
         settings.setSoftwarePlateProvider(SoftwarePlateProvider.HYPER_LPR3);
         settings.setYolo26PlateEnabled(false);
         return new SystemSettingsView(
-                settings.getDefaultLocale(),
+                SupportedLocale.resolve(settings.getDefaultLocale()).toLanguageTag(),
                 settings.getTimezone(),
                 settings.getDefaultPlateColor(),
                 List.copyOf(settings.getAllowedPlateColors()),
@@ -288,6 +308,10 @@ public class SystemSettingsService {
                         settings.getHyperlpr3ConnectTimeoutMs(),
                         settings.getHyperlpr3ReadTimeoutMs()),
                 toCloudView(settings),
+                new CameraWhitelistSyncSettings(
+                        settings.isSyncOwnerToRecognitionCamera(),
+                        settings.isSyncMonthlyToRecognitionCamera(),
+                        settings.getDeviceGatewayCallbackBaseUrl()),
                 SupportedLocale.languageTags(),
                 SupportedTimezone.all(),
                 PlateColorSupport.all(),
@@ -306,6 +330,37 @@ public class SystemSettingsService {
     private void enforceSingleSoftwarePlateEnabled(SiteSettings settings) {
         settings.setSoftwarePlateProvider(SoftwarePlateProvider.HYPER_LPR3);
         settings.setYolo26PlateEnabled(false);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isCameraWhitelistSyncEnabled(VehicleType type) {
+        if (type == VehicleType.OWNER) {
+            return requireSettings().isSyncOwnerToRecognitionCamera();
+        }
+        if (type == VehicleType.MONTHLY) {
+            return requireSettings().isSyncMonthlyToRecognitionCamera();
+        }
+        return false;
+    }
+
+    private void applyCameraWhitelistSync(
+            SiteSettings settings, UpdateSystemSettingsRequest.CameraWhitelistSyncUpdate update) {
+        if (update == null) {
+            return;
+        }
+        if (update.owner() != null) {
+            settings.setSyncOwnerToRecognitionCamera(update.owner());
+        }
+        if (update.monthly() != null) {
+            settings.setSyncMonthlyToRecognitionCamera(update.monthly());
+        }
+        if (update.callbackBaseUrl() != null) {
+            String normalized = ZhenshiWhitelistBatch.normalizeCallbackBase(update.callbackBaseUrl());
+            if (!update.callbackBaseUrl().isBlank() && normalized.isEmpty()) {
+                throw new BusinessException(ErrorCode.VALIDATION_FAILED);
+            }
+            settings.setDeviceGatewayCallbackBaseUrl(normalized.isEmpty() ? null : normalized);
+        }
     }
 
     private void applyCloudStorage(SiteSettings settings, UpdateSystemSettingsRequest.CloudStorageUpdate update) {
@@ -512,5 +567,18 @@ public class SystemSettingsService {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+            return;
+        }
+        action.run();
     }
 }

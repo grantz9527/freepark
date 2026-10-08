@@ -1,14 +1,18 @@
 package com.freepark.local.domain;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import com.freepark.driver.api.model.VehicleType;
 
 public interface WhitelistVehicleRepository
         extends JpaRepository<WhitelistVehicle, UUID>, JpaSpecificationExecutor<WhitelistVehicle> {
@@ -16,6 +20,17 @@ public interface WhitelistVehicleRepository
     Optional<WhitelistVehicle> findByCloudId(Long cloudId);
 
     List<WhitelistVehicle> findAllByLotId(UUID lotId);
+
+    List<WhitelistVehicle> findAllByLotIdAndPlateNumberIgnoreCase(UUID lotId, String plateNumber);
+
+    /** 定时对账用：业主/月租车牌，JOIN FETCH 车场，避免调度线程 LazyInitialization。 */
+    @Query("""
+            select distinct w from WhitelistVehicle w
+            join fetch w.lot
+            where w.type in :types
+            """)
+    List<WhitelistVehicle> findAllOwnerMonthlyWithLot(@Param("types") Collection<VehicleType> types);
+
 
     /**
      * 车场下是否存在当前时间正处于有效时间区间（且启用）的白名单记录。
@@ -64,4 +79,20 @@ public interface WhitelistVehicleRepository
             """)
     List<WhitelistVehicle> findAllEnabledByLotAndPlate(@Param("lotId") UUID lotId,
             @Param("plateNumber") String plateNumber, @Param("plateColor") PlateColor plateColor);
+
+    /**
+     * 机内白名单状态条件更新（CAS），避免并发收口时把「过期待移除」盖回「已下发」。
+     *
+     * @return 更新行数，0 表示期望状态已变、本次未写入
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update WhitelistVehicle w
+            set w.cameraWhitelistSyncStatus = :next
+            where w.id = :id and w.cameraWhitelistSyncStatus = :expected
+            """)
+    int casCameraSyncStatus(
+            @Param("id") UUID id,
+            @Param("expected") CameraWhitelistSyncStatus expected,
+            @Param("next") CameraWhitelistSyncStatus next);
 }

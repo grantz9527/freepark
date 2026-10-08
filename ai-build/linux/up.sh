@@ -37,7 +37,7 @@ wait_healthy freepark-local-mysql 90
 wait_healthy freepark-hyperlpr3 180
 wait_healthy frigate 180
 
-echo "OK  MySQL :3307  (8.4.11)"
+echo "OK  MySQL :8306  (8.4.11)"
 echo "OK  HyperLPR3 :8715  (0.1.3)"
 echo "OK  Frigate :5000  go2rtc :1984  (0.17.2)"
 echo "Next: sh ai-build/linux/install.sh"
